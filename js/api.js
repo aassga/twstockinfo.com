@@ -169,20 +169,28 @@ function parseInstSummary(data) {
 async function callClaude(prompt, system = '') {
   const key = getApiKey();
   if (!key) return '⚠️ 尚未設定 API Key。請點擊右上角 ⚙️ 齒輪圖示輸入 Anthropic API Key。';
-  const proxy = getProxy();
-  const body  = { model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] };
+  let proxy;
+  try { proxy = getProxy(); } catch(e) { return '❌ ' + e.message; }
+  const body = { model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] };
   if (system) body.system = system;
 
-  const r = await fetch(`${proxy}/claude`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Api-Key': key },
-    body:    JSON.stringify(body),
-  });
-  const data = await r.json();
+  let r;
+  try {
+    r = await fetch(`${proxy}/claude`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': key },
+      body:    JSON.stringify(body),
+    });
+  } catch(netErr) {
+    return `❌ 網路錯誤：無法連線到 Worker。請確認 Cloudflare Worker 已正常部署。(${netErr.message})`;
+  }
+  let data;
+  try { data = await r.json(); } catch(e) { return `❌ 回應解析失敗 (HTTP ${r.status})`; }
   if (!r.ok) {
     if (r.status === 401) return '❌ API Key 無效或已過期，請重新設定。';
     if (r.status === 429) return '⏳ 請求過於頻繁，請稍後再試。';
-    return `❌ 錯誤：${data.error || '未知錯誤'}`;
+    const errMsg = data?.error?.message || data?.error || JSON.stringify(data);
+    return `❌ 錯誤 (${r.status})：${errMsg}`;
   }
   return data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '無回應';
 }
@@ -197,7 +205,8 @@ async function runAI({ spinnerId, contentId, resultBoxId = null, prompt, system 
     const result = await callClaude(prompt, system);
     content.innerHTML = escHtml(result).replace(/\n/g, '<br>');
   } catch(e) {
-    content.innerHTML = `❌ 連線失敗：${e.message}`;
+    const msg = e?.message || JSON.stringify(e) || '未知錯誤';
+    content.innerHTML = `❌ 連線失敗：${msg}`;
   } finally {
     spinner.style.display = 'none';
   }
