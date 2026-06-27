@@ -145,6 +145,39 @@ button {
     min-width: 0;
   }
 
+  .page-title + .search-row {
+    margin-top: 12px;
+  }
+
+  .search-row {
+    width: 100%;
+    align-items: center;
+  }
+
+  .search-row .search-input {
+    box-sizing: border-box;
+    min-width: 0;
+    height: 40px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .search-row .btn {
+    height: 40px;
+    min-height: 0;
+    padding: 0 16px;
+  }
+
+  .search-row .btn.primary {
+    background: var(--bg-3);
+    border-color: var(--border-strong);
+    color: var(--text-1);
+  }
+
+  .search-row .btn.primary:hover {
+    background: var(--bg-4);
+  }
+
   .chart-header {
     align-items: flex-start;
     gap: 12px;
