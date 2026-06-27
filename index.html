@@ -76,25 +76,8 @@
           <button class="icon-btn" id="refreshBtn" title="重新整理" onclick="refreshAll()">
             <i class="ti ti-refresh"></i>
           </button>
-          <div class="settings-btn" id="settingsBtn" title="API設定" onclick="toggleSettings()">
-            <i class="ti ti-settings"></i>
-          </div>
         </div>
       </header>
-
-      <!-- Settings Panel -->
-      <div class="settings-panel" id="settingsPanel" style="display:none">
-        <div class="settings-inner">
-          <h3 class="settings-title">API 設定</h3>
-          <p class="settings-desc">輸入 Anthropic API Key 以啟用 AI 分析功能。金鑰僅儲存在本機 localStorage，不會上傳至任何伺服器。</p>
-          <div class="settings-row">
-            <input type="password" id="apiKeyInput" class="settings-input" placeholder="sk-ant-api03-..." />
-            <button class="btn primary" onclick="saveApiKey()">儲存</button>
-            <button class="btn" onclick="toggleSettings()">取消</button>
-          </div>
-          <div class="settings-status" id="apiStatus"></div>
-        </div>
-      </div>
 
       <!-- Tab Pages -->
       <div class="content">

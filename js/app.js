@@ -3,6 +3,14 @@
 let currentStock   = null;
 let allStocksCache = [];
 let instCache      = [];
+let isLoadingAllStocks = false;
+let isRefreshingQuote  = false;
+let isLoadingInst      = false;
+
+const MARKET_REFRESH_MS      = 30000;
+const STOCK_LIST_REFRESH_MS  = 60000;
+const ACTIVE_QUOTE_REFRESH_MS = 15000;
+const INST_REFRESH_MS        = 180000;
 
 // ─── 初始化 ───────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -10,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initClock();
   loadMarket();
   loadAllStocks();   // 先拉全部股票清單
-  setInterval(loadMarket, 30000);   // 大盤每30秒更新
+  startAutoRefresh();
 });
 
 // ─── 導覽列 ───────────────────────────────
@@ -23,7 +31,7 @@ function initNav() {
       btn.classList.add('active');
       document.getElementById('tab-' + tab).classList.add('active');
       // 切換時按需載入
-      if (tab === 'hot100'  && allStocksCache.length) renderHot100(allStocksCache);
+      if (tab === 'hot100'  && allStocksCache.length) renderHot100(getHot100ViewList());
       if (tab === 'alerts'  && allStocksCache.length) renderAlerts();
       if (tab === 'inst')   loadInstitutional();
       if (tab === 'ai')     refreshAiAnalysis();
@@ -40,12 +48,21 @@ function initClock() {
   tick(); setInterval(tick, 1000);
 }
 
+function startAutoRefresh() {
+  setInterval(loadMarket, MARKET_REFRESH_MS);
+  setInterval(() => loadAllStocks({ silent: true }), STOCK_LIST_REFRESH_MS);
+  setInterval(refreshActiveStockQuote, ACTIVE_QUOTE_REFRESH_MS);
+  setInterval(refreshInstitutionalData, INST_REFRESH_MS);
+}
+
 // ─── 全域刷新 ─────────────────────────────
 function refreshAll() {
   const btn = document.getElementById('refreshBtn');
   btn.style.animation = 'spin 0.7s linear infinite';
   loadMarket();
   loadAllStocks();
+  refreshActiveStockQuote();
+  if (getActiveTab() === 'inst') loadInstitutional();
   setTimeout(() => { btn.style.animation = ''; }, 2000);
 }
 
@@ -66,8 +83,10 @@ async function loadMarket() {
 }
 
 // ─── 全部股票（STOCK_DAY_ALL） ────────────
-async function loadAllStocks() {
-  showLoading('hot100Body', 11, '載入股票資料中...');
+async function loadAllStocks({ silent = false } = {}) {
+  if (isLoadingAllStocks) return;
+  isLoadingAllStocks = true;
+  if (!silent) showLoading('hot100Body', 11, '載入股票資料中...');
   try {
     const raw = await TWSE.allStocks();
     allStocksCache = raw.map(s => ({
@@ -88,11 +107,12 @@ async function loadAllStocks() {
     document.getElementById('volume').textContent    =
       Math.round(allStocksCache.reduce((a, b) => a + b.volume, 0) / 1000).toLocaleString();
 
-    renderHot100(allStocksCache);
-    renderAlerts();
+    refreshStockViews(!silent);
   } catch(e) {
     console.error('股票清單錯誤:', e);
-    showError('hot100Body', 11, '無法取得股票資料，請確認伺服器已啟動');
+    if (!silent) showError('hot100Body', 11, '無法取得股票資料，請確認伺服器已啟動');
+  } finally {
+    isLoadingAllStocks = false;
   }
 }
 
@@ -103,7 +123,7 @@ function quickSearch(code) {
   switchToTab('search');
 }
 
-async function searchStock() {
+async function searchStock({ preserveAi = false } = {}) {
   const q = document.getElementById('stockInput').value.trim();
   if (!q) return;
 
@@ -118,7 +138,9 @@ async function searchStock() {
   document.getElementById('res-code').textContent = code;
   document.getElementById('res-name').textContent = found ? found.name : '載入中...';
   document.getElementById('res-sector').textContent = found ? found.sector : '';
-  document.getElementById('stockAiContent').innerHTML = '<span class="hint">點擊「AI 深度分析」取得個股分析報告</span>';
+  if (!preserveAi) {
+    document.getElementById('stockAiContent').innerHTML = '<span class="hint">點擊「AI 深度分析」取得個股分析報告</span>';
+  }
 
   try {
     const s = await TWSE.quoteAuto(code);
@@ -169,6 +191,22 @@ async function searchStock() {
   }
 }
 
+async function refreshActiveStockQuote() {
+  if (!currentStock || getActiveTab() !== 'search' || isRefreshingQuote) return;
+  const input = document.getElementById('stockInput');
+  if (document.activeElement === input) return;
+
+  isRefreshingQuote = true;
+  const originalValue = input.value;
+  input.value = currentStock.code;
+  try {
+    await searchStock({ preserveAi: true });
+  } finally {
+    input.value = originalValue || currentStock.code;
+    isRefreshingQuote = false;
+  }
+}
+
 async function loadStockInst(code) {
   try {
     if (!instCache.length) {
@@ -214,6 +252,7 @@ function analyzeStock() {
 買入佔比 ${s.buyPct || s.buy}%，賣出佔比 ${s.sellPct || s.sell}%
 外資 ${s.foreign >= 0 ? '+' : ''}${s.foreign}億，投信 ${s.trust >= 0 ? '+' : ''}${s.trust}億，自營商 ${s.dealer >= 0 ? '+' : ''}${s.dealer}億
 請提供：1.趨勢判斷 2.籌碼面解讀 3.短線操作建議（含進場時機） 4.停損停利 5.風險提示`,
+    localFallback: () => buildLocalStockAnalysis(s),
   });
 }
 function analyzeStockTech() {
@@ -222,6 +261,7 @@ function analyzeStockTech() {
   runAI({
     spinnerId: 'stockSpinner', contentId: 'stockAiContent',
     prompt: `台股 ${s.code} ${s.name}，股價 $${s.price}（${s.chgPct >= 0?'+':''}${s.chgPct}%），今日振幅 $${s.low}~$${s.high}。請從技術面分析：1.目前型態 2.支撐壓力 3.量價關係 4.建議觀察的技術訊號。請用繁體中文。`,
+    localFallback: () => buildLocalTechAnalysis(s),
   });
 }
 function analyzeStockRisk() {
@@ -230,33 +270,168 @@ function analyzeStockRisk() {
   runAI({
     spinnerId: 'stockSpinner', contentId: 'stockAiContent',
     prompt: `評估台股 ${s.code} ${s.name}（${s.sector}）的風險：買${s.buyPct||s.buy}%，賣${s.sellPct||s.sell}%，外資${s.foreign}億，投信${s.trust}億。請分析：1.籌碼集中度風險 2.法人態度 3.類股系統風險 4.風險等級（低/中/高）。請用繁體中文。`,
+    localFallback: () => buildLocalRiskAnalysis(s),
   });
 }
 
+function buildLocalStockAnalysis(s) {
+  const signal = getLocalSignal(s);
+  const range = getLocalRange(s);
+  const inst = getLocalInstTone(s);
+  return [
+    `本地規則分析：${s.code} ${s.name}（${s.sector || '未分類'}）`,
+    '',
+    `1. 趨勢判斷：${signal.bias}。目前漲跌幅 ${formatPct(s.chgPct)}，買方力道 ${signal.buy}%、賣方力道 ${signal.sell}%，綜合分數 ${signal.score}。`,
+    `2. 籌碼面解讀：${signal.flowText}。法人合計約 ${formatSigned(inst.total, '億')}，${inst.text}`,
+    `3. 短線操作建議：${signal.action}`,
+    `4. 停損停利：日內支撐約 ${formatPrice(range.support)}，壓力約 ${formatPrice(range.resistance)}；跌破支撐宜先防守，突破壓力再觀察續航。`,
+    `5. 風險提示：這是本機根據即時報價、買賣力道與法人資料的規則分析，不等同完整 AI 判讀，也不構成投資建議。`,
+  ].join('\n');
+}
+
+function buildLocalTechAnalysis(s) {
+  const signal = getLocalSignal(s);
+  const range = getLocalRange(s);
+  const dayRangePct = s.price ? ((range.resistance - range.support) / s.price * 100) : 0;
+  const position = range.resistance === range.support
+    ? 50
+    : Math.round((s.price - range.support) / (range.resistance - range.support) * 100);
+
+  return [
+    `本地技術面分析：${s.code} ${s.name}`,
+    '',
+    `1. 目前型態：${signal.bias}。現價位於日內區間約 ${Math.max(0, Math.min(100, position))}% 的位置，越靠近上緣追價風險越高。`,
+    `2. 支撐壓力：支撐 ${formatPrice(range.support)}，壓力 ${formatPrice(range.resistance)}，日內震幅約 ${dayRangePct.toFixed(2)}%。`,
+    `3. 量價關係：量比 ${Math.round(Number(s.volRatio || s.vol || 0))}%，買賣力道為 ${signal.buy}% / ${signal.sell}%。若價格上漲但買方力道未同步放大，需防拉回。`,
+    `4. 觀察訊號：留意是否站穩 ${formatPrice(range.resistance)}，或跌破 ${formatPrice(range.support)} 後賣壓擴大。`,
+  ].join('\n');
+}
+
+function buildLocalRiskAnalysis(s) {
+  const signal = getLocalSignal(s);
+  const range = getLocalRange(s);
+  const inst = getLocalInstTone(s);
+  const volatility = s.price ? Math.abs(range.resistance - range.support) / s.price * 100 : 0;
+  let riskScore = 1;
+  if (Math.abs(Number(s.chgPct || 0)) >= 3) riskScore += 1;
+  if (volatility >= 4) riskScore += 1;
+  if (signal.sell >= 65) riskScore += 1;
+  if (inst.total < 0) riskScore += 1;
+  const level = riskScore >= 4 ? '高' : riskScore >= 3 ? '中' : '低';
+
+  return [
+    `本地風險評估：${s.code} ${s.name}（${s.sector || '未分類'}）`,
+    '',
+    `1. 籌碼集中度風險：買賣力道 ${signal.buy}% / ${signal.sell}%，${signal.sell >= 65 ? '賣方力道偏高，需避免逆勢硬接。' : '尚未看到明顯單邊賣壓。'}`,
+    `2. 法人態度：法人合計 ${formatSigned(inst.total, '億')}，${inst.text}`,
+    `3. 類股與波動風險：日內區間 ${formatPrice(range.support)} 到 ${formatPrice(range.resistance)}，估算震幅 ${volatility.toFixed(2)}%。`,
+    `4. 風險等級：${level}。${level === '高' ? '建議降低部位或等待回穩。' : level === '中' ? '可小部位觀察，嚴守停損。' : '仍需搭配大盤與成交量確認。'}`,
+  ].join('\n');
+}
+
+function getLocalSignal(s) {
+  const chgPct = Number(s.chgPct || 0);
+  const buy = Math.round(Number(s.buyPct || s.buy || 50));
+  const sell = Math.round(Number(s.sellPct || s.sell || (100 - buy)));
+  const inst = getLocalInstTone(s).total;
+  let score = 0;
+  if (chgPct > 1) score += 1;
+  if (chgPct < -1) score -= 1;
+  if (buy >= 60) score += 1;
+  if (sell >= 60) score -= 1;
+  if (inst > 0) score += 1;
+  if (inst < 0) score -= 1;
+
+  const bias = score >= 2 ? '偏多' : score <= -2 ? '偏空' : '中性震盪';
+  const flowText = buy > sell
+    ? `買方略占優勢（${buy}% 對 ${sell}%）`
+    : sell > buy
+      ? `賣方略占優勢（${sell}% 對 ${buy}%）`
+      : '買賣力道接近平衡';
+  const action = score >= 2
+    ? '可觀察回測支撐不破後的續強機會，避免直接追高。'
+    : score <= -2
+      ? '以保守觀望為主，等待賣壓收斂或重新站回壓力區。'
+      : '適合等待方向確認，區間內以低接高出或小部位試單為主。';
+
+  return { buy, sell, score, bias, flowText, action };
+}
+
+function getLocalRange(s) {
+  const price = Number(s.price || 0);
+  const high = Number(s.high || price);
+  const low = Number(s.low || price);
+  const open = Number(s.open || price);
+  return {
+    support: Math.min(low || price, open || price, price || low || open),
+    resistance: Math.max(high || price, open || price, price || high || open),
+  };
+}
+
+function getLocalInstTone(s) {
+  const foreign = Number(s.foreign || 0);
+  const trust = Number(s.trust || 0);
+  const dealer = Number(s.dealer || 0);
+  const total = foreign + trust + dealer;
+  const text = total > 0
+    ? '法人籌碼偏正向，但仍要確認買超是否集中且能延續。'
+    : total < 0
+      ? '法人籌碼偏保守，若股價同時轉弱，需提高防守。'
+      : '法人資料目前沒有明顯方向，需以價格與量能為主。';
+  return { total, text };
+}
+
+function formatPrice(value) {
+  const n = Number(value || 0);
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+function formatPct(value) {
+  const n = Number(value || 0);
+  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+}
+
+function formatSigned(value, unit = '') {
+  const n = Number(value || 0);
+  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}${unit}`;
+}
+
 // ─── 前100熱門 ────────────────────────────
-function loadHot100() { renderHot100(allStocksCache); }
+function loadHot100() { renderHot100(getHot100ViewList()); }
 
 function sortHot100() {
-  const key = document.getElementById('hot100Sort').value;
-  const sorted = [...allStocksCache].sort((a, b) => {
-    if (key === 'buy')  return b.buy  - a.buy;
-    if (key === 'sell') return b.sell - a.sell;
-    if (key === 'chg')  return b.chgPct - a.chgPct;
-    return b.volume - a.volume;
-  });
-  renderHot100(sorted);
+  renderHot100(getHot100ViewList());
 }
 
 let hot100Filtered = [];
 function filterHot100(btn, filter) {
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  renderHot100(getHot100ViewList());
+}
+
+function refreshStockViews(force = false) {
+  const activeTab = getActiveTab();
+  if (force || activeTab === 'hot100') renderHot100(getHot100ViewList());
+  if (force || activeTab === 'alerts') renderAlerts();
+}
+
+function getHot100ViewList() {
+  const key = document.getElementById('hot100Sort')?.value || 'vol';
+  const activeFilter = document.querySelector('.filter-btn.active')?.dataset.filter || 'all';
   let list = [...allStocksCache];
-  if (filter === 'buy')  list = list.filter(s => s.buy  >= 65);
-  if (filter === 'sell') list = list.filter(s => s.sell >= 65);
-  if (filter === 'up')   list = list.filter(s => s.chgPct > 0);
-  if (filter === 'dn')   list = list.filter(s => s.chgPct < 0);
-  renderHot100(list);
+
+  if (activeFilter === 'buy')  list = list.filter(s => s.buy  >= 65);
+  if (activeFilter === 'sell') list = list.filter(s => s.sell >= 65);
+  if (activeFilter === 'up')   list = list.filter(s => s.chgPct > 0);
+  if (activeFilter === 'dn')   list = list.filter(s => s.chgPct < 0);
+
+  return list.sort((a, b) => {
+    if (key === 'buy')  return b.buy  - a.buy;
+    if (key === 'sell') return b.sell - a.sell;
+    if (key === 'chg')  return b.chgPct - a.chgPct;
+    return b.volume - a.volume;
+  });
 }
 
 function renderHot100(list) {
@@ -355,8 +530,10 @@ function aiAnalyzeAlerts() {
 }
 
 // ─── 三大法人 ─────────────────────────────
-async function loadInstitutional() {
-  showLoading('instTableBody', 8, '載入三大法人資料...');
+async function loadInstitutional({ silent = false } = {}) {
+  if (isLoadingInst) return;
+  isLoadingInst = true;
+  if (!silent) showLoading('instTableBody', 8, '載入三大法人資料...');
   try {
     const [inst, summary] = await Promise.all([TWSE.institutional(), TWSE.instSummary()]);
     instCache = inst;
@@ -401,9 +578,15 @@ async function loadInstitutional() {
       tbody.appendChild(tr);
     });
   } catch(e) {
-    showError('instTableBody', 8, '無法取得三大法人資料');
+    if (!silent) showError('instTableBody', 8, '無法取得三大法人資料');
     console.error('法人資料錯誤:', e);
+  } finally {
+    isLoadingInst = false;
   }
+}
+
+function refreshInstitutionalData() {
+  loadInstitutional({ silent: true });
 }
 
 function aiAnalyzeInst() {
@@ -497,6 +680,11 @@ function switchToTab(name) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.querySelector(`[data-tab="${name}"]`).classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
+}
+
+function getActiveTab() {
+  const active = document.querySelector('.tab-content.active');
+  return active ? active.id.replace('tab-', '') : 'search';
 }
 
 function showLoading(tbodyId, cols, msg) {

@@ -3,33 +3,9 @@
 const API_KEY_STORAGE = 'tw_stock_api_key';
 
 // ── API Key 管理 ──────────────────────────────
-function getApiKey()  { return localStorage.getItem(API_KEY_STORAGE) || ''; }
-
-function saveApiKey() {
-  const key = document.getElementById('apiKeyInput').value.trim();
-  if (!key.startsWith('sk-ant-')) {
-    showApiStatus('格式錯誤，請輸入正確的 Anthropic API Key (sk-ant-...)', true);
-    return;
-  }
-  localStorage.setItem(API_KEY_STORAGE, key);
-  showApiStatus('✓ API Key 儲存成功，AI 分析功能已啟用', false);
-  setTimeout(() => toggleSettings(), 1200);
-}
-
-function showApiStatus(msg, isError) {
-  const el = document.getElementById('apiStatus');
-  el.textContent = msg;
-  el.className = 'settings-status' + (isError ? ' error' : '');
-}
-
-function toggleSettings() {
-  const panel = document.getElementById('settingsPanel');
-  const isOpen = panel.style.display !== 'none';
-  panel.style.display = isOpen ? 'none' : 'block';
-  if (!isOpen) {
-    const key = getApiKey();
-    if (key) document.getElementById('apiKeyInput').value = key;
-  }
+function getApiKey() {
+  localStorage.removeItem(API_KEY_STORAGE);
+  return '';
 }
 
 // ── proxy base (from config.js) ───────────────
@@ -168,7 +144,6 @@ function parseInstSummary(data) {
 // ── Claude AI ─────────────────────────────────
 async function callClaude(prompt, system = '') {
   const key = getApiKey();
-  if (!key) return '⚠️ 尚未設定 API Key。請點擊右上角 ⚙️ 齒輪圖示輸入 Anthropic API Key。';
   let proxy;
   try { proxy = getProxy(); } catch(e) { return '❌ ' + e.message; }
   const body = { model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] };
@@ -178,42 +153,102 @@ async function callClaude(prompt, system = '') {
   try {
     r = await fetch(`${proxy}/claude`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': key },
+      headers: key
+        ? { 'Content-Type': 'application/json', 'X-Api-Key': key }
+        : { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     });
   } catch(netErr) {
     return `❌ 網路錯誤：無法連線到 Worker。請確認 Cloudflare Worker 已正常部署。(${netErr.message})`;
   }
   let data;
-  try { data = await r.json(); } catch(e) { return `❌ 回應解析失敗 (HTTP ${r.status})`; }
+  let rawText = '';
+  try {
+    rawText = await r.text();
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch(e) {
+    return `❌ 回應解析失敗 (HTTP ${r.status})`;
+  }
   if (!r.ok) {
-    if (r.status === 401) return '❌ API Key 無效或已過期，請重新設定。';
+    if (r.status === 401) {
+      const errMsg = formatErrorDetail(data?.error || data || rawText);
+      return `❌ 認證失敗：${errMsg}`;
+    }
     if (r.status === 429) return '⏳ 請求過於頻繁，請稍後再試。';
-    const errMsg = data?.error?.message || data?.error || JSON.stringify(data);
+    const errMsg = formatErrorDetail(data?.error || data || rawText);
     return `❌ 錯誤 (${r.status})：${errMsg}`;
   }
-  return data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '無回應';
+  if (data?.error) {
+    return `❌ 錯誤：${formatErrorDetail(data.error)}`;
+  }
+  return data?.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '無回應';
 }
 
-async function runAI({ spinnerId, contentId, resultBoxId = null, prompt, system = '' }) {
+async function runAI({ spinnerId, contentId, resultBoxId = null, prompt, system = '', localFallback = null }) {
   const spinner = document.getElementById(spinnerId);
   const content = document.getElementById(contentId);
   if (resultBoxId) document.getElementById(resultBoxId).style.display = 'block';
   spinner.style.display = 'inline-block';
   content.innerHTML = '<span class="hint">AI 分析中，請稍候...</span>';
   try {
-    const result = await callClaude(prompt, system);
+    let result = await callClaude(prompt, system);
+    if (typeof localFallback === 'function' && shouldUseLocalFallback(result)) {
+      result = `${getFallbackNotice(result)}\n\n${localFallback()}`;
+    }
     content.innerHTML = escHtml(result).replace(/\n/g, '<br>');
   } catch(e) {
     const msg = e?.message || JSON.stringify(e) || '未知錯誤';
-    content.innerHTML = `❌ 連線失敗：${msg}`;
+    if (typeof localFallback === 'function') {
+      const result = `⚠️ AI 服務暫時無法使用，已改用本地規則分析。\n\n${localFallback()}`;
+      content.innerHTML = escHtml(result).replace(/\n/g, '<br>');
+    } else {
+      content.innerHTML = `❌ 連線失敗：${escHtml(msg)}`;
+    }
   } finally {
     spinner.style.display = 'none';
   }
 }
 
 function escHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatErrorDetail(value) {
+  if (!value) return '未知錯誤';
+  if (typeof value === 'string') return value;
+  if (value instanceof Error) return value.message || String(value);
+  if (Array.isArray(value)) {
+    return value.map(formatErrorDetail).filter(Boolean).join('\n') || '未知錯誤';
+  }
+  if (typeof value === 'object') {
+    const parts = [];
+    for (const key of ['message', 'detail', 'type', 'code']) {
+      if (typeof value[key] === 'string' && value[key]) parts.push(value[key]);
+    }
+    if (value.error && value.error !== value) parts.push(formatErrorDetail(value.error));
+    if (parts.length) return [...new Set(parts)].join(' / ');
+    try { return JSON.stringify(value, null, 2); } catch(e) { return String(value); }
+  }
+  return String(value);
+}
+
+function shouldUseLocalFallback(message) {
+  const text = String(message || '');
+  return /credit balance|Plans & Billing|invalid_request_error|額度不足|尚未設定 API Key|API Key 無效|認證失敗|missing_api_key|無法連線到 Worker|網路錯誤/i.test(text);
+}
+
+function getFallbackNotice(message) {
+  const text = String(message || '');
+  if (/credit balance|Plans & Billing|額度不足/i.test(text)) {
+    return '⚠️ Anthropic API 額度不足，已改用本地規則分析。';
+  }
+  if (/missing_api_key|尚未設定 API Key/i.test(text)) {
+    return '⚠️ Cloudflare Worker 尚未讀到 ANTHROPIC_API_KEY Secret，已改用本地規則分析。';
+  }
+  if (/API Key 無效|認證失敗|401/i.test(text)) {
+    return '⚠️ Anthropic API Key 尚未可用，已改用本地規則分析。';
+  }
+  return '⚠️ AI 服務暫時無法使用，已改用本地規則分析。';
 }
 
 // quote with auto fallback

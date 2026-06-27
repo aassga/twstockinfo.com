@@ -12,7 +12,7 @@
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, X-Api-Key',
 };
 
@@ -30,7 +30,7 @@ const ALLOWED_UPSTREAM = [
 ];
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     // Preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -39,6 +39,16 @@ export default {
     const url    = new URL(request.url);
     const route  = url.pathname; // e.g. /twse/exchangeReport/MI_INDEX
     const params = url.search;   // e.g. ?ex_ch=tse_2330.tw
+
+    // ── Route: /claude-status  → safe diagnostics, no secret value exposed ──
+    if (route === '/claude-status') {
+      const hasWorkerSecret = Boolean(env?.ANTHROPIC_API_KEY);
+      return jsonResp({
+        ok: true,
+        anthropicSecretConfigured: hasWorkerSecret,
+        keySource: hasWorkerSecret ? 'worker_secret' : 'request_header_or_missing',
+      });
+    }
 
     // ── Route: /twse/*  → openapi.twse.com.tw ──
     if (route.startsWith('/twse/')) {
@@ -56,9 +66,14 @@ export default {
 
     // ── Route: /claude  → Anthropic API ──
     if (route === '/claude' && request.method === 'POST') {
-      const apiKey = request.headers.get('X-Api-Key') || '';
+      const apiKey = env?.ANTHROPIC_API_KEY || request.headers.get('X-Api-Key') || '';
       if (!apiKey.startsWith('sk-ant-')) {
-        return jsonResp({ error: 'Invalid API key' }, 401);
+        return jsonResp({
+          error: {
+            type: 'missing_api_key',
+            message: 'Anthropic API Key 尚未設定。請在 Cloudflare Worker Secrets 設定 ANTHROPIC_API_KEY。',
+          },
+        }, 401);
       }
       const body = await request.text();
       const resp = await fetch('https://api.anthropic.com/v1/messages', {
