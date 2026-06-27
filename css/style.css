@@ -486,6 +486,90 @@ html, body {
 .empty-state p { font-size: 15px; color: var(--text-2); margin-bottom: 4px; }
 .empty-state small { font-size: 12px; }
 
+/* ========== Portfolio ========== */
+.portfolio-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.2fr) minmax(320px, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.portfolio-form,
+.portfolio-summary {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+}
+
+.form-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 12px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.form-input {
+  padding: 9px 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-1);
+  font-size: 13px;
+  font-family: inherit;
+}
+.form-input:focus { outline: none; border-color: var(--blue); }
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.portfolio-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.summary-label {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+
+.summary-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.portfolio-table-wrap .stock-table tbody tr { cursor: default; }
+.row-actions { display: flex; gap: 6px; }
+.btn.xs { padding: 3px 8px; font-size: 11px; }
+
 /* ========== Hot100 Table ========== */
 .filter-row {
   display: flex;
@@ -521,6 +605,31 @@ html, body {
   cursor: pointer;
 }
 
+.table-search-input {
+  width: 190px;
+  padding: 6px 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-1);
+  font-size: 13px;
+  font-family: inherit;
+}
+.table-search-input:focus { outline: none; border-color: var(--blue); }
+
+.table-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.table-hint i {
+  color: var(--blue);
+  font-size: 15px;
+}
+
 .table-wrapper { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); }
 
 .stock-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -536,6 +645,41 @@ html, body {
   background: var(--bg-3);
   white-space: nowrap;
 }
+.sort-th {
+  width: 100%;
+  min-height: 22px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  cursor: pointer;
+  padding: 0;
+}
+.sort-th i {
+  color: var(--text-3);
+  font-size: 13px;
+  transition: color 0.15s, transform 0.15s;
+}
+.sort-th:hover,
+.sort-th.active {
+  color: var(--text-1);
+}
+.sort-th:hover i,
+.sort-th.active i {
+  color: var(--blue);
+}
+.sort-th.desc i {
+  transform: translateY(1px);
+}
+.sort-th.asc i {
+  transform: translateY(-1px);
+}
 .stock-table td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
@@ -544,7 +688,43 @@ html, body {
 }
 .stock-table tbody tr:last-child td { border-bottom: none; }
 .stock-table tbody tr:hover td { background: var(--bg-3); }
-.stock-table tbody tr { cursor: pointer; }
+.stock-table td.move-cell {
+  color: #071018;
+  font-weight: 700;
+  text-align: center;
+  border-bottom-color: rgba(255,255,255,0.08);
+}
+.stock-table td.move-cell.up {
+  background: rgba(242,92,92,0.72);
+}
+.stock-table td.move-cell.dn {
+  background: rgba(38,208,124,0.72);
+}
+.stock-table tbody tr:hover td.move-cell.up {
+  background: rgba(242,92,92,0.84);
+}
+.stock-table tbody tr:hover td.move-cell.dn {
+  background: rgba(38,208,124,0.84);
+}
+.stock-table tbody tr { cursor: default; }
+.stock-link {
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+.stock-link:hover {
+  color: var(--blue);
+  text-decoration-color: var(--blue);
+}
 
 .bar-mini {
   display: flex;
@@ -587,6 +767,139 @@ html, body {
   padding: 16px 18px;
 }
 
+/* ========== Chart Page ========== */
+.chart-page {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 104px);
+}
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.chart-title {
+  margin-bottom: 4px;
+}
+.chart-subtitle {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.chart-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.chart-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chart-search-input {
+  width: 210px;
+  padding: 8px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-1);
+  font-size: 13px;
+  font-family: inherit;
+}
+.chart-search-input:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+.chart-search-btn {
+  width: 34px;
+  height: 34px;
+}
+.timeframe-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.timeframe-btn {
+  min-width: 48px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.timeframe-btn:hover {
+  color: var(--text-1);
+  background: var(--bg-3);
+}
+.timeframe-btn.active {
+  color: #fff;
+  background: var(--blue);
+  font-weight: 600;
+}
+.chart-frame {
+  position: relative;
+  flex: 1;
+  min-height: 620px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: #131722;
+}
+#stockChartCanvas {
+  display: none;
+  width: 100%;
+  height: 100%;
+  min-height: 620px;
+}
+.chart-empty,
+.chart-loading,
+.chart-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-3);
+  background: #131722;
+}
+.chart-loading {
+  z-index: 2;
+}
+.chart-empty i {
+  font-size: 42px;
+  color: var(--blue);
+}
+.chart-error a {
+  color: var(--blue);
+}
+.chart-tooltip {
+  position: absolute;
+  display: none;
+  z-index: 3;
+  min-width: 210px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: rgba(15,17,23,0.94);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.65;
+  pointer-events: none;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+}
+
 /* ========== Alerts ========== */
 .alerts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .alerts-col { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
@@ -619,7 +932,7 @@ html, body {
   padding: 10px 12px;
   background: var(--bg-3);
   border-radius: var(--radius);
-  cursor: pointer;
+  cursor: default;
   transition: all 0.15s;
   border: 1px solid transparent;
 }
@@ -743,12 +1056,19 @@ html, body {
   .result-body { grid-template-columns: 1fr; }
   .result-col:first-child { border-right: none; border-bottom: 1px solid var(--border); }
   .alerts-grid { grid-template-columns: 1fr; }
+  .portfolio-grid { grid-template-columns: 1fr; }
   .inst-overview { grid-template-columns: 1fr; }
   .topbar-market { gap: 0; overflow-x: auto; }
   .market-item { padding: 0 12px; }
+  .chart-header { align-items: flex-start; flex-direction: column; }
+  .chart-controls { justify-content: flex-start; width: 100%; }
 }
 
 @media (max-width: 640px) {
   :root { --sidebar-w: 0px; }
   .sidebar { display: none; }
+  .form-grid,
+  .portfolio-summary { grid-template-columns: 1fr; }
+  .chart-search,
+  .chart-search-input { width: 100%; }
 }

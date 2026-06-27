@@ -20,9 +20,17 @@
           <i class="ti ti-search"></i>
           <span>股票搜尋</span>
         </button>
+        <button class="nav-item" data-tab="portfolio">
+          <i class="ti ti-briefcase"></i>
+          <span>我的持股</span>
+        </button>
         <button class="nav-item" data-tab="hot100">
           <i class="ti ti-flame"></i>
           <span>前100熱門</span>
+        </button>
+        <button class="nav-item" data-tab="chart">
+          <i class="ti ti-chart-candle"></i>
+          <span>走勢圖</span>
         </button>
         <button class="nav-item" data-tab="alerts">
           <i class="ti ti-bell"></i>
@@ -203,6 +211,12 @@
             </div>
 
             <div class="result-actions">
+              <button class="btn" onclick="addCurrentStockToPortfolio()">
+                <i class="ti ti-briefcase"></i> 加入持股
+              </button>
+              <button class="btn" onclick="openCurrentStockChart()">
+                <i class="ti ti-chart-candle"></i> 走勢圖
+              </button>
               <button class="btn primary" onclick="analyzeStock()">
                 <i class="ti ti-sparkles"></i> AI 深度分析
               </button>
@@ -222,17 +236,103 @@
           </div>
         </section>
 
+        <!-- ========== PORTFOLIO TAB ========== -->
+        <section class="tab-content" id="tab-portfolio">
+          <div class="page-title-row">
+            <div class="page-title"><i class="ti ti-briefcase"></i> 我的持股</div>
+            <div class="page-actions">
+              <button class="btn" onclick="refreshPortfolioQuotes()"><i class="ti ti-refresh"></i> 更新現價</button>
+              <button class="btn" onclick="exportPortfolioJson()"><i class="ti ti-file-type-json"></i> 匯出 JSON</button>
+              <button class="btn" onclick="exportPortfolioCsv()"><i class="ti ti-file-spreadsheet"></i> 匯出 CSV</button>
+            </div>
+          </div>
+
+          <div class="portfolio-grid">
+            <form class="portfolio-form" onsubmit="saveHolding(event)">
+              <input type="hidden" id="holdingId" />
+              <div class="form-title" id="holdingFormTitle">新增持股</div>
+              <div class="form-grid">
+                <label class="form-field">
+                  <span>股票代號</span>
+                  <input class="form-input" id="holdingCode" inputmode="numeric" placeholder="2330" required />
+                </label>
+                <label class="form-field">
+                  <span>股票名稱</span>
+                  <input class="form-input" id="holdingName" placeholder="台積電" required />
+                </label>
+                <label class="form-field">
+                  <span>買進價</span>
+                  <input class="form-input" id="holdingBuyPrice" type="number" min="0" step="0.01" placeholder="580" required />
+                </label>
+                <label class="form-field">
+                  <span>股數</span>
+                  <input class="form-input" id="holdingShares" type="number" min="1" step="1" placeholder="1000" required />
+                </label>
+                <label class="form-field">
+                  <span>買進日期</span>
+                  <input class="form-input" id="holdingBuyDate" type="date" required />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="btn primary" type="submit"><i class="ti ti-device-floppy"></i> 儲存持股</button>
+                <button class="btn" type="button" onclick="resetHoldingForm()">取消編輯</button>
+              </div>
+            </form>
+
+            <div class="portfolio-summary">
+              <div class="summary-card">
+                <div class="summary-label">總成本</div>
+                <div class="summary-value" id="portfolioCost">$0</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-label">目前市值</div>
+                <div class="summary-value" id="portfolioValue">$0</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-label">未實現損益</div>
+                <div class="summary-value" id="portfolioPnl">$0</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-label">報酬率</div>
+                <div class="summary-value" id="portfolioReturn">0.00%</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-hint"><i class="ti ti-info-circle"></i> 點擊股票名稱可以看走勢圖</div>
+          <div class="table-wrapper portfolio-table-wrap">
+            <table class="stock-table">
+              <thead>
+                <tr>
+                  <th>代號</th>
+                  <th>名稱</th>
+                  <th>買進價</th>
+                  <th>股數</th>
+                  <th>買進日期</th>
+                  <th>現價</th>
+                  <th>市值</th>
+                  <th>損益</th>
+                  <th>報酬率</th>
+                  <th>更新時間</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="portfolioBody"></tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- ========== HOT100 TAB ========== -->
         <section class="tab-content" id="tab-hot100">
           <div class="page-title-row">
             <div class="page-title"><i class="ti ti-flame"></i> 前100名熱門台股</div>
             <div class="page-actions">
-              <select class="sort-select" id="hot100Sort" onchange="sortHot100()">
-                <option value="vol">依成交量排序</option>
-                <option value="buy">依買入%排序</option>
-                <option value="sell">依賣出%排序</option>
-                <option value="chg">依漲跌%排序</option>
-              </select>
+              <input
+                class="table-search-input"
+                id="hot100Search"
+                placeholder="搜尋代號或名稱"
+                oninput="renderHot100(getHot100ViewList())"
+              />
               <button class="btn" onclick="loadHot100()"><i class="ti ti-refresh"></i> 重新整理</button>
             </div>
           </div>
@@ -244,6 +344,7 @@
             <button class="filter-btn" data-filter="up" onclick="filterHot100(this,'up')">▲ 上漲</button>
             <button class="filter-btn" data-filter="dn" onclick="filterHot100(this,'dn')">▼ 下跌</button>
           </div>
+          <div class="table-hint"><i class="ti ti-info-circle"></i> 點擊股票名稱可以看走勢圖</div>
 
           <div class="table-wrapper">
             <table class="stock-table" id="hot100Table">
@@ -252,12 +353,13 @@
                   <th>#</th>
                   <th>代號</th>
                   <th>名稱</th>
-                  <th>股價</th>
-                  <th>漲跌%</th>
-                  <th>買入%</th>
-                  <th>賣出%</th>
-                  <th>買賣力道</th>
-                  <th>量比%</th>
+                  <th><button class="sort-th" type="button" data-sort-key="price"><span>股價</span><i class="ti ti-selector"></i></button></th>
+                  <th><button class="sort-th" type="button" data-sort-key="chg"><span>漲跌%</span><i class="ti ti-selector"></i></button></th>
+                  <th><button class="sort-th" type="button" data-sort-key="vol"><span>成交量</span><i class="ti ti-selector"></i></button></th>
+                  <th><button class="sort-th" type="button" data-sort-key="buy"><span>買入%</span><i class="ti ti-selector"></i></button></th>
+                  <th><button class="sort-th" type="button" data-sort-key="sell"><span>賣出%</span><i class="ti ti-selector"></i></button></th>
+                  <th><button class="sort-th" type="button" data-sort-key="force"><span>買賣力道</span><i class="ti ti-selector"></i></button></th>
+                  <th><button class="sort-th" type="button" data-sort-key="volRatio"><span>量比%</span><i class="ti ti-selector"></i></button></th>
                   <th>主力方向</th>
                   <th>操作</th>
                 </tr>
@@ -272,6 +374,48 @@
             <div class="ai-pick-result" id="aiPickResult" style="display:none">
               <div class="ai-box-header"><i class="ti ti-sparkles"></i> AI 精選結果 <div class="spinner" id="pickSpinner" style="display:none"></div></div>
               <div class="ai-content" id="aiPickContent"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========== CHART TAB ========== -->
+        <section class="tab-content" id="tab-chart">
+          <div class="chart-page">
+            <div class="chart-header">
+              <div>
+                <div class="page-title chart-title"><i class="ti ti-chart-candle"></i> <span id="chartStockTitle">股票走勢圖</span></div>
+                <div class="chart-subtitle" id="chartStockMeta">請從股票列表選擇一檔股票</div>
+              </div>
+              <div class="chart-controls">
+                <div class="chart-search">
+                  <input
+                    class="chart-search-input"
+                    id="chartSearchInput"
+                    placeholder="搜尋代號或名稱"
+                    onkeydown="if(event.key==='Enter') searchChartStock()"
+                  />
+                  <button class="icon-btn chart-search-btn" type="button" title="搜尋走勢圖" onclick="searchChartStock()">
+                    <i class="ti ti-search"></i>
+                  </button>
+                </div>
+                <div class="timeframe-group" role="group" aria-label="走勢圖週期">
+                  <button class="timeframe-btn" type="button" data-interval="60" onclick="setChartInterval('60')">1時</button>
+                  <button class="timeframe-btn" type="button" data-interval="240" onclick="setChartInterval('240')">4時</button>
+                  <button class="timeframe-btn active" type="button" data-interval="D" onclick="setChartInterval('D')">1日</button>
+                </div>
+              </div>
+            </div>
+            <div class="chart-frame">
+              <div class="chart-empty" id="chartEmpty">
+                <i class="ti ti-chart-candle"></i>
+                <span>選擇股票後顯示走勢圖</span>
+              </div>
+              <div class="chart-loading" id="chartLoading" style="display:none">
+                <div class="spinner"></div>
+                <span>載入走勢圖...</span>
+              </div>
+              <canvas id="stockChartCanvas"></canvas>
+              <div class="chart-tooltip" id="chartTooltip"></div>
             </div>
           </div>
         </section>
@@ -303,6 +447,7 @@
               <div class="alert-list" id="sellAlerts"></div>
             </div>
           </div>
+          <div class="table-hint"><i class="ti ti-info-circle"></i> 點擊股票名稱可以看走勢圖</div>
           <div class="table-footer" style="margin-top:1.5rem">
             <button class="btn" onclick="aiAnalyzeAlerts()">
               <i class="ti ti-sparkles"></i> AI 解讀買賣訊號
@@ -373,6 +518,7 @@
           </div>
 
           <div class="section-title" style="margin-top:1.5rem">法人重點布局個股</div>
+          <div class="table-hint"><i class="ti ti-info-circle"></i> 點擊股票名稱可以看走勢圖</div>
           <div class="table-wrapper">
             <table class="stock-table">
               <thead>

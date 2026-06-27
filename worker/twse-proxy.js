@@ -22,11 +22,17 @@ const TWSE_HEADERS = {
   'Accept':     'application/json, text/plain, */*',
 };
 
+const YAHOO_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+  'Accept':     'application/json, text/plain, */*',
+};
+
 // 白名單：只允許打這些 domain
 const ALLOWED_UPSTREAM = [
   'openapi.twse.com.tw',
   'mis.twse.com.tw',
   'www.twse.com.tw',
+  'query1.finance.yahoo.com',
 ];
 
 export default {
@@ -50,6 +56,20 @@ export default {
       });
     }
 
+    // ── Route: /proxy-status  → safe feature diagnostics ──
+    if (route === '/proxy-status') {
+      return jsonResp({
+        ok: true,
+        features: {
+          twseOpenApi: true,
+          twseRwd: true,
+          twseMis: true,
+          yahooChart: true,
+          claude: true,
+        },
+      });
+    }
+
     // ── Route: /twse/*  → openapi.twse.com.tw ──
     if (route.startsWith('/twse/')) {
       const path     = route.replace('/twse/', '/v1/');
@@ -62,6 +82,19 @@ export default {
       const path     = route.replace('/mis', '');
       const upstream = `https://mis.twse.com.tw${path}${params}`;
       return proxyFetch(upstream);
+    }
+
+    // ── Route: /rwd/*  → www.twse.com.tw/rwd/* ──
+    if (route.startsWith('/rwd/')) {
+      const upstream = `https://www.twse.com.tw${route}${params}`;
+      return proxyFetch(upstream);
+    }
+
+    // ── Route: /yahoo/*  → query1.finance.yahoo.com/* ──
+    if (route.startsWith('/yahoo/')) {
+      const path = route.replace('/yahoo', '');
+      const upstream = `https://query1.finance.yahoo.com${path}${params}`;
+      return proxyFetch(upstream, YAHOO_HEADERS);
     }
 
     // ── Route: /claude  → Anthropic API ──
@@ -96,9 +129,9 @@ export default {
   }
 };
 
-async function proxyFetch(upstream) {
+async function proxyFetch(upstream, headers = TWSE_HEADERS) {
   try {
-    const resp = await fetch(upstream, { headers: TWSE_HEADERS });
+    const resp = await fetch(upstream, { headers });
     const body = await resp.text();
     return new Response(body, {
       status:  resp.status,

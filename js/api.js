@@ -21,8 +21,18 @@ function getProxy() {
 async function apiFetch(path) {
   const proxy = getProxy();
   const r = await fetch(proxy + path);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  if (!r.ok) {
+    if (path.startsWith('/yahoo/') && r.status === 404) {
+      throw new Error('Worker 尚未部署圖表代理 /yahoo/*，請將新版 worker/twse-proxy.js 部署到 Cloudflare Worker');
+    }
+    throw new Error(`HTTP ${r.status}`);
+  }
+  const text = await r.text();
+  try {
+    return JSON.parse(text);
+  } catch(e) {
+    throw new Error(`回應不是 JSON：${text.slice(0, 80)}`);
+  }
 }
 
 // ── TWSE API wrappers ─────────────────────────
@@ -31,8 +41,9 @@ const TWSE = {
   allStocks:     () => apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks),
   quote:      code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(d => parseQuote(d, code)),
   quoteOtc:   code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(d => parseQuote(d, code)),
-  institutional: () => apiFetch('/twse/fund/T86').then(parseInst),
-  instSummary:   () => apiFetch('/twse/fund/BFI82U').then(parseInstSummary),
+  institutional: () => fetchLatestTwseRwd('/rwd/zh/fund/T86', '&selectType=ALLBUT0999').then(parseInst),
+  instSummary:   () => fetchLatestTwseRwd('/rwd/zh/fund/BFI82U').then(parseInstSummary),
+  chart:      (code, interval = 'D', exchange = '') => fetchYahooChart(code, interval, exchange),
 };
 
 // ── Parse helpers ─────────────────────────────
@@ -69,7 +80,10 @@ async function parseQuoteAuto(code) {
   // 自動判斷上市/上櫃
   try {
     const d = await apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`);
-    if (d.msgArray && d.msgArray.length) return parseQuote(d, code);
+    if (d.msgArray && d.msgArray.length) {
+      const quote = parseQuote(d, code);
+      if (quote.name) return quote;
+    }
   } catch(e) {}
   const d2 = await apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0&_=${Date.now()}`);
   return parseQuote(d2, code);
@@ -79,6 +93,7 @@ function parseQuote(data, code) {
   const arr = data.msgArray || [];
   if (!arr.length) throw new Error('找不到股票: ' + code);
   const s    = arr[0];
+  if (!s.c || !s.n) throw new Error('找不到股票: ' + code);
   const prev = parseFloat(s.y || '0') || 0;
   const raw  = s.z && s.z !== '-' ? s.z : String(prev);
   const close = parseFloat(raw) || prev;
@@ -94,6 +109,7 @@ function parseQuote(data, code) {
   return {
     code:     s.c || code,
     name:     s.n || '',
+    exchange: s.ex || '',
     price:    close, prev, change: chg, chgPct: chgP,
     open:     parseFloat(s.o || close) || close,
     high:     parseFloat(s.h || close) || close,
@@ -105,9 +121,74 @@ function parseQuote(data, code) {
   };
 }
 
-function parseInst(data) {
+async function fetchYahooChart(code, interval, exchange = '') {
+  const market = String(exchange || '').toLowerCase() === 'otc' ? 'TWO' : 'TW';
+  try {
+    return await fetchYahooChartBySymbol(`${code}.${market}`, interval);
+  } catch(e) {
+    if (market === 'TW') return fetchYahooChartBySymbol(`${code}.TWO`, interval);
+    throw e;
+  }
+}
+
+async function fetchYahooChartBySymbol(symbol, interval) {
+  const params = getYahooChartParams(interval);
+  const data = await apiFetch(`/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?range=${params.range}&interval=${params.interval}&includePrePost=false`);
+  const result = data?.chart?.result?.[0];
+  if (!result) throw new Error(data?.chart?.error?.description || '無法取得走勢圖資料');
+
+  const quote = result.indicators?.quote?.[0] || {};
+  const timestamps = result.timestamp || [];
+  const rows = timestamps.map((time, i) => ({
+    time: Number(time) * 1000,
+    open: Number(quote.open?.[i]),
+    high: Number(quote.high?.[i]),
+    low: Number(quote.low?.[i]),
+    close: Number(quote.close?.[i]),
+    volume: Number(quote.volume?.[i] || 0),
+  })).filter(row =>
+    Number.isFinite(row.open) &&
+    Number.isFinite(row.high) &&
+    Number.isFinite(row.low) &&
+    Number.isFinite(row.close)
+  );
+
+  const candles = interval === '240' ? aggregateCandles(rows, 4) : rows;
+  if (!candles.length) throw new Error('無走勢圖資料');
+  return {
+    symbol,
+    candles,
+    currency: result.meta?.currency || 'TWD',
+  };
+}
+
+function getYahooChartParams(interval) {
+  if (interval === '60') return { range: '1mo', interval: '60m' };
+  if (interval === '240') return { range: '3mo', interval: '60m' };
+  return { range: '1y', interval: '1d' };
+}
+
+function aggregateCandles(rows, size) {
   const result = [];
-  for (const d of data.slice(0, 80)) {
+  for (let i = 0; i < rows.length; i += size) {
+    const group = rows.slice(i, i + size);
+    if (!group.length) continue;
+    result.push({
+      time: group[0].time,
+      open: group[0].open,
+      high: Math.max(...group.map(row => row.high)),
+      low: Math.min(...group.map(row => row.low)),
+      close: group[group.length - 1].close,
+      volume: group.reduce((sum, row) => sum + Number(row.volume || 0), 0),
+    });
+  }
+  return result;
+}
+
+function parseInst(data) {
+  const rows = normalizeTwseRows(data);
+  const result = [];
+  for (const d of rows.slice(0, 120)) {
     try {
       const toB = v => parseFloat((String(v || '0').replace(/,/g, '').replace('+', '')) || '0') / 1e8;
       const foreign = toB(d['外陸資買賣超股數(不含外資自營商)'] || d['外資買賣超股數']);
@@ -128,17 +209,58 @@ function parseInst(data) {
 }
 
 function parseInstSummary(data) {
+  const rows = normalizeTwseRows(data);
   const toB = (d, key = '買賣差額') => {
     try { return parseFloat((String(d[key] || '0').replace(/,/g, '')) || '0') / 1e8; } catch(e) { return 0; }
   };
-  const foreign = data.find(d => /外資|外陸/.test(String(d['單位名稱'] || '')));
-  const trust   = data.find(d => /投信/.test(String(d['單位名稱'] || '')));
-  const dealer  = data.find(d => /自營商/.test(String(d['單位名稱'] || '')) && !/自行/.test(String(d['單位名稱'] || '')));
+  const foreign = rows.find(d => /外資|外陸/.test(String(d['單位名稱'] || '')));
+  const trust   = rows.find(d => /投信/.test(String(d['單位名稱'] || '')));
+  const dealerRows = rows.filter(d => /自營商/.test(String(d['單位名稱'] || '')));
+  const dealerTotal = dealerRows.reduce((sum, row) => sum + toB(row), 0);
   return {
     foreign: parseFloat((toB(foreign || {})).toFixed(2)),
     trust:   parseFloat((toB(trust   || {})).toFixed(2)),
-    dealer:  parseFloat((toB(dealer  || {})).toFixed(2)),
+    dealer:  parseFloat(dealerTotal.toFixed(2)),
   };
+}
+
+async function fetchLatestTwseRwd(path, extraParams = '') {
+  const dates = getRecentTaiwanDates(10);
+  let lastError = null;
+
+  for (const date of dates) {
+    try {
+      const data = await apiFetch(`${path}?response=json&date=${date}${extraParams}`);
+      if (data?.stat === 'OK' && Array.isArray(data.data) && data.data.length) {
+        return data;
+      }
+      lastError = new Error(data?.stat || '沒有符合條件的資料');
+    } catch(e) {
+      lastError = e;
+    }
+  }
+
+  throw lastError || new Error('無法取得 TWSE 資料');
+}
+
+function getRecentTaiwanDates(days) {
+  const result = [];
+  const now = new Date();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    result.push(`${y}${m}${day}`);
+  }
+  return result;
+}
+
+function normalizeTwseRows(data) {
+  if (Array.isArray(data)) return data;
+  if (!data || !Array.isArray(data.fields) || !Array.isArray(data.data)) return [];
+  return data.data.map(row => Object.fromEntries(data.fields.map((field, i) => [field, row[i]])));
 }
 
 // ── Claude AI ─────────────────────────────────

@@ -3,19 +3,32 @@
 let currentStock   = null;
 let allStocksCache = [];
 let instCache      = [];
+let portfolioHoldings = [];
 let isLoadingAllStocks = false;
 let isRefreshingQuote  = false;
 let isLoadingInst      = false;
+let isRefreshingPortfolio = false;
+let chartStock = null;
+let chartInterval = 'D';
+let chartData = [];
+let chartHoverIndex = null;
+let holdingCodeLookupTimer = null;
+let holdingCodeLookupSeq = 0;
 
 const MARKET_REFRESH_MS      = 30000;
 const STOCK_LIST_REFRESH_MS  = 60000;
 const ACTIVE_QUOTE_REFRESH_MS = 15000;
 const INST_REFRESH_MS        = 180000;
+const PORTFOLIO_REFRESH_MS   = 30000;
+const PORTFOLIO_STORAGE_KEY  = 'tw_stock_portfolio_holdings';
 
 // ─── 初始化 ───────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initNav();
   initClock();
+  initPortfolio();
+  initHot100SortHeaders();
+  initStockChartCanvas();
   loadMarket();
   loadAllStocks();   // 先拉全部股票清單
   startAutoRefresh();
@@ -31,7 +44,9 @@ function initNav() {
       btn.classList.add('active');
       document.getElementById('tab-' + tab).classList.add('active');
       // 切換時按需載入
+      if (tab === 'portfolio') renderPortfolio();
       if (tab === 'hot100'  && allStocksCache.length) renderHot100(getHot100ViewList());
+      if (tab === 'chart') renderStockChartPage();
       if (tab === 'alerts'  && allStocksCache.length) renderAlerts();
       if (tab === 'inst')   loadInstitutional();
       if (tab === 'ai')     refreshAiAnalysis();
@@ -53,6 +68,7 @@ function startAutoRefresh() {
   setInterval(() => loadAllStocks({ silent: true }), STOCK_LIST_REFRESH_MS);
   setInterval(refreshActiveStockQuote, ACTIVE_QUOTE_REFRESH_MS);
   setInterval(refreshInstitutionalData, INST_REFRESH_MS);
+  setInterval(() => refreshPortfolioQuotes({ silent: true }), PORTFOLIO_REFRESH_MS);
 }
 
 // ─── 全域刷新 ─────────────────────────────
@@ -62,6 +78,7 @@ function refreshAll() {
   loadMarket();
   loadAllStocks();
   refreshActiveStockQuote();
+  refreshPortfolioQuotes({ silent: true });
   if (getActiveTab() === 'inst') loadInstitutional();
   setTimeout(() => { btn.style.animation = ''; }, 2000);
 }
@@ -72,11 +89,11 @@ async function loadMarket() {
     const d = await TWSE.market();
     const sign = d.sign === '+' || parseFloat(d.change) >= 0;
     document.getElementById('taiex').textContent    = parseFloat(d.taiex).toLocaleString();
-    document.getElementById('taiex').className      = 'market-value ' + (sign ? 'up' : 'dn');
+    document.getElementById('taiex').className      = 'market-value ' + priceMoveClass(sign ? 1 : -1);
     document.getElementById('taiex-chg').textContent =
       (sign ? '▲ +' : '▼ ') + Math.abs(parseFloat(d.change)).toFixed(2) +
       ' (' + (sign ? '+' : '') + parseFloat(d.changePct).toFixed(2) + '%)';
-    document.getElementById('taiex-chg').className  = 'market-chg ' + (sign ? 'up' : 'dn');
+    document.getElementById('taiex-chg').className  = 'market-chg ' + priceMoveClass(sign ? 1 : -1);
   } catch(e) {
     console.warn('大盤資料錯誤:', e);
   }
@@ -86,7 +103,7 @@ async function loadMarket() {
 async function loadAllStocks({ silent = false } = {}) {
   if (isLoadingAllStocks) return;
   isLoadingAllStocks = true;
-  if (!silent) showLoading('hot100Body', 11, '載入股票資料中...');
+  if (!silent) showLoading('hot100Body', 12, '載入股票資料中...');
   try {
     const raw = await TWSE.allStocks();
     allStocksCache = raw.map(s => ({
@@ -110,7 +127,7 @@ async function loadAllStocks({ silent = false } = {}) {
     refreshStockViews(!silent);
   } catch(e) {
     console.error('股票清單錯誤:', e);
-    if (!silent) showError('hot100Body', 11, '無法取得股票資料，請確認伺服器已啟動');
+    if (!silent) showError('hot100Body', 12, '無法取得股票資料，請確認伺服器已啟動');
   } finally {
     isLoadingAllStocks = false;
   }
@@ -155,7 +172,7 @@ async function searchStock({ preserveAi = false } = {}) {
     const chgEl = document.getElementById('res-chg');
     chgEl.textContent = (up ? '▲ +' : '▼ ') + Math.abs(s.change).toFixed(2) +
       ' (' + (up ? '+' : '') + s.chgPct.toFixed(2) + '%)';
-    chgEl.className = 'result-chg ' + (up ? 'up' : 'dn');
+    chgEl.className = 'result-chg ' + priceMoveClass(s.chgPct);
 
     // 買賣力道
     document.getElementById('buy-bar').style.width  = s.buyPct  + '%';
@@ -391,9 +408,385 @@ function formatPct(value) {
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
+function priceMoveClass(value) {
+  return Number(value || 0) >= 0 ? 'up' : 'dn';
+}
+
 function formatSigned(value, unit = '') {
   const n = Number(value || 0);
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}${unit}`;
+}
+
+// ─── 我的持股 ─────────────────────────────
+function initPortfolio() {
+  loadPortfolio();
+  initHoldingCodeLookup();
+  const dateInput = document.getElementById('holdingBuyDate');
+  if (dateInput && !dateInput.value) {
+    dateInput.value = new Date().toISOString().slice(0, 10);
+  }
+  renderPortfolio();
+  refreshPortfolioQuotes({ silent: true });
+}
+
+function loadPortfolio() {
+  try {
+    portfolioHoldings = JSON.parse(localStorage.getItem(PORTFOLIO_STORAGE_KEY) || '[]');
+    if (!Array.isArray(portfolioHoldings)) portfolioHoldings = [];
+  } catch(e) {
+    portfolioHoldings = [];
+  }
+}
+
+function persistPortfolio() {
+  localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(portfolioHoldings));
+}
+
+function initHoldingCodeLookup() {
+  const codeInput = document.getElementById('holdingCode');
+  if (!codeInput) return;
+
+  codeInput.addEventListener('input', () => {
+    const normalized = codeInput.value.replace(/\D/g, '').slice(0, 6);
+    if (codeInput.value !== normalized) codeInput.value = normalized;
+    scheduleHoldingNameLookup();
+  });
+  codeInput.addEventListener('blur', () => lookupHoldingNameByCode());
+}
+
+function scheduleHoldingNameLookup() {
+  clearTimeout(holdingCodeLookupTimer);
+  holdingCodeLookupTimer = setTimeout(lookupHoldingNameByCode, 350);
+}
+
+async function lookupHoldingNameByCode() {
+  const codeInput = document.getElementById('holdingCode');
+  const nameInput = document.getElementById('holdingName');
+  if (!codeInput || !nameInput) return;
+
+  const rawCode = codeInput.value.trim();
+  if (!/^\d{4,6}$/.test(rawCode)) return;
+  const code = rawCode.padStart(4, '0');
+  codeInput.value = code;
+
+  const seq = ++holdingCodeLookupSeq;
+  const cached = allStocksCache.find(s => String(s.code) === code)
+    || portfolioHoldings.find(s => String(s.code) === code)
+    || (currentStock && String(currentStock.code) === code ? currentStock : null);
+  if (cached?.name) {
+    nameInput.value = cached.name;
+    nameInput.placeholder = '台積電';
+    return;
+  }
+
+  nameInput.placeholder = '查詢股票名稱中...';
+  try {
+    const quote = await TWSE.quoteAuto(code);
+    if (seq !== holdingCodeLookupSeq || codeInput.value.trim() !== code) return;
+    if (quote.name) {
+      nameInput.value = quote.name;
+      nameInput.placeholder = '台積電';
+    } else {
+      nameInput.placeholder = '查無名稱，請手動輸入';
+    }
+  } catch(e) {
+    if (seq === holdingCodeLookupSeq && !nameInput.value.trim()) {
+      nameInput.placeholder = '查無名稱，請手動輸入';
+    }
+  }
+}
+
+async function saveHolding(event) {
+  event.preventDefault();
+
+  const id = document.getElementById('holdingId').value || createHoldingId();
+  const holding = {
+    id,
+    code: document.getElementById('holdingCode').value.trim(),
+    name: document.getElementById('holdingName').value.trim(),
+    buyPrice: Number(document.getElementById('holdingBuyPrice').value),
+    shares: Number(document.getElementById('holdingShares').value),
+    buyDate: document.getElementById('holdingBuyDate').value,
+  };
+
+  if (!/^\d{4,6}$/.test(holding.code)) {
+    alert('股票代號請輸入 4 到 6 位數字');
+    return;
+  }
+  if (!holding.name || holding.buyPrice <= 0 || holding.shares <= 0 || !holding.buyDate) {
+    alert('請完整填寫股票名稱、買進價、股數與買進日期');
+    return;
+  }
+
+  const existingIndex = portfolioHoldings.findIndex(item => item.id === id);
+  const previous = existingIndex >= 0 ? portfolioHoldings[existingIndex] : {};
+  const next = {
+    ...previous,
+    ...holding,
+    code: holding.code.padStart(4, '0'),
+    updatedAt: previous.updatedAt || '',
+    currentPrice: Number(previous.currentPrice || 0),
+  };
+
+  if (existingIndex >= 0) {
+    portfolioHoldings[existingIndex] = next;
+  } else {
+    portfolioHoldings.push(next);
+  }
+
+  persistPortfolio();
+  resetHoldingForm();
+  renderPortfolio();
+  await refreshHoldingQuote(next.id);
+}
+
+function editHolding(id) {
+  const holding = portfolioHoldings.find(item => item.id === id);
+  if (!holding) return;
+
+  document.getElementById('holdingId').value = holding.id;
+  document.getElementById('holdingCode').value = holding.code;
+  document.getElementById('holdingName').value = holding.name;
+  document.getElementById('holdingBuyPrice').value = holding.buyPrice;
+  document.getElementById('holdingShares').value = holding.shares;
+  document.getElementById('holdingBuyDate').value = holding.buyDate;
+  document.getElementById('holdingFormTitle').textContent = '編輯持股';
+  switchToTab('portfolio');
+}
+
+function deleteHolding(id) {
+  const holding = portfolioHoldings.find(item => item.id === id);
+  if (!holding) return;
+  if (!confirm(`確定刪除 ${holding.code} ${holding.name}？`)) return;
+
+  portfolioHoldings = portfolioHoldings.filter(item => item.id !== id);
+  persistPortfolio();
+  renderPortfolio();
+}
+
+function resetHoldingForm() {
+  document.getElementById('holdingId').value = '';
+  document.getElementById('holdingCode').value = '';
+  document.getElementById('holdingName').value = '';
+  document.getElementById('holdingBuyPrice').value = '';
+  document.getElementById('holdingShares').value = '';
+  document.getElementById('holdingBuyDate').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('holdingFormTitle').textContent = '新增持股';
+}
+
+function addCurrentStockToPortfolio() {
+  if (!currentStock) return;
+  resetHoldingForm();
+  document.getElementById('holdingCode').value = currentStock.code;
+  document.getElementById('holdingName').value = currentStock.name;
+  document.getElementById('holdingBuyPrice').value = currentStock.price;
+  switchToTab('portfolio');
+  document.getElementById('holdingShares').focus();
+}
+
+function openCurrentStockChart() {
+  if (!currentStock) return;
+  openStockChart(currentStock);
+}
+
+function renderPortfolio() {
+  const tbody = document.getElementById('portfolioBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  if (!portfolioHoldings.length) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text-3)">尚未新增持股</td></tr>';
+    updatePortfolioSummary();
+    return;
+  }
+
+  portfolioHoldings.forEach(holding => {
+    const currentPrice = Number(holding.currentPrice || 0);
+    const cost = holding.buyPrice * holding.shares;
+    const value = currentPrice > 0 ? currentPrice * holding.shares : 0;
+    const pnl = value - cost;
+    const returnPct = cost ? pnl / cost * 100 : 0;
+    const hasQuote = currentPrice > 0;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-weight:600">${holding.code}</td>
+      <td><button class="stock-link" type="button" onclick="openStockChartByCode('${holding.code}')">${escHtml(holding.name)}</button></td>
+      <td>${formatMoney(holding.buyPrice)}</td>
+      <td>${formatNumber(holding.shares)}</td>
+      <td>${holding.buyDate}</td>
+      <td>${hasQuote ? formatMoney(currentPrice) : '--'}</td>
+      <td>${hasQuote ? formatMoney(value) : '--'}</td>
+      <td class="${priceMoveClass(pnl)}">${hasQuote ? formatSignedMoney(pnl) : '--'}</td>
+      <td class="${priceMoveClass(returnPct)}">${hasQuote ? formatPct(returnPct) : '--'}</td>
+      <td style="color:var(--text-3);font-size:12px">${holding.updatedAt || '--'}</td>
+      <td>
+        <div class="row-actions">
+          <button class="btn xs" onclick="editHolding('${holding.id}')">編輯</button>
+          <button class="btn xs" onclick="deleteHolding('${holding.id}')">刪除</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  updatePortfolioSummary();
+}
+
+function updatePortfolioSummary() {
+  const totals = portfolioHoldings.reduce((acc, holding) => {
+    const cost = Number(holding.buyPrice || 0) * Number(holding.shares || 0);
+    const value = Number(holding.currentPrice || 0) > 0
+      ? Number(holding.currentPrice) * Number(holding.shares || 0)
+      : 0;
+    acc.cost += cost;
+    acc.value += value;
+    return acc;
+  }, { cost: 0, value: 0 });
+
+  const pnl = totals.value - totals.cost;
+  const returnPct = totals.cost ? pnl / totals.cost * 100 : 0;
+  setText('portfolioCost', formatMoney(totals.cost));
+  setText('portfolioValue', totals.value ? formatMoney(totals.value) : '--');
+  setText('portfolioPnl', totals.value ? formatSignedMoney(pnl) : '--');
+  setText('portfolioReturn', totals.value ? formatPct(returnPct) : '--');
+  setClass('portfolioPnl', 'summary-value ' + priceMoveClass(pnl));
+  setClass('portfolioReturn', 'summary-value ' + priceMoveClass(returnPct));
+}
+
+async function refreshPortfolioQuotes({ silent = false } = {}) {
+  if (isRefreshingPortfolio || !portfolioHoldings.length) return;
+  isRefreshingPortfolio = true;
+  try {
+    for (const holding of portfolioHoldings) {
+      await refreshHoldingQuote(holding.id, { render: false });
+    }
+    persistPortfolio();
+    renderPortfolio();
+  } catch(e) {
+    if (!silent) console.warn('持股現價更新失敗:', e);
+  } finally {
+    isRefreshingPortfolio = false;
+  }
+}
+
+async function refreshHoldingQuote(id, { render = true } = {}) {
+  const holding = portfolioHoldings.find(item => item.id === id);
+  if (!holding) return;
+
+  try {
+    const quote = await TWSE.quoteAuto(holding.code);
+    holding.name = holding.name || quote.name;
+    holding.currentPrice = quote.price;
+    holding.change = quote.change;
+    holding.chgPct = quote.chgPct;
+    holding.exchange = quote.exchange;
+    holding.updatedAt = new Date().toLocaleTimeString('zh-TW', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    persistPortfolio();
+    if (render) renderPortfolio();
+  } catch(e) {
+    console.warn(`持股 ${holding.code} 現價更新失敗:`, e);
+  }
+}
+
+function exportPortfolioJson() {
+  const data = portfolioHoldings.map(getExportHolding);
+  downloadTextFile(`portfolio-${getDateStamp()}.json`, JSON.stringify(data, null, 2), 'application/json;charset=utf-8');
+}
+
+function exportPortfolioCsv() {
+  const rows = portfolioHoldings.map(getExportHolding);
+  const headers = ['股票代號','股票名稱','買進價','股數','買進日期','現價','成本','市值','損益','報酬率','更新時間'];
+  const body = rows.map(row => [
+    row.code,
+    row.name,
+    row.buyPrice,
+    row.shares,
+    row.buyDate,
+    row.currentPrice,
+    row.cost,
+    row.marketValue,
+    row.pnl,
+    row.returnPct,
+    row.updatedAt,
+  ]);
+  const csv = [headers, ...body].map(cols => cols.map(csvCell).join(',')).join('\n');
+  downloadTextFile(`portfolio-${getDateStamp()}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8');
+}
+
+function getExportHolding(holding) {
+  const cost = Number(holding.buyPrice || 0) * Number(holding.shares || 0);
+  const marketValue = Number(holding.currentPrice || 0) * Number(holding.shares || 0);
+  const pnl = marketValue - cost;
+  return {
+    code: holding.code,
+    name: holding.name,
+    buyPrice: Number(holding.buyPrice || 0),
+    shares: Number(holding.shares || 0),
+    buyDate: holding.buyDate,
+    currentPrice: Number(holding.currentPrice || 0),
+    cost,
+    marketValue,
+    pnl,
+    returnPct: cost ? Number((pnl / cost * 100).toFixed(2)) : 0,
+    updatedAt: holding.updatedAt || '',
+  };
+}
+
+function downloadTextFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value) {
+  const text = String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function createHoldingId() {
+  return `h_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getDateStamp() {
+  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+function formatMoney(value) {
+  const n = Number(value || 0);
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+function formatSignedMoney(value) {
+  const n = Number(value || 0);
+  return `${n >= 0 ? '+' : '-'}$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString();
+}
+
+function formatVolume(value) {
+  const n = Number(value || 0);
+  if (n >= 100000000) return `${(n / 100000000).toFixed(2)}億`;
+  if (n >= 10000) return `${Math.round(n / 10000).toLocaleString()}萬`;
+  return n.toLocaleString();
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function setClass(id, className) {
+  const el = document.getElementById(id);
+  if (el) el.className = className;
 }
 
 // ─── 前100熱門 ────────────────────────────
@@ -404,6 +797,50 @@ function sortHot100() {
 }
 
 let hot100Filtered = [];
+let hot100SortState = { key: null, direction: null };
+
+function initHot100SortHeaders() {
+  document.querySelectorAll('[data-sort-key]').forEach(btn => {
+    btn.addEventListener('click', event => {
+      event.stopPropagation();
+      setHot100Sort(btn.dataset.sortKey);
+    });
+  });
+  updateHot100SortHeaders();
+}
+
+function setHot100Sort(key) {
+  if (hot100SortState.key !== key) {
+    hot100SortState = { key, direction: 'asc' };
+  } else if (hot100SortState.direction === 'asc') {
+    hot100SortState.direction = 'desc';
+  } else if (hot100SortState.direction === 'desc') {
+    hot100SortState = { key: null, direction: null };
+  }
+  renderHot100(getHot100ViewList());
+}
+
+function updateHot100SortHeaders() {
+  document.querySelectorAll('[data-sort-key]').forEach(btn => {
+    const isActive = btn.dataset.sortKey === hot100SortState.key;
+    const icon = btn.querySelector('i');
+    btn.classList.toggle('active', isActive);
+    btn.classList.toggle('asc', isActive && hot100SortState.direction === 'asc');
+    btn.classList.toggle('desc', isActive && hot100SortState.direction === 'desc');
+    btn.setAttribute('aria-sort', isActive ? (hot100SortState.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+    btn.title = !isActive
+      ? '點擊升序排序'
+      : hot100SortState.direction === 'asc'
+        ? '點擊降序排序'
+        : '點擊取消排序';
+    if (icon) {
+      icon.className = isActive
+        ? (hot100SortState.direction === 'asc' ? 'ti ti-chevron-up' : 'ti ti-chevron-down')
+        : 'ti ti-selector';
+    }
+  });
+}
+
 function filterHot100(btn, filter) {
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -417,28 +854,49 @@ function refreshStockViews(force = false) {
 }
 
 function getHot100ViewList() {
-  const key = document.getElementById('hot100Sort')?.value || 'vol';
+  const key = hot100SortState.key || 'vol';
+  const direction = hot100SortState.direction || 'desc';
   const activeFilter = document.querySelector('.filter-btn.active')?.dataset.filter || 'all';
+  const keyword = (document.getElementById('hot100Search')?.value || '').trim().toLowerCase();
   let list = [...allStocksCache];
+
+  if (keyword) {
+    list = list.filter(s =>
+      String(s.code || '').toLowerCase().includes(keyword) ||
+      String(s.name || '').toLowerCase().includes(keyword) ||
+      String(s.sector || '').toLowerCase().includes(keyword)
+    );
+  }
 
   if (activeFilter === 'buy')  list = list.filter(s => s.buy  >= 65);
   if (activeFilter === 'sell') list = list.filter(s => s.sell >= 65);
   if (activeFilter === 'up')   list = list.filter(s => s.chgPct > 0);
   if (activeFilter === 'dn')   list = list.filter(s => s.chgPct < 0);
 
-  return list.sort((a, b) => {
-    if (key === 'buy')  return b.buy  - a.buy;
-    if (key === 'sell') return b.sell - a.sell;
-    if (key === 'chg')  return b.chgPct - a.chgPct;
-    return b.volume - a.volume;
-  });
+  return list.sort((a, b) => compareHot100Rows(a, b, key, direction));
+}
+
+function compareHot100Rows(a, b, key, direction) {
+  const factor = direction === 'asc' ? 1 : -1;
+  let result = 0;
+  if (key === 'price') result = Number(a.price || 0) - Number(b.price || 0);
+  else if (key === 'chg') result = Number(a.chgPct || 0) - Number(b.chgPct || 0);
+  else if (key === 'vol') result = Number(a.volume || 0) - Number(b.volume || 0);
+  else if (key === 'buy') result = Number(a.buy || 0) - Number(b.buy || 0);
+  else if (key === 'sell') result = Number(a.sell || 0) - Number(b.sell || 0);
+  else if (key === 'force') result = Math.max(Number(a.buy || 0), Number(a.sell || 0)) - Math.max(Number(b.buy || 0), Number(b.sell || 0));
+  else if (key === 'volRatio') result = Number(a.volRatio || 0) - Number(b.volRatio || 0);
+  else result = Number(a.volume || 0) - Number(b.volume || 0);
+  if (result === 0) return String(a.code).localeCompare(String(b.code), 'zh-Hant', { numeric: true });
+  return result * factor;
 }
 
 function renderHot100(list) {
+  updateHot100SortHeaders();
   const tbody = document.getElementById('hot100Body');
   tbody.innerHTML = '';
   const top = list.slice(0, 100);
-  if (!top.length) { showError('hot100Body', 11, '暫無資料'); return; }
+  if (!top.length) { showError('hot100Body', 12, '暫無資料'); return; }
 
   top.forEach((s, i) => {
     const up       = s.chgPct >= 0;
@@ -449,9 +907,10 @@ function renderHot100(list) {
     tr.innerHTML = `
       <td style="color:var(--text-3);font-size:12px">${i + 1}</td>
       <td style="font-weight:600">${s.code}</td>
-      <td>${s.name} <small style="color:var(--text-3);font-size:11px">${s.sector}</small></td>
+      <td><button class="stock-link" type="button" onclick="openStockChartByCode('${s.code}')">${escHtml(s.name)}</button> <small style="color:var(--text-3);font-size:11px">${escHtml(s.sector)}</small></td>
       <td style="font-weight:600">$${(s.price||0).toLocaleString()}</td>
-      <td class="${up ? 'up' : 'dn'}">${up ? '▲ +' : '▼ '}${Math.abs(s.chgPct||0).toFixed(2)}%</td>
+      <td class="move-cell ${priceMoveClass(s.chgPct)}">${up ? '▲ +' : '▼ '}${Math.abs(s.chgPct||0).toFixed(2)}%</td>
+      <td>${formatVolume(s.volume)}</td>
       <td class="up" style="font-weight:600">${Math.round(s.buy||50)}%</td>
       <td class="dn" style="font-weight:600">${Math.round(s.sell||50)}%</td>
       <td>
@@ -462,18 +921,17 @@ function renderHot100(list) {
           <span style="font-size:11px;color:var(--text-3)">${dominant?Math.round(s.buy):Math.round(s.sell)}%</span>
         </div>
       </td>
-      <td class="${up ? 'up' : 'dn'}">${(s.chgPct||0) > 0 ? '+' : ''}${(s.chgPct||0).toFixed(2)}%</td>
+      <td>${Math.round(s.volRatio || 0)}%</td>
       <td><span class="direction-pill ${pillCls}">${pillText}</span></td>
       <td><button class="btn" style="padding:3px 8px;font-size:11px" onclick="event.stopPropagation();quickSearch('${s.code}')">分析</button></td>
     `;
-    tr.addEventListener('click', () => quickSearch(s.code));
     tbody.appendChild(tr);
   });
 }
 
 function aiPickStocks() {
   const top10 = allStocksCache.slice(0, 10).map(s =>
-    `${s.code}${s.name} 買${Math.round(s.buy)}% 賣${Math.round(s.sell)}% 漲跌${s.chgPct >= 0 ? '+' : ''}${(s.chgPct||0).toFixed(2)}%`
+    `${s.code}${s.name} 成交量${formatVolume(s.volume)} 買${Math.round(s.buy)}% 賣${Math.round(s.sell)}% 漲跌${s.chgPct >= 0 ? '+' : ''}${(s.chgPct||0).toFixed(2)}%`
   ).join('\n');
   runAI({
     spinnerId: 'pickSpinner', contentId: 'aiPickContent', resultBoxId: 'aiPickResult',
@@ -507,15 +965,14 @@ function renderAlertList(id, list, type) {
         <i class="ti ti-trending-${type === 'buy' ? 'up' : 'down'}"></i>
       </div>
       <div>
-        <div class="alert-stock-name">${s.code} ${s.name}</div>
-        <div class="alert-detail">${s.sector} · ${s.chgPct >= 0 ? '+' : ''}${(s.chgPct||0).toFixed(2)}%</div>
+        <div class="alert-stock-name">${s.code} <button class="stock-link" type="button" onclick="openStockChartByCode('${s.code}')">${escHtml(s.name)}</button></div>
+        <div class="alert-detail">${escHtml(s.sector)} · <span class="${priceMoveClass(s.chgPct)}">${s.chgPct >= 0 ? '+' : ''}${(s.chgPct||0).toFixed(2)}%</span></div>
       </div>
       <div class="alert-right">
         <div class="alert-pct ${type === 'buy' ? 'up' : 'dn'}">${pct}%</div>
         <div style="font-size:11px;color:var(--text-3)">${type === 'buy' ? '買入' : '賣出'}佔比</div>
       </div>
     `;
-    item.addEventListener('click', () => quickSearch(s.code));
     container.appendChild(item);
   });
 }
@@ -565,7 +1022,7 @@ async function loadInstitutional({ silent = false } = {}) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td style="font-weight:600">${s.code}</td>
-        <td>${s.name}</td>
+        <td><button class="stock-link" type="button" onclick="openStockChartByCode('${s.code}')">${escHtml(s.name)}</button></td>
         <td>${fmt(s.foreign)}</td>
         <td>${fmt(s.trust)}</td>
         <td>${fmt(s.dealer)}</td>
@@ -573,8 +1030,6 @@ async function loadInstitutional({ silent = false } = {}) {
         <td style="font-size:12px;color:var(--text-3)">當日</td>
         <td><span class="direction-pill ${pillCls}">${pillText}</span></td>
       `;
-      tr.style.cursor = 'pointer';
-      tr.addEventListener('click', () => quickSearch(s.code));
       tbody.appendChild(tr);
     });
   } catch(e) {
@@ -672,6 +1127,397 @@ function askAI(question) {
     spinnerId: 'quickSpinner', contentId: 'aiQuickContent', resultBoxId: 'aiQuickResult',
     prompt: question + '\n請用繁體中文作答，條理清晰。',
   });
+}
+
+// ─── 走勢圖 ───────────────────────────────
+function openStockChartByCode(code) {
+  const target = findStockForChart(code);
+  openStockChart(target || { code });
+}
+
+function openStockChart(stock, interval = chartInterval) {
+  const code = String(stock?.code || '').trim();
+  if (!code) return;
+
+  chartStock = {
+    code,
+    name: String(stock?.name || '').trim(),
+    exchange: String(stock?.exchange || ''),
+  };
+  chartInterval = interval;
+  switchToTab('chart');
+  setChartSearchValue(chartStock);
+  updateChartHeader();
+  updateTimeframeButtons();
+  renderStockChartPage();
+}
+
+function searchChartStock() {
+  const input = document.getElementById('chartSearchInput');
+  const q = String(input?.value || '').trim();
+  if (!q) return;
+
+  const stock = findStockByQuery(q);
+  if (stock) {
+    openStockChart(stock);
+    return;
+  }
+
+  const code = q.match(/\d{4,6}/)?.[0];
+  if (code) {
+    openStockChart({ code });
+    return;
+  }
+
+  drawChartMessage('找不到符合的股票，請輸入股票代號');
+}
+
+function setChartInterval(interval) {
+  chartInterval = interval;
+  updateTimeframeButtons();
+  if (chartStock) renderStockChartPage();
+}
+
+function findStockByQuery(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const sources = [allStocksCache, portfolioHoldings, instCache].flat();
+  if (currentStock) sources.unshift(currentStock);
+  return sources.find(s => String(s.code || '').toLowerCase() === q)
+    || sources.find(s => String(s.name || '').toLowerCase() === q)
+    || sources.find(s =>
+      String(s.code || '').toLowerCase().includes(q) ||
+      String(s.name || '').toLowerCase().includes(q)
+    );
+}
+
+function findStockForChart(code) {
+  const key = String(code || '').trim();
+  return allStocksCache.find(s => String(s.code) === key)
+    || portfolioHoldings.find(s => String(s.code) === key)
+    || instCache.find(s => String(s.code) === key)
+    || (currentStock && String(currentStock.code) === key ? currentStock : null);
+}
+
+function setChartSearchValue(stock) {
+  const input = document.getElementById('chartSearchInput');
+  if (!input || !stock) return;
+  input.value = stock.name ? `${stock.code} ${stock.name}` : stock.code;
+}
+
+function updateChartHeader() {
+  const title = document.getElementById('chartStockTitle');
+  const meta = document.getElementById('chartStockMeta');
+  if (!title || !meta) return;
+
+  if (!chartStock) {
+    title.textContent = '股票走勢圖';
+    meta.textContent = '請從股票列表選擇一檔股票';
+    return;
+  }
+
+  title.textContent = `${chartStock.code} ${chartStock.name || ''}`.trim();
+  meta.textContent = `${getChartSymbol(chartStock)} · ${getChartIntervalLabel(chartInterval)}`;
+}
+
+function updateTimeframeButtons() {
+  document.querySelectorAll('[data-interval]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.interval === chartInterval);
+  });
+}
+
+function initStockChartCanvas() {
+  const canvas = document.getElementById('stockChartCanvas');
+  const frame = document.querySelector('.chart-frame');
+  if (!canvas || !frame) return;
+
+  window.addEventListener('resize', () => {
+    if (getActiveTab() === 'chart' && chartData.length) drawStockChart();
+  });
+
+  canvas.addEventListener('mousemove', event => {
+    if (!chartData.length) return;
+    const rect = canvas.getBoundingClientRect();
+    const layout = getChartLayout(canvas);
+    const x = event.clientX - rect.left;
+    const plotW = layout.width - layout.left - layout.right;
+    const step = plotW / Math.max(chartData.length, 1);
+    chartHoverIndex = Math.max(0, Math.min(chartData.length - 1, Math.floor((x - layout.left) / step)));
+    drawStockChart();
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    chartHoverIndex = null;
+    hideChartTooltip();
+    if (chartData.length) drawStockChart();
+  });
+}
+
+async function renderStockChartPage() {
+  const canvas = document.getElementById('stockChartCanvas');
+  const loading = document.getElementById('chartLoading');
+  const empty = document.getElementById('chartEmpty');
+  if (!canvas) return;
+
+  updateChartHeader();
+  updateTimeframeButtons();
+
+  if (!chartStock) {
+    chartData = [];
+    canvas.style.display = 'none';
+    hideChartTooltip();
+    if (loading) loading.style.display = 'none';
+    if (empty) empty.style.display = 'flex';
+    return;
+  }
+
+  if (empty) empty.style.display = 'none';
+  if (loading) loading.style.display = 'flex';
+  canvas.style.display = 'block';
+  hideChartTooltip();
+
+  try {
+    const result = await TWSE.chart(chartStock.code, chartInterval, chartStock.exchange);
+    chartData = result.candles;
+    chartStock.yahooSymbol = result.symbol;
+    updateChartHeader();
+    drawStockChart();
+  } catch(e) {
+    console.warn('走勢圖載入失敗:', e);
+    chartData = [];
+    drawChartMessage(`走勢圖載入失敗：${e.message || '請稍後再試'}`);
+  } finally {
+    if (loading) loading.style.display = 'none';
+  }
+}
+
+function drawStockChart() {
+  const canvas = document.getElementById('stockChartCanvas');
+  if (!canvas) return;
+  const ctx = setupChartCanvas(canvas);
+  const layout = getChartLayout(canvas);
+
+  ctx.clearRect(0, 0, layout.width, layout.height);
+  drawChartBackground(ctx, layout);
+  if (!chartData.length) {
+    drawCenteredChartText(ctx, layout, '無走勢圖資料');
+    return;
+  }
+
+  const priceMin = Math.min(...chartData.map(row => row.low));
+  const priceMax = Math.max(...chartData.map(row => row.high));
+  const volumeMax = Math.max(...chartData.map(row => row.volume || 0), 1);
+  const pricePad = Math.max((priceMax - priceMin) * 0.08, priceMax * 0.01);
+  const min = priceMin - pricePad;
+  const max = priceMax + pricePad;
+
+  const plotX = layout.left;
+  const plotY = layout.top;
+  const plotW = layout.width - layout.left - layout.right;
+  const priceH = layout.priceHeight;
+  const volumeY = layout.top + layout.priceHeight + layout.gap;
+  const volumeH = layout.volumeHeight;
+  const step = plotW / Math.max(chartData.length, 1);
+  const candleW = Math.max(2, Math.min(12, step * 0.62));
+  const yForPrice = value => plotY + (max - value) / (max - min || 1) * priceH;
+  const yForVol = value => volumeY + volumeH - (value / volumeMax) * volumeH;
+
+  drawChartGrid(ctx, layout, min, max);
+
+  chartData.forEach((row, i) => {
+    const x = plotX + i * step + step / 2;
+    const up = row.close >= row.open;
+    const color = up ? '#f25c5c' : '#26d07c';
+    const openY = yForPrice(row.open);
+    const closeY = yForPrice(row.close);
+    const highY = yForPrice(row.high);
+    const lowY = yForPrice(row.low);
+    const bodyTop = Math.min(openY, closeY);
+    const bodyH = Math.max(1, Math.abs(closeY - openY));
+
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, highY);
+    ctx.lineTo(x, lowY);
+    ctx.stroke();
+    ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
+
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(x - candleW / 2, yForVol(row.volume || 0), candleW, volumeY + volumeH - yForVol(row.volume || 0));
+    ctx.globalAlpha = 1;
+  });
+
+  drawChartAxes(ctx, layout, min, max);
+  drawChartHover(ctx, layout, min, max, step);
+}
+
+function getChartSymbol(stock) {
+  const code = String(stock?.code || '').trim();
+  const exchange = String(stock?.exchange || '').toLowerCase();
+  const suffix = exchange === 'otc' ? 'TWO' : 'TW';
+  return stock?.yahooSymbol || `${code}.${suffix}`;
+}
+
+function getChartIntervalLabel(interval) {
+  if (interval === '60') return '1時';
+  if (interval === '240') return '4時';
+  return '1日';
+}
+
+function setupChartCanvas(canvas) {
+  const frame = canvas.parentElement;
+  const width = frame.clientWidth;
+  const height = frame.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+function getChartLayout(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const width = rect.width || canvas.parentElement.clientWidth || 800;
+  const height = rect.height || canvas.parentElement.clientHeight || 520;
+  const top = 28;
+  const bottom = 28;
+  const gap = 18;
+  const volumeHeight = Math.max(90, height * 0.22);
+  const priceHeight = height - top - bottom - gap - volumeHeight;
+  return { width, height, left: 56, right: 72, top, bottom, gap, priceHeight, volumeHeight };
+}
+
+function drawChartBackground(ctx, layout) {
+  ctx.fillStyle = '#131722';
+  ctx.fillRect(0, 0, layout.width, layout.height);
+}
+
+function drawChartGrid(ctx, layout, min, max) {
+  const plotW = layout.width - layout.left - layout.right;
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+
+  for (let i = 0; i <= 5; i++) {
+    const y = layout.top + (layout.priceHeight / 5) * i;
+    ctx.beginPath();
+    ctx.moveTo(layout.left, y);
+    ctx.lineTo(layout.left + plotW, y);
+    ctx.stroke();
+  }
+
+  for (let i = 0; i <= 6; i++) {
+    const x = layout.left + (plotW / 6) * i;
+    ctx.beginPath();
+    ctx.moveTo(x, layout.top);
+    ctx.lineTo(x, layout.height - layout.bottom);
+    ctx.stroke();
+  }
+
+  const volumeTop = layout.top + layout.priceHeight + layout.gap;
+  ctx.beginPath();
+  ctx.moveTo(layout.left, volumeTop);
+  ctx.lineTo(layout.left + plotW, volumeTop);
+  ctx.stroke();
+
+  ctx.fillStyle = '#9da5b4';
+  ctx.font = '12px -apple-system, Segoe UI, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 5; i++) {
+    const value = max - ((max - min) / 5) * i;
+    const y = layout.top + (layout.priceHeight / 5) * i;
+    ctx.fillText(formatChartPrice(value), layout.width - layout.right + 10, y);
+  }
+}
+
+function drawChartAxes(ctx, layout, min, max) {
+  const first = chartData[0];
+  const last = chartData[chartData.length - 1];
+  if (!first || !last) return;
+  ctx.fillStyle = '#6b7385';
+  ctx.font = '12px -apple-system, Segoe UI, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(formatChartTime(first.time), layout.left, layout.height - 8);
+  ctx.textAlign = 'right';
+  ctx.fillText(formatChartTime(last.time), layout.width - layout.right, layout.height - 8);
+
+  const latest = chartData[chartData.length - 1];
+  const closeY = layout.top + (max - latest.close) / (max - min || 1) * layout.priceHeight;
+  ctx.strokeStyle = 'rgba(242,92,92,0.7)';
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath();
+  ctx.moveTo(layout.left, closeY);
+  ctx.lineTo(layout.width - layout.right, closeY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawChartHover(ctx, layout, min, max, step) {
+  if (chartHoverIndex === null || !chartData[chartHoverIndex]) return;
+  const row = chartData[chartHoverIndex];
+  const x = layout.left + chartHoverIndex * step + step / 2;
+  const y = layout.top + (max - row.close) / (max - min || 1) * layout.priceHeight;
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(x, layout.top);
+  ctx.lineTo(x, layout.height - layout.bottom);
+  ctx.moveTo(layout.left, y);
+  ctx.lineTo(layout.width - layout.right, y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const tooltip = document.getElementById('chartTooltip');
+  if (!tooltip) return;
+  tooltip.style.display = 'block';
+  tooltip.style.left = `${Math.min(layout.width - 230, x + 12)}px`;
+  tooltip.style.top = `${Math.max(12, y - 72)}px`;
+  tooltip.innerHTML = `
+    <div>${formatChartTime(row.time)}</div>
+    <div>開 ${formatChartPrice(row.open)} 高 ${formatChartPrice(row.high)}</div>
+    <div>低 ${formatChartPrice(row.low)} 收 ${formatChartPrice(row.close)}</div>
+    <div>量 ${formatVolume(row.volume)}</div>
+  `;
+}
+
+function hideChartTooltip() {
+  const tooltip = document.getElementById('chartTooltip');
+  if (tooltip) tooltip.style.display = 'none';
+}
+
+function drawChartMessage(message) {
+  const canvas = document.getElementById('stockChartCanvas');
+  if (!canvas) return;
+  canvas.style.display = 'block';
+  const ctx = setupChartCanvas(canvas);
+  const layout = getChartLayout(canvas);
+  drawChartBackground(ctx, layout);
+  drawCenteredChartText(ctx, layout, message);
+}
+
+function drawCenteredChartText(ctx, layout, text) {
+  ctx.fillStyle = '#9da5b4';
+  ctx.font = '14px -apple-system, Segoe UI, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, layout.width / 2, layout.height / 2);
+}
+
+function formatChartPrice(value) {
+  const n = Number(value || 0);
+  return n >= 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) : n.toFixed(2);
+}
+
+function formatChartTime(time) {
+  const options = chartInterval === 'D'
+    ? { month: '2-digit', day: '2-digit' }
+    : { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+  return new Date(time).toLocaleString('zh-TW', options);
 }
 
 // ─── 工具函式 ─────────────────────────────
