@@ -1,7 +1,14 @@
 <script setup>
 import { reactive, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { showConfirmDialog, showToast } from 'vant';
+import {
+  IconBriefcase,
+  IconDeviceFloppy,
+  IconFileCode,
+  IconFileSpreadsheet,
+  IconInfoCircle,
+  IconRefresh
+} from '@tabler/icons-vue';
 import { useChartStore } from '../stores/chartStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { formatDateTime, formatMoney, formatPct, moveClass } from '../utils/formatters';
@@ -32,6 +39,12 @@ function resetForm() {
   portfolioStore.clearDraft();
 }
 
+function save(event) {
+  event.preventDefault();
+  portfolioStore.saveHolding(form);
+  resetForm();
+}
+
 function editHolding(holding) {
   Object.assign(form, {
     id: holding.id,
@@ -41,34 +54,16 @@ function editHolding(holding) {
     shares: holding.shares,
     buyDate: holding.buyDate
   });
-  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function save() {
-  try {
-    portfolioStore.saveHolding(form);
-    resetForm();
-    showToast('已儲存');
-  } catch (error) {
-    showToast(error?.message || '儲存失敗');
-  }
-}
-
-async function remove(holding) {
-  try {
-    await showConfirmDialog({
-      title: '刪除持股',
-      message: `${holding.name} ${holding.code}`
-    });
+function removeHolding(holding) {
+  if (window.confirm(`刪除 ${holding.name} ${holding.code}？`)) {
     portfolioStore.removeHolding(holding.id);
-  } catch (error) {
-    // User cancelled.
   }
 }
 
 async function refresh() {
   await portfolioStore.refreshQuotes();
-  showToast('已更新');
 }
 
 async function openChart(holding) {
@@ -79,76 +74,175 @@ async function openChart(holding) {
   });
   router.push('/chart');
 }
+
+function exportJson() {
+  downloadFile('portfolio.json', JSON.stringify(portfolioStore.holdings, null, 2), 'application/json');
+}
+
+function exportCsv() {
+  const rows = portfolioStore.holdings.map(holding => [
+    holding.code,
+    holding.name,
+    holding.buyPrice,
+    holding.shares,
+    holding.buyDate,
+    holding.currentPrice || '',
+    ((holding.currentPrice || holding.buyPrice) * holding.shares).toFixed(0),
+    (((holding.currentPrice || holding.buyPrice) - holding.buyPrice) * holding.shares).toFixed(0)
+  ]);
+  const csv = [['代號', '名稱', '買進價', '股數', '買進日期', '現價', '市值', '損益'], ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  downloadFile('portfolio.csv', csv, 'text/csv;charset=utf-8');
+}
+
+function downloadFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function holdingPnl(holding) {
+  return ((holding.currentPrice || holding.buyPrice) - holding.buyPrice) * holding.shares;
+}
+
+function holdingReturn(holding) {
+  return holding.buyPrice ? (((holding.currentPrice || holding.buyPrice) - holding.buyPrice) / holding.buyPrice) * 100 : 0;
+}
 </script>
 
 <template>
-  <section class="view-stack">
-    <div class="summary-grid">
-      <div class="summary-tile">
-        <span>總成本</span>
-        <strong>{{ formatMoney(portfolioStore.summary.cost) }}</strong>
+  <section class="tab-content active">
+    <div class="page-title-row">
+      <div class="page-title">
+        <IconBriefcase class="title-icon" :stroke-width="2" />
+        我的持股
       </div>
-      <div class="summary-tile">
-        <span>市值</span>
-        <strong>{{ formatMoney(portfolioStore.summary.value) }}</strong>
-      </div>
-      <div class="summary-tile">
-        <span>損益</span>
-        <strong :class="moveClass(portfolioStore.summary.pnl)">
-          {{ formatMoney(portfolioStore.summary.pnl) }}
-        </strong>
-      </div>
-      <div class="summary-tile">
-        <span>報酬率</span>
-        <strong :class="moveClass(portfolioStore.summary.returnPct)">
-          {{ formatPct(portfolioStore.summary.returnPct) }}
-        </strong>
+      <div class="page-actions">
+        <button class="btn" type="button" @click="refresh">
+          <IconRefresh class="btn-icon" :stroke-width="2" />
+          更新現價
+        </button>
+        <button class="btn" type="button" @click="exportJson">
+          <IconFileCode class="btn-icon" :stroke-width="2" />
+          匯出 JSON
+        </button>
+        <button class="btn" type="button" @click="exportCsv">
+          <IconFileSpreadsheet class="btn-icon" :stroke-width="2" />
+          匯出 CSV
+        </button>
       </div>
     </div>
 
-    <van-form class="panel form-panel" @submit="save">
-      <div class="section-head">
-        <h2>{{ form.id ? '編輯持股' : '新增持股' }}</h2>
-        <button class="text-action" type="button" @click="resetForm">清空</button>
-      </div>
-      <van-cell-group inset>
-        <van-field v-model="form.code" name="code" label="代號" placeholder="2330" required />
-        <van-field v-model="form.name" name="name" label="名稱" placeholder="台積電" required />
-        <van-field v-model="form.buyPrice" name="buyPrice" label="買進價" type="number" required />
-        <van-field v-model="form.shares" name="shares" label="股數" type="number" required />
-        <van-field v-model="form.buyDate" name="buyDate" label="日期" type="date" required />
-      </van-cell-group>
-      <div class="button-row">
-        <van-button block plain type="primary" native-type="button" :loading="portfolioStore.loading" @click="refresh">
-          更新現價
-        </van-button>
-        <van-button block type="primary" native-type="submit">儲存</van-button>
-      </div>
-    </van-form>
+    <div class="portfolio-grid">
+      <form class="portfolio-form" @submit="save">
+        <div class="form-title">{{ form.id ? '編輯持股' : '新增持股' }}</div>
+        <div class="form-grid">
+          <label class="form-field">
+            <span>股票代號</span>
+            <input v-model="form.code" class="form-input" inputmode="numeric" placeholder="2330" required />
+          </label>
+          <label class="form-field">
+            <span>股票名稱</span>
+            <input v-model="form.name" class="form-input" placeholder="台積電" required />
+          </label>
+          <label class="form-field">
+            <span>買進價</span>
+            <input v-model="form.buyPrice" class="form-input" type="number" min="0" step="0.01" placeholder="580" required />
+          </label>
+          <label class="form-field">
+            <span>股數</span>
+            <input v-model="form.shares" class="form-input" type="number" min="1" step="1" placeholder="1000" required />
+          </label>
+          <label class="form-field">
+            <span>買進日期</span>
+            <input v-model="form.buyDate" class="form-input" type="date" required />
+          </label>
+        </div>
+        <div class="form-actions">
+          <button class="btn primary" type="submit">
+            <IconDeviceFloppy class="btn-icon" :stroke-width="2" />
+            儲存持股
+          </button>
+          <button class="btn" type="button" @click="resetForm">取消編輯</button>
+        </div>
+      </form>
 
-    <div class="holding-list">
-      <van-swipe-cell v-for="holding in portfolioStore.holdings" :key="holding.id">
-        <article class="panel holding-card" @click="openChart(holding)">
-          <div>
-            <h3>{{ holding.name }}</h3>
-            <span class="subtle">{{ holding.code }} · {{ holding.shares.toLocaleString() }} 股</span>
+      <div class="portfolio-summary">
+        <div class="summary-card">
+          <div class="summary-label">總成本</div>
+          <div class="summary-value">{{ formatMoney(portfolioStore.summary.cost) }}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">目前市值</div>
+          <div class="summary-value">{{ formatMoney(portfolioStore.summary.value) }}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">未實現損益</div>
+          <div class="summary-value" :class="moveClass(portfolioStore.summary.pnl).replace('is-', '')">
+            {{ formatMoney(portfolioStore.summary.pnl) }}
           </div>
-          <div class="holding-price">
-            <strong>{{ formatMoney(holding.currentPrice || holding.buyPrice, 2) }}</strong>
-            <span :class="moveClass(((holding.currentPrice || holding.buyPrice) - holding.buyPrice) * holding.shares)">
-              {{ formatPct((((holding.currentPrice || holding.buyPrice) - holding.buyPrice) / holding.buyPrice) * 100) }}
-            </span>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">報酬率</div>
+          <div class="summary-value" :class="moveClass(portfolioStore.summary.returnPct).replace('is-', '')">
+            {{ formatPct(portfolioStore.summary.returnPct) }}
           </div>
-          <div class="holding-meta">
-            <span>成本 {{ formatMoney(holding.buyPrice * holding.shares) }}</span>
-            <span>{{ formatDateTime(holding.updatedAt) }}</span>
-          </div>
-        </article>
-        <template #right>
-          <button class="swipe-action edit" type="button" @click="editHolding(holding)">編輯</button>
-          <button class="swipe-action delete" type="button" @click="remove(holding)">刪除</button>
-        </template>
-      </van-swipe-cell>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-hint">
+      <IconInfoCircle class="inline-icon" :stroke-width="2" />
+      點擊股票名稱可以看走勢圖
+    </div>
+    <div class="table-wrapper portfolio-table-wrap">
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>代號</th>
+            <th>名稱</th>
+            <th>買進價</th>
+            <th>股數</th>
+            <th>買進日期</th>
+            <th>現價</th>
+            <th>市值</th>
+            <th>損益</th>
+            <th>報酬率</th>
+            <th>更新時間</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="!portfolioStore.holdings.length">
+            <td colspan="11" style="text-align:center;color:var(--text-3);padding:28px">尚未新增持股</td>
+          </tr>
+          <tr v-for="holding in portfolioStore.holdings" :key="holding.id">
+            <td>{{ holding.code }}</td>
+            <td>
+              <button class="stock-link" type="button" @click="openChart(holding)">{{ holding.name }}</button>
+            </td>
+            <td>{{ formatMoney(holding.buyPrice, 2) }}</td>
+            <td>{{ Number(holding.shares).toLocaleString() }}</td>
+            <td>{{ holding.buyDate }}</td>
+            <td>{{ formatMoney(holding.currentPrice || holding.buyPrice, 2) }}</td>
+            <td>{{ formatMoney((holding.currentPrice || holding.buyPrice) * holding.shares) }}</td>
+            <td :class="moveClass(holdingPnl(holding)).replace('is-', '')">{{ formatMoney(holdingPnl(holding)) }}</td>
+            <td :class="moveClass(holdingReturn(holding)).replace('is-', '')">{{ formatPct(holdingReturn(holding)) }}</td>
+            <td>{{ formatDateTime(holding.updatedAt) }}</td>
+            <td>
+              <div class="row-actions">
+                <button class="btn xs" type="button" @click="editHolding(holding)">編輯</button>
+                <button class="btn xs" type="button" @click="removeHolding(holding)">刪除</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 </template>

@@ -16,7 +16,7 @@ function devRootIndexFallback() {
 }
 
 export default defineConfig(({ command }) => ({
-  base: command === 'serve' ? '/' : './',
+  base: command === 'serve' ? '/' : '/twstockinfo.com/',
   appType: 'spa',
   plugins: [
     devRootIndexFallback(),
@@ -32,7 +32,8 @@ export default defineConfig(({ command }) => ({
         background_color: '#f6f8fb',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: './',
+        start_url: '/twstockinfo.com/',
+        scope: '/twstockinfo.com/',
         icons: [
           {
             src: 'icons/app.svg',

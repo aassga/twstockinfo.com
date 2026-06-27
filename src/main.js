@@ -7,6 +7,7 @@ import App from './App.vue';
 import router from './router';
 import 'vant/lib/index.css';
 import 'element-plus/dist/index.css';
+import '../legacy/css/style.css';
 import './styles/app.scss';
 
 const app = createApp(App);

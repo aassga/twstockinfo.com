@@ -1,28 +1,47 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { showToast } from 'vant';
+import {
+  IconBriefcase,
+  IconChartCandle,
+  IconMinus,
+  IconSearch,
+  IconShield,
+  IconSparkles,
+  IconTrendingDown,
+  IconTrendingUp,
+  IconWorld
+} from '@tabler/icons-vue';
 import { useChartStore } from '../stores/chartStore';
+import { useInstitutionalStore } from '../stores/institutionalStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useStockStore } from '../stores/stockStore';
-import { formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
+import { formatMoney, formatPct, formatSigned, moveClass } from '../utils/formatters';
 import { quickStocks } from '../utils/stockMeta';
 
 const router = useRouter();
 const stockStore = useStockStore();
 const portfolioStore = usePortfolioStore();
 const chartStore = useChartStore();
-const query = ref(stockStore.searchQuery || '');
+const institutionalStore = useInstitutionalStore();
+const query = ref(stockStore.searchQuery || '2330');
+const aiText = ref('點擊「AI 深度分析」取得個股分析報告');
+
 const stock = computed(() => stockStore.currentStock);
+const inst = computed(() => institutionalStore.rows.find(row => row.code === stock.value?.code) || null);
+const dominantBuy = computed(() => Number(stock.value?.buyPct || 0) >= Number(stock.value?.sellPct || 0));
+const changeClass = computed(() => moveClass(stock.value?.chgPct).replace('is-', ''));
 
 async function submit(value = query.value) {
   if (!value) return;
-  try {
-    const result = await stockStore.searchStock(value);
-    query.value = result.code;
-  } catch (error) {
-    showToast(error?.message || '查詢失敗');
-  }
+  const result = await stockStore.searchStock(value);
+  query.value = result.code;
+  const row = institutionalStore.rows.find(item => item.code === result.code);
+  if (!row && !institutionalStore.loading) institutionalStore.loadInstitutional({ silent: true });
+}
+
+function quickSearch(code) {
+  submit(code);
 }
 
 function addToPortfolio() {
@@ -36,109 +55,194 @@ async function openChart() {
   await chartStore.openStock(stock.value);
   router.push('/chart');
 }
+
+function analyze(type) {
+  if (!stock.value) return;
+  const s = stock.value;
+  const instTotal = inst.value?.total || 0;
+  if (type === 'tech') {
+    aiText.value = [
+      `${s.code} ${s.name} 技術面觀察`,
+      `目前漲跌幅 ${formatPct(s.chgPct)}，量比 ${Math.round(s.volRatio || 0)}%。`,
+      `買賣力道為買入 ${Math.round(s.buyPct)}% / 賣出 ${Math.round(s.sellPct)}%。`,
+      s.chgPct >= 0 ? '價格偏強，若量能延續可觀察突破後是否站穩。' : '價格偏弱，先觀察是否止跌並守住前低。'
+    ].join('\n');
+    return;
+  }
+  if (type === 'risk') {
+    aiText.value = [
+      `${s.code} ${s.name} 風險評估`,
+      `法人合計 ${formatSigned(instTotal, 2, '億')}。`,
+      s.sellPct >= 62 ? '賣方力道偏高，短線需提高防守。' : '目前未見明顯單邊賣壓。',
+      '此分析為本機規則推估，不構成投資建議。'
+    ].join('\n');
+    return;
+  }
+  aiText.value = [
+    `${s.code} ${s.name} 個股深度分析`,
+    `產業：${s.sector}，現價 ${formatMoney(s.price, 2)}，漲跌幅 ${formatPct(s.chgPct)}。`,
+    `籌碼面：買入 ${Math.round(s.buyPct)}%，賣出 ${Math.round(s.sellPct)}%，${dominantBuy.value ? '買入主導' : '賣出主導'}。`,
+    `法人面：外資 ${formatSigned(inst.value?.foreign || 0, 2, '億')}，投信 ${formatSigned(inst.value?.trust || 0, 2, '億')}，自營商 ${formatSigned(inst.value?.dealer || 0, 2, '億')}。`,
+    '操作上建議搭配走勢圖確認支撐壓力與量能延續。'
+  ].join('\n');
+}
 </script>
 
 <template>
-  <section class="view-stack">
-    <van-search
-      v-model="query"
-      shape="round"
-      placeholder="輸入股票代號或名稱"
-      :show-action="true"
-      @search="submit"
-    >
-      <template #action>
-        <button class="text-action" type="button" @click="submit()">搜尋</button>
-      </template>
-    </van-search>
+  <section class="tab-content active">
+    <div class="page-title">
+      <IconSearch class="title-icon" :stroke-width="2" />
+      股票搜尋分析
+    </div>
 
-    <div class="quick-row">
-      <button
-        v-for="item in quickStocks"
-        :key="item.code"
-        class="quick-chip"
-        type="button"
-        @click="submit(item.code)"
-      >
-        <span>{{ item.name }}</span>
-        <strong>{{ item.code }}</strong>
+    <div class="search-row">
+      <input
+        v-model="query"
+        class="search-input"
+        placeholder="輸入股票代號或名稱，例如：2330 或 台積電"
+        @keydown.enter="submit()"
+      />
+      <button class="btn primary" type="button" @click="submit()">
+        <IconSearch class="btn-icon" :stroke-width="2" />
+        搜尋
       </button>
     </div>
 
-    <van-skeleton v-if="stockStore.loadingQuote" title :row="5" />
+    <div class="quick-picks">
+      <span class="quick-label">熱門：</span>
+      <button
+        v-for="item in quickStocks"
+        :key="item.code"
+        class="quick-btn"
+        type="button"
+        @click="quickSearch(item.code)"
+      >
+        {{ item.name }} {{ item.code }}
+      </button>
+    </div>
 
-    <article v-else-if="stock" class="panel stock-panel">
-      <div class="stock-heading">
-        <div>
-          <div class="stock-code">{{ stock.code }}</div>
-          <h1>{{ stock.name }}</h1>
-          <span class="subtle">{{ stock.sector }}</span>
+    <div v-if="stock" class="search-result">
+      <div class="result-header">
+        <div class="result-meta">
+          <div class="result-code">{{ stock.code }}</div>
+          <div class="result-name">{{ stock.name }}</div>
+          <div class="result-sector">{{ stock.sector }}</div>
         </div>
-        <div class="price-box">
-          <strong>{{ formatMoney(stock.price, 2) }}</strong>
-          <span :class="moveClass(stock.chgPct)">{{ formatPct(stock.chgPct) }}</span>
+        <div class="result-price-block">
+          <div class="result-price">{{ formatMoney(stock.price, 2) }}</div>
+          <div class="result-chg" :class="changeClass">
+            {{ stock.chgPct >= 0 ? '▲' : '▼' }} {{ formatSigned(stock.change, 2) }}
+            ({{ formatPct(stock.chgPct) }})
+          </div>
         </div>
-      </div>
-
-      <div class="metric-grid three">
-        <div>
-          <span>開盤</span>
-          <strong>{{ formatMoney(stock.open, 2) }}</strong>
-        </div>
-        <div>
-          <span>最高</span>
-          <strong>{{ formatMoney(stock.high, 2) }}</strong>
-        </div>
-        <div>
-          <span>最低</span>
-          <strong>{{ formatMoney(stock.low, 2) }}</strong>
-        </div>
-      </div>
-
-      <div class="trade-force">
-        <div class="force-row">
-          <span>買盤</span>
-          <div class="force-track"><i class="buy" :style="{ width: `${stock.buyPct}%` }" /></div>
-          <strong>{{ stock.buyPct }}%</strong>
-        </div>
-        <div class="force-row">
-          <span>賣盤</span>
-          <div class="force-track"><i class="sell" :style="{ width: `${stock.sellPct}%` }" /></div>
-          <strong>{{ stock.sellPct }}%</strong>
-        </div>
-      </div>
-
-      <div class="button-row">
-        <van-button block plain type="primary" @click="addToPortfolio">加入持股</van-button>
-        <van-button block type="primary" @click="openChart">走勢圖</van-button>
-      </div>
-    </article>
-
-    <article v-else class="panel quiet-panel">
-      <strong>台股資訊</strong>
-      <span>熱門股與持股資料會自動同步到下方頁籤。</span>
-    </article>
-
-    <section class="panel">
-      <div class="section-head">
-        <h2>熱門成交</h2>
-        <router-link to="/hot100">全部</router-link>
-      </div>
-      <div class="compact-list">
-        <button
-          v-for="item in stockStore.hotStocks.slice(0, 5)"
-          :key="item.code"
-          class="stock-row"
-          type="button"
-          @click="submit(item.code)"
-        >
-          <span>
-            <strong>{{ item.name }}</strong>
-            <small>{{ item.code }} · {{ formatVolume(item.volume) }}</small>
+        <div class="result-dominant">
+          <span class="dominant-label">當前主力</span>
+          <span class="dominant-tag" :class="dominantBuy ? 'buy' : 'sell'">
+            {{ dominantBuy ? '買入主導' : '賣出主導' }}
           </span>
-          <b :class="moveClass(item.chgPct)">{{ formatPct(item.chgPct) }}</b>
+        </div>
+      </div>
+
+      <div class="result-body">
+        <div class="result-col">
+          <div class="col-title">買賣力道</div>
+          <div class="buysell-bars">
+            <div class="bs-row">
+              <span class="bs-label buy">買入</span>
+              <div class="bs-track"><div class="bs-fill buy" :style="{ width: `${stock.buyPct}%` }"></div></div>
+              <span class="bs-pct buy">{{ Math.round(stock.buyPct) }}%</span>
+            </div>
+            <div class="bs-row">
+              <span class="bs-label sell">賣出</span>
+              <div class="bs-track"><div class="bs-fill sell" :style="{ width: `${stock.sellPct}%` }"></div></div>
+              <span class="bs-pct sell">{{ Math.round(stock.sellPct) }}%</span>
+            </div>
+            <div class="bs-row">
+              <span class="bs-label vol">量比</span>
+              <div class="bs-track"><div class="bs-fill vol" :style="{ width: `${stock.volRatio}%` }"></div></div>
+              <span class="bs-pct vol">{{ Math.round(stock.volRatio) }}%</span>
+            </div>
+          </div>
+          <div class="vs-summary">
+            <IconTrendingUp v-if="dominantBuy" class="inline-icon" :stroke-width="2" />
+            <IconTrendingDown v-else class="inline-icon" :stroke-width="2" />
+            {{ dominantBuy ? '買方較強，市場偏多' : '賣方較強，留意拉回' }}
+          </div>
+        </div>
+
+        <div class="result-col">
+          <div class="col-title">三大法人</div>
+          <div class="inst-cards">
+            <div class="inst-card">
+              <div class="inst-icon foreign"><IconWorld class="inline-icon" :stroke-width="2" /></div>
+              <div class="inst-info">
+                <div class="inst-name">外資</div>
+                <div class="inst-val" :class="moveClass(inst?.foreign).replace('is-', '')">
+                  {{ formatSigned(inst?.foreign || 0, 2, '億') }}
+                </div>
+              </div>
+            </div>
+            <div class="inst-card">
+              <div class="inst-icon trust"><IconTrendingUp class="inline-icon" :stroke-width="2" /></div>
+              <div class="inst-info">
+                <div class="inst-name">投信</div>
+                <div class="inst-val" :class="moveClass(inst?.trust).replace('is-', '')">
+                  {{ formatSigned(inst?.trust || 0, 2, '億') }}
+                </div>
+              </div>
+            </div>
+            <div class="inst-card">
+              <div class="inst-icon dealer"><IconMinus class="inline-icon" :stroke-width="2" /></div>
+              <div class="inst-info">
+                <div class="inst-name">自營商</div>
+                <div class="inst-val" :class="moveClass(inst?.dealer).replace('is-', '')">
+                  {{ formatSigned(inst?.dealer || 0, 2, '億') }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-box">
+        <div class="ai-box-header">
+          <IconSparkles class="inline-icon" :stroke-width="2" />
+          AI 個股深度分析
+        </div>
+        <div class="ai-content">
+          <span v-if="!aiText" class="hint">點擊「AI 深度分析」取得個股分析報告</span>
+          <span v-else>{{ aiText }}</span>
+        </div>
+      </div>
+
+      <div class="result-actions">
+        <button class="btn" type="button" @click="addToPortfolio">
+          <IconBriefcase class="btn-icon" :stroke-width="2" />
+          加入持股
+        </button>
+        <button class="btn" type="button" @click="openChart">
+          <IconChartCandle class="btn-icon" :stroke-width="2" />
+          走勢圖
+        </button>
+        <button class="btn primary" type="button" @click="analyze('deep')">
+          <IconSparkles class="btn-icon" :stroke-width="2" />
+          AI 深度分析
+        </button>
+        <button class="btn" type="button" @click="analyze('tech')">
+          <IconTrendingUp class="btn-icon" :stroke-width="2" />
+          技術面分析
+        </button>
+        <button class="btn" type="button" @click="analyze('risk')">
+          <IconShield class="btn-icon" :stroke-width="2" />
+          風險評估
         </button>
       </div>
-    </section>
+    </div>
+
+    <div v-else class="empty-state">
+      <IconChartCandle class="title-icon" :size="48" :stroke-width="1.8" />
+      <p>輸入股票代號或名稱開始分析</p>
+      <small>支援台股代號搜尋，例如 2330、2317、0050</small>
+    </div>
   </section>
 </template>

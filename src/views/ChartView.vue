@@ -1,13 +1,11 @@
 <script setup>
 import { ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import { showToast } from 'vant';
+import { IconChartCandle, IconSearch } from '@tabler/icons-vue';
 import StockChart from '../components/StockChart.vue';
 import { useChartStore } from '../stores/chartStore';
 import { useStockStore } from '../stores/stockStore';
-import { formatMoney, formatPct, moveClass } from '../utils/formatters';
 
-const router = useRouter();
 const stockStore = useStockStore();
 const chartStore = useChartStore();
 const query = ref(chartStore.stock?.code || stockStore.currentStock?.code || '');
@@ -31,72 +29,67 @@ async function search() {
     showToast(error?.message || '走勢圖讀取失敗');
   }
 }
-
-async function selectInterval(value) {
-  await chartStore.setInterval(value);
-}
-
-function backToSearch() {
-  if (chartStore.stock?.code) stockStore.searchQuery = chartStore.stock.code;
-  router.push('/search');
-}
 </script>
 
 <template>
-  <section class="view-stack">
-    <van-search
-      v-model="query"
-      shape="round"
-      placeholder="輸入股票代號或名稱"
-      :show-action="true"
-      @search="search"
-    >
-      <template #action>
-        <button class="text-action" type="button" @click="search">搜尋</button>
-      </template>
-    </van-search>
-
-    <article v-if="chartStore.stock" class="panel chart-stock-strip">
-      <div>
-        <strong>{{ chartStore.stock.name }}</strong>
-        <span>{{ chartStore.stock.code }}</span>
+  <section class="tab-content active">
+    <div class="chart-page">
+      <div class="chart-header">
+        <div>
+          <div class="page-title chart-title">
+            <IconChartCandle class="title-icon" :stroke-width="2" />
+            <span>{{ chartStore.stock ? `${chartStore.stock.code} ${chartStore.stock.name}` : '股票走勢圖' }}</span>
+          </div>
+          <div class="chart-subtitle">
+            {{ chartStore.stock ? `目前週期：${chartStore.interval}` : '請從股票列表選擇一檔股票' }}
+          </div>
+        </div>
+        <div class="chart-controls">
+          <div class="chart-search">
+            <input
+              v-model="query"
+              class="chart-search-input"
+              placeholder="搜尋代號或名稱"
+              @keydown.enter="search"
+            />
+            <button class="icon-btn chart-search-btn" type="button" title="搜尋走勢圖" @click="search">
+              <IconSearch class="btn-icon" :stroke-width="2" />
+            </button>
+          </div>
+          <div class="timeframe-group" role="group" aria-label="走勢圖週期">
+            <button
+              v-for="item in intervals"
+              :key="item.value"
+              class="timeframe-btn"
+              :class="{ active: chartStore.interval === item.value }"
+              type="button"
+              @click="chartStore.setInterval(item.value)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+        </div>
       </div>
-      <button class="text-action" type="button" @click="backToSearch">明細</button>
-    </article>
 
-    <div class="filter-row">
-      <button
-        v-for="item in intervals"
-        :key="item.value"
-        :class="{ active: chartStore.interval === item.value }"
-        type="button"
-        @click="selectInterval(item.value)"
-      >
-        {{ item.label }}
-      </button>
-    </div>
-
-    <StockChart
-      :candles="chartStore.candles"
-      :interval="chartStore.interval"
-      :loading="chartStore.loading"
-      :error="chartStore.error"
-    />
-
-    <div v-if="chartStore.stock" class="metric-grid three">
-      <div>
-        <span>現價</span>
-        <strong>{{ formatMoney(chartStore.stock.price, 2) }}</strong>
-      </div>
-      <div>
-        <span>漲跌幅</span>
-        <strong :class="moveClass(chartStore.stock.chgPct)">
-          {{ formatPct(chartStore.stock.chgPct) }}
-        </strong>
-      </div>
-      <div>
-        <span>K棒數</span>
-        <strong>{{ chartStore.candles.length }}</strong>
+      <div class="chart-frame">
+        <div v-if="!chartStore.stock && !chartStore.loading" class="chart-empty">
+          <IconChartCandle class="title-icon" :size="42" :stroke-width="1.8" />
+          <span>選擇股票後顯示走勢圖</span>
+        </div>
+        <div v-else-if="chartStore.loading" class="chart-loading">
+          <div class="spinner"></div>
+          <span>載入走勢圖...</span>
+        </div>
+        <div v-else-if="chartStore.error" class="chart-error">
+          {{ chartStore.error }}
+        </div>
+        <StockChart
+          v-else
+          :candles="chartStore.candles"
+          :interval="chartStore.interval"
+          :loading="chartStore.loading"
+          :error="chartStore.error"
+        />
       </div>
     </div>
   </section>

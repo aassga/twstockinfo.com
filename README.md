@@ -46,7 +46,7 @@ GitHub Pages 應部署 `dist/`，不要直接部署 Vue 原始碼。
 已加入 GitHub Actions workflow：
 
 ```text
-.github/workflows/deploy-pages.yml
+.github/workflows/deploy.yml
 ```
 
 Repo 的 GitHub Pages 設定請選：
@@ -55,7 +55,17 @@ Repo 的 GitHub Pages 設定請選：
 Settings -> Pages -> Source: GitHub Actions
 ```
 
-目前 Vite production build 使用相對路徑 `./`，可支援 GitHub Pages 專案路徑與自訂網域。若未來要固定成自訂網域根目錄，也可以改成 `base: '/'`。
+GitHub Pages 專案網址：
+
+```text
+https://aassga.github.io/twstockinfo.com/
+```
+
+目前 Vite production build 使用：
+
+```js
+base: '/twstockinfo.com/'
+```
 
 ## Worker
 

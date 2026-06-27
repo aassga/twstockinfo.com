@@ -1,5 +1,6 @@
 <script setup>
 import { useRouter } from 'vue-router';
+import { IconFlame, IconInfoCircle, IconRefresh, IconSelector, IconSparkles } from '@tabler/icons-vue';
 import { useChartStore } from '../stores/chartStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
@@ -7,50 +8,143 @@ import { formatMoney, formatPct, formatVolume, moveClass } from '../utils/format
 const router = useRouter();
 const stockStore = useStockStore();
 const chartStore = useChartStore();
+const filters = [
+  { key: 'all', label: '全部' },
+  { key: 'buy', label: '🔴 強力買入' },
+  { key: 'sell', label: '🟢 強力賣出' },
+  { key: 'up', label: '▲ 上漲' },
+  { key: 'down', label: '▼ 下跌' }
+];
+const columns = [
+  { key: 'price', label: '股價' },
+  { key: 'chg', label: '漲跌%' },
+  { key: 'vol', label: '成交量' },
+  { key: 'buy', label: '買入%' },
+  { key: 'sell', label: '賣出%' },
+  { key: 'force', label: '買賣力道' },
+  { key: 'volRatio', label: '量比%' }
+];
 
 async function openChart(stock) {
   await chartStore.openStock(stock);
   router.push('/chart');
 }
+
+function direction(stock) {
+  if (stock.buyPct >= 65) return { text: '強買', type: 'buy' };
+  if (stock.sellPct >= 65) return { text: '強賣', type: 'sell' };
+  return { text: '均衡', type: 'neutral' };
+}
 </script>
 
 <template>
-  <section class="view-stack">
-    <van-search v-model="stockStore.hotSearch" shape="round" placeholder="搜尋代號或名稱" />
+  <section class="tab-content active">
+    <div class="page-title-row">
+      <div class="page-title">
+        <IconFlame class="title-icon" :stroke-width="2" />
+        前100名熱門台股
+      </div>
+      <div class="page-actions">
+        <input v-model="stockStore.hotSearch" class="table-search-input" placeholder="搜尋代號或名稱" />
+        <button class="btn" type="button" @click="stockStore.loadAllStocks()">
+          <IconRefresh class="btn-icon" :stroke-width="2" />
+          重新整理
+        </button>
+      </div>
+    </div>
 
     <div class="filter-row">
-      <button :class="{ active: stockStore.hotFilter === 'all' }" type="button" @click="stockStore.hotFilter = 'all'">全部</button>
-      <button :class="{ active: stockStore.hotFilter === 'up' }" type="button" @click="stockStore.hotFilter = 'up'">上漲</button>
-      <button :class="{ active: stockStore.hotFilter === 'down' }" type="button" @click="stockStore.hotFilter = 'down'">下跌</button>
-    </div>
-
-    <div class="sort-row">
-      <button type="button" @click="stockStore.setHotSort('volume')">成交量</button>
-      <button type="button" @click="stockStore.setHotSort('chgPct')">漲跌幅</button>
-      <button type="button" @click="stockStore.setHotSort('price')">股價</button>
-      <button type="button" @click="stockStore.setHotSort('buyPct')">買盤</button>
-    </div>
-
-    <van-skeleton v-if="stockStore.loadingAll" title :row="8" />
-
-    <div v-else class="ranking-list">
       <button
-        v-for="(stock, index) in stockStore.hotStocks.slice(0, 100)"
-        :key="stock.code"
-        class="ranking-row"
+        v-for="filter in filters"
+        :key="filter.key"
+        class="filter-btn"
+        :class="{ active: stockStore.hotFilter === filter.key }"
         type="button"
-        @click="openChart(stock)"
+        @click="stockStore.hotFilter = filter.key"
       >
-        <span class="rank">{{ index + 1 }}</span>
-        <span class="ranking-main">
-          <strong>{{ stock.name }}</strong>
-          <small>{{ stock.code }} · {{ stock.sector }} · {{ formatVolume(stock.volume) }}</small>
-        </span>
-        <span class="ranking-price">
-          <strong>{{ formatMoney(stock.price, 2) }}</strong>
-          <small :class="moveClass(stock.chgPct)">{{ formatPct(stock.chgPct) }}</small>
-        </span>
+        {{ filter.label }}
       </button>
+    </div>
+
+    <div class="table-hint">
+      <IconInfoCircle class="inline-icon" :stroke-width="2" />
+      點擊股票名稱可以看走勢圖
+    </div>
+
+    <div class="table-wrapper">
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>代號</th>
+            <th>名稱</th>
+            <th v-for="column in columns" :key="column.key">
+              <button class="sort-th" type="button" :class="{ active: stockStore.hotSort.key === column.key }" @click="stockStore.setHotSort(column.key)">
+                <span>{{ column.label }}</span>
+                <IconSelector class="inline-icon" :stroke-width="2" />
+              </button>
+            </th>
+            <th>主力方向</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(stock, index) in stockStore.hotStocks.slice(0, 100)" :key="stock.code">
+            <td>{{ index + 1 }}</td>
+            <td>{{ stock.code }}</td>
+            <td>
+              <button class="stock-link" type="button" @click="openChart(stock)">
+                {{ stock.name }}
+              </button>
+              <span style="color:var(--text-3);font-size:11px;margin-left:4px">{{ stock.sector }}</span>
+            </td>
+            <td>{{ formatMoney(stock.price, 2) }}</td>
+            <td class="move-cell" :class="moveClass(stock.chgPct).replace('is-', '')">
+              {{ stock.chgPct >= 0 ? '▲' : '▼' }} {{ formatPct(Math.abs(stock.chgPct)) }}
+            </td>
+            <td>{{ formatVolume(stock.volume) }}</td>
+            <td>{{ Math.round(stock.buyPct) }}%</td>
+            <td>{{ Math.round(stock.sellPct) }}%</td>
+            <td>
+              <div class="bar-mini">
+                <div class="bar-mini-track">
+                  <div
+                    class="bar-mini-fill"
+                    :class="stock.buyPct >= stock.sellPct ? 'buy' : 'sell'"
+                    :style="{ width: `${Math.max(stock.buyPct, stock.sellPct)}%` }"
+                  ></div>
+                </div>
+                <span>{{ Math.round(Math.max(stock.buyPct, stock.sellPct)) }}%</span>
+              </div>
+            </td>
+            <td>{{ Math.round(stock.volRatio) }}%</td>
+            <td>
+              <span class="direction-pill" :class="direction(stock).type">
+                {{ direction(stock).text }}
+              </span>
+            </td>
+            <td>
+              <button class="btn xs" type="button" @click="openChart(stock)">分析</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-footer">
+      <button class="btn" type="button">
+        <IconSparkles class="btn-icon" :stroke-width="2" />
+        AI 精選推薦
+      </button>
+      <div class="ai-pick-result">
+        <div class="ai-box-header">
+          <IconSparkles class="inline-icon" :stroke-width="2" />
+          AI 精選結果
+        </div>
+        <div class="ai-content">
+          <span class="hint">依目前前100熱門股排序，優先觀察量價同步且主力方向明確的個股。</span>
+        </div>
+      </div>
     </div>
   </section>
 </template>

@@ -26,10 +26,18 @@ function parseMarket(data) {
   const weighted = rows.find(row => Object.values(row).some(value => String(value).includes('發行量加權股價指數')));
   const row = weighted || rows[0] || {};
   const taiex = parseNumber(read(row, ['收盤指數', '收盤價', '指數', 'Index']));
-  const change = parseNumber(read(row, ['漲跌點數', '漲跌', 'Change']));
-  const changePct = parseNumber(read(row, ['漲跌百分比', '漲跌幅', 'ChangePercent']));
-  const signText = String(read(row, ['漲跌(+/-)', '漲跌符號', 'Sign']) || '');
-  const sign = signText.includes('-') || change < 0 ? '-' : '+';
+  const rawChange = read(row, ['漲跌點數', '漲跌', 'Change']);
+  const rawChangePct = read(row, ['漲跌百分比', '漲跌幅', 'ChangePercent']);
+  const rawSign = read(row, ['漲跌(+/-)', '漲跌符號', 'Sign']);
+  const changeValue = parseNumber(rawChange);
+  const changePctValue = parseNumber(rawChangePct);
+  const negative = isNegativeMarketMove(rawSign) ||
+    isNegativeMarketMove(rawChange) ||
+    changeValue < 0 ||
+    changePctValue < 0;
+  const sign = negative ? '-' : '+';
+  const change = Number((Math.abs(changeValue) * (negative ? -1 : 1)).toFixed(2));
+  const changePct = Number((Math.abs(changePctValue) * (negative ? -1 : 1)).toFixed(2));
 
   return {
     taiex,
@@ -239,8 +247,17 @@ function read(row, keys) {
 }
 
 function parseNumber(value, fallback = 0) {
-  const number = Number(String(value ?? '').replace(/,/g, '').replace('+', ''));
+  const normalized = String(value ?? '')
+    .replace(/,/g, '')
+    .replace(/[－−]/g, '-')
+    .replace(/[＋]/g, '+');
+  const match = normalized.match(/[+-]?\d+(?:\.\d+)?/);
+  const number = match ? Number(match[0]) : NaN;
   return Number.isFinite(number) ? number : fallback;
+}
+
+function isNegativeMarketMove(value) {
+  return /-|－|−|▼|跌|down/i.test(String(value ?? ''));
 }
 
 function toHundredMillion(value) {

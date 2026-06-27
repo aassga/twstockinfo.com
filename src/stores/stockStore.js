@@ -33,13 +33,15 @@ export const useStockStore = defineStore('stocks', () => {
       .filter(stock => {
         if (hotFilter.value === 'up' && stock.chgPct < 0) return false;
         if (hotFilter.value === 'down' && stock.chgPct >= 0) return false;
+        if (hotFilter.value === 'buy' && stock.buyPct < 65) return false;
+        if (hotFilter.value === 'sell' && stock.sellPct < 65) return false;
         if (!keyword) return true;
         return stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
       })
       .slice()
       .sort((a, b) => {
-        const left = Number(a[key] ?? 0);
-        const right = Number(b[key] ?? 0);
+        const left = Number(sortValue(a, key));
+        const right = Number(sortValue(b, key));
         if (left === right) return a.code.localeCompare(b.code);
         return (left - right) * factor;
       });
@@ -126,6 +128,15 @@ export const useStockStore = defineStore('stocks', () => {
       sellPct,
       volRatio: Number(stock.volRatio || 50)
     };
+  }
+
+  function sortValue(stock, key) {
+    if (key === 'chg') return stock.chgPct;
+    if (key === 'vol') return stock.volume;
+    if (key === 'buy') return stock.buyPct;
+    if (key === 'sell') return stock.sellPct;
+    if (key === 'force') return Math.max(stock.buyPct, stock.sellPct);
+    return stock[key] ?? 0;
   }
 
   return {
