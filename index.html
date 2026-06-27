@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台股即時分析儀表板</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.10.0/dist/tabler-icons.min.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-icon">📈</span>
+        <span class="logo-text">台股分析</span>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="search">
+          <i class="ti ti-search"></i>
+          <span>股票搜尋</span>
+        </button>
+        <button class="nav-item" data-tab="hot100">
+          <i class="ti ti-flame"></i>
+          <span>前100熱門</span>
+        </button>
+        <button class="nav-item" data-tab="alerts">
+          <i class="ti ti-bell"></i>
+          <span>買賣提醒</span>
+        </button>
+        <button class="nav-item" data-tab="inst">
+          <i class="ti ti-building-bank"></i>
+          <span>三大法人</span>
+        </button>
+        <button class="nav-item" data-tab="ai">
+          <i class="ti ti-brain"></i>
+          <span>AI 分析</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="live-indicator">
+          <span class="live-dot"></span>
+          <span>即時更新中</span>
+        </div>
+        <div class="sidebar-time" id="sidebarTime"></div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-market">
+          <div class="market-item">
+            <span class="market-label">加權指數</span>
+            <span class="market-value up" id="taiex">21,847</span>
+            <span class="market-chg up" id="taiex-chg">▲ +152 (+0.70%)</span>
+          </div>
+          <div class="market-divider"></div>
+          <div class="market-item">
+            <span class="market-label">成交量 (億)</span>
+            <span class="market-value" id="volume">3,421</span>
+          </div>
+          <div class="market-divider"></div>
+          <div class="market-item">
+            <span class="market-label">市場買超比</span>
+            <span class="market-value up" id="buy-ratio">58%</span>
+          </div>
+          <div class="market-divider"></div>
+          <div class="market-item">
+            <span class="market-label">三大法人合計</span>
+            <span class="market-value up" id="inst-total">+84.2億</span>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-btn" id="refreshBtn" title="重新整理" onclick="refreshAll()">
+            <i class="ti ti-refresh"></i>
+          </button>
+          <div class="settings-btn" id="settingsBtn" title="API設定" onclick="toggleSettings()">
+            <i class="ti ti-settings"></i>
+          </div>
+        </div>
+      </header>
+
+      <!-- Settings Panel -->
+      <div class="settings-panel" id="settingsPanel" style="display:none">
+        <div class="settings-inner">
+          <h3 class="settings-title">API 設定</h3>
+          <p class="settings-desc">輸入 Anthropic API Key 以啟用 AI 分析功能。金鑰僅儲存在本機 localStorage，不會上傳至任何伺服器。</p>
+          <div class="settings-row">
+            <input type="password" id="apiKeyInput" class="settings-input" placeholder="sk-ant-api03-..." />
+            <button class="btn primary" onclick="saveApiKey()">儲存</button>
+            <button class="btn" onclick="toggleSettings()">取消</button>
+          </div>
+          <div class="settings-status" id="apiStatus"></div>
+        </div>
+      </div>
+
+      <!-- Tab Pages -->
+      <div class="content">
+
+        <!-- ========== SEARCH TAB ========== -->
+        <section class="tab-content active" id="tab-search">
+          <div class="page-title">
+            <i class="ti ti-search"></i> 股票搜尋分析
+          </div>
+          <div class="search-row">
+            <input
+              class="search-input"
+              id="stockInput"
+              placeholder="輸入股票代號或名稱，例如：2330 或 台積電"
+              onkeydown="if(event.key==='Enter') searchStock()"
+            />
+            <button class="btn primary" onclick="searchStock()">
+              <i class="ti ti-search"></i> 搜尋
+            </button>
+          </div>
+
+          <!-- Quick picks -->
+          <div class="quick-picks">
+            <span class="quick-label">熱門：</span>
+            <button class="quick-btn" onclick="quickSearch('2330')">台積電 2330</button>
+            <button class="quick-btn" onclick="quickSearch('2454')">聯發科 2454</button>
+            <button class="quick-btn" onclick="quickSearch('3008')">大立光 3008</button>
+            <button class="quick-btn" onclick="quickSearch('2382')">廣達 2382</button>
+            <button class="quick-btn" onclick="quickSearch('0050')">元大50 0050</button>
+          </div>
+
+          <!-- Result -->
+          <div class="search-result" id="searchResult" style="display:none">
+            <div class="result-header">
+              <div class="result-meta">
+                <div class="result-code" id="res-code">2330</div>
+                <div class="result-name" id="res-name">台積電</div>
+                <div class="result-sector" id="res-sector">半導體</div>
+              </div>
+              <div class="result-price-block">
+                <div class="result-price" id="res-price">$980</div>
+                <div class="result-chg up" id="res-chg">▲ +15.5 (+1.61%)</div>
+              </div>
+              <div class="result-dominant" id="res-dominant">
+                <span class="dominant-label">當前主力</span>
+                <span class="dominant-tag buy" id="res-tag">買入主導</span>
+              </div>
+            </div>
+
+            <div class="result-body">
+              <!-- Left: Buy/Sell bars -->
+              <div class="result-col">
+                <div class="col-title">買賣力道</div>
+                <div class="buysell-bars">
+                  <div class="bs-row">
+                    <span class="bs-label buy">買入</span>
+                    <div class="bs-track">
+                      <div class="bs-fill buy" id="buy-bar" style="width:60%"></div>
+                    </div>
+                    <span class="bs-pct buy" id="buy-pct">60%</span>
+                  </div>
+                  <div class="bs-row">
+                    <span class="bs-label sell">賣出</span>
+                    <div class="bs-track">
+                      <div class="bs-fill sell" id="sell-bar" style="width:40%"></div>
+                    </div>
+                    <span class="bs-pct sell" id="sell-pct">40%</span>
+                  </div>
+                  <div class="bs-row">
+                    <span class="bs-label vol">量比</span>
+                    <div class="bs-track">
+                      <div class="bs-fill vol" id="vol-bar" style="width:70%"></div>
+                    </div>
+                    <span class="bs-pct vol" id="vol-pct">70%</span>
+                  </div>
+                </div>
+
+                <div class="vs-summary" id="vs-summary">
+                  <i class="ti ti-trending-up"></i>
+                  買方較強，市場偏多
+                </div>
+              </div>
+
+              <!-- Right: Institutional -->
+              <div class="result-col">
+                <div class="col-title">三大法人</div>
+                <div class="inst-cards">
+                  <div class="inst-card">
+                    <div class="inst-icon foreign"><i class="ti ti-world"></i></div>
+                    <div class="inst-info">
+                      <div class="inst-name">外資</div>
+                      <div class="inst-val" id="res-foreign">+24.3億</div>
+                    </div>
+                  </div>
+                  <div class="inst-card">
+                    <div class="inst-icon trust"><i class="ti ti-chart-pie"></i></div>
+                    <div class="inst-info">
+                      <div class="inst-name">投信</div>
+                      <div class="inst-val" id="res-trust">+8.1億</div>
+                    </div>
+                  </div>
+                  <div class="inst-card">
+                    <div class="inst-icon dealer"><i class="ti ti-building"></i></div>
+                    <div class="inst-info">
+                      <div class="inst-name">自營商</div>
+                      <div class="inst-val" id="res-dealer">-2.7億</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Analysis Box -->
+            <div class="ai-box" id="stockAiBox">
+              <div class="ai-box-header">
+                <i class="ti ti-sparkles"></i>
+                <span>AI 個股深度分析</span>
+                <div class="spinner" id="stockSpinner" style="display:none"></div>
+              </div>
+              <div class="ai-content" id="stockAiContent">
+                <span class="hint">點擊下方「AI 深度分析」按鈕取得個股分析報告</span>
+              </div>
+            </div>
+
+            <div class="result-actions">
+              <button class="btn primary" onclick="analyzeStock()">
+                <i class="ti ti-sparkles"></i> AI 深度分析
+              </button>
+              <button class="btn" onclick="analyzeStockTech()">
+                <i class="ti ti-chart-candle"></i> 技術面分析
+              </button>
+              <button class="btn" onclick="analyzeStockRisk()">
+                <i class="ti ti-shield"></i> 風險評估
+              </button>
+            </div>
+          </div>
+
+          <div class="empty-state" id="searchEmpty">
+            <i class="ti ti-chart-candle"></i>
+            <p>輸入股票代號或名稱開始分析</p>
+            <small>支援台股代號搜尋，例如 2330、2317、0050</small>
+          </div>
+        </section>
+
+        <!-- ========== HOT100 TAB ========== -->
+        <section class="tab-content" id="tab-hot100">
+          <div class="page-title-row">
+            <div class="page-title"><i class="ti ti-flame"></i> 前100名熱門台股</div>
+            <div class="page-actions">
+              <select class="sort-select" id="hot100Sort" onchange="sortHot100()">
+                <option value="vol">依成交量排序</option>
+                <option value="buy">依買入%排序</option>
+                <option value="sell">依賣出%排序</option>
+                <option value="chg">依漲跌%排序</option>
+              </select>
+              <button class="btn" onclick="loadHot100()"><i class="ti ti-refresh"></i> 重新整理</button>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <button class="filter-btn active" data-filter="all" onclick="filterHot100(this,'all')">全部</button>
+            <button class="filter-btn" data-filter="buy" onclick="filterHot100(this,'buy')">🔴 強力買入</button>
+            <button class="filter-btn" data-filter="sell" onclick="filterHot100(this,'sell')">🟢 強力賣出</button>
+            <button class="filter-btn" data-filter="up" onclick="filterHot100(this,'up')">▲ 上漲</button>
+            <button class="filter-btn" data-filter="dn" onclick="filterHot100(this,'dn')">▼ 下跌</button>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="stock-table" id="hot100Table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>代號</th>
+                  <th>名稱</th>
+                  <th>股價</th>
+                  <th>漲跌%</th>
+                  <th>買入%</th>
+                  <th>賣出%</th>
+                  <th>買賣力道</th>
+                  <th>量比%</th>
+                  <th>主力方向</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="hot100Body"></tbody>
+            </table>
+          </div>
+          <div class="table-footer">
+            <button class="btn" onclick="aiPickStocks()">
+              <i class="ti ti-sparkles"></i> AI 精選推薦
+            </button>
+            <div class="ai-pick-result" id="aiPickResult" style="display:none">
+              <div class="ai-box-header"><i class="ti ti-sparkles"></i> AI 精選結果 <div class="spinner" id="pickSpinner" style="display:none"></div></div>
+              <div class="ai-content" id="aiPickContent"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========== ALERTS TAB ========== -->
+        <section class="tab-content" id="tab-alerts">
+          <div class="page-title-row">
+            <div class="page-title"><i class="ti ti-bell"></i> 買賣提醒</div>
+            <div class="page-actions">
+              <button class="btn" onclick="loadAlerts()"><i class="ti ti-refresh"></i> 重新整理</button>
+            </div>
+          </div>
+
+          <div class="alerts-grid">
+            <div class="alerts-col">
+              <div class="alerts-col-header buy">
+                <i class="ti ti-trending-up"></i>
+                <span>高買入提醒</span>
+                <span class="alert-badge buy">強力買入 ≥70%</span>
+              </div>
+              <div class="alert-list" id="buyAlerts"></div>
+            </div>
+            <div class="alerts-col">
+              <div class="alerts-col-header sell">
+                <i class="ti ti-trending-down"></i>
+                <span>高賣出提醒</span>
+                <span class="alert-badge sell">強力賣出 ≥65%</span>
+              </div>
+              <div class="alert-list" id="sellAlerts"></div>
+            </div>
+          </div>
+          <div class="table-footer" style="margin-top:1.5rem">
+            <button class="btn" onclick="aiAnalyzeAlerts()">
+              <i class="ti ti-sparkles"></i> AI 解讀買賣訊號
+            </button>
+            <div class="ai-pick-result" id="aiAlertResult" style="display:none">
+              <div class="ai-box-header"><i class="ti ti-sparkles"></i> AI 訊號解讀 <div class="spinner" id="alertSpinner" style="display:none"></div></div>
+              <div class="ai-content" id="aiAlertContent"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========== INSTITUTIONAL TAB ========== -->
+        <section class="tab-content" id="tab-inst">
+          <div class="page-title"><i class="ti ti-building-bank"></i> 三大法人即時動態</div>
+
+          <div class="inst-overview">
+            <div class="inst-overview-card foreign">
+              <div class="inst-ov-label">外資及陸資</div>
+              <div class="inst-ov-val up" id="inst-foreign-total">+52.4億</div>
+              <div class="inst-ov-sub">今日淨買超</div>
+              <div class="inst-ov-bars">
+                <div class="mini-bar-row">
+                  <span class="mini-bar-label">買</span>
+                  <div class="mini-bar-track"><div class="mini-bar-fill buy" style="width:65%"></div></div>
+                  <span class="mini-bar-pct buy">65%</span>
+                </div>
+                <div class="mini-bar-row">
+                  <span class="mini-bar-label">賣</span>
+                  <div class="mini-bar-track"><div class="mini-bar-fill sell" style="width:35%"></div></div>
+                  <span class="mini-bar-pct sell">35%</span>
+                </div>
+              </div>
+            </div>
+            <div class="inst-overview-card trust">
+              <div class="inst-ov-label">投信</div>
+              <div class="inst-ov-val up" id="inst-trust-total">+18.2億</div>
+              <div class="inst-ov-sub">今日淨買超</div>
+              <div class="inst-ov-bars">
+                <div class="mini-bar-row">
+                  <span class="mini-bar-label">買</span>
+                  <div class="mini-bar-track"><div class="mini-bar-fill buy" style="width:72%"></div></div>
+                  <span class="mini-bar-pct buy">72%</span>
+                </div>
+                <div class="mini-bar-row">
+                  <span class="mini-bar-label">賣</span>
+                  <div class="mini-bar-track"><div class="mini-bar-fill sell" style="width:28%"></div></div>
+                  <span class="mini-bar-pct sell">28%</span>
+                </div>
+              </div>
+            </div>
+            <div class="inst-overview-card dealer">
+              <div class="inst-ov-label">自營商</div>
+              <div class="inst-ov-val dn" id="inst-dealer-total">-13.6億</div>
+              <div class="inst-ov-sub">今日淨賣超</div>
+              <div class="inst-ov-bars">
+                <div class="mini-bar-row">
+                  <span class="mini-bar-label">買</span>
+                  <div class="mini-bar-track"><div class="mini-bar-fill buy" style="width:42%"></div></div>
+                  <span class="mini-bar-pct buy">42%</span>
+                </div>
+                <div class="mini-bar-row">
+                  <span class="mini-bar-label">賣</span>
+                  <div class="mini-bar-track"><div class="mini-bar-fill sell" style="width:58%"></div></div>
+                  <span class="mini-bar-pct sell">58%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-title" style="margin-top:1.5rem">法人重點布局個股</div>
+          <div class="table-wrapper">
+            <table class="stock-table">
+              <thead>
+                <tr>
+                  <th>代號</th><th>名稱</th><th>外資</th><th>投信</th><th>自營商</th><th>合計</th><th>連續買超</th><th>訊號</th>
+                </tr>
+              </thead>
+              <tbody id="instTableBody"></tbody>
+            </table>
+          </div>
+          <div class="table-footer">
+            <button class="btn" onclick="aiAnalyzeInst()">
+              <i class="ti ti-sparkles"></i> AI解讀法人動向
+            </button>
+            <div class="ai-pick-result" id="aiInstResult" style="display:none">
+              <div class="ai-box-header"><i class="ti ti-sparkles"></i> AI 法人解讀 <div class="spinner" id="instSpinner" style="display:none"></div></div>
+              <div class="ai-content" id="aiInstContent"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========== AI TAB ========== -->
+        <section class="tab-content" id="tab-ai">
+          <div class="page-title"><i class="ti ti-brain"></i> AI 市場分析</div>
+
+          <div class="direction-row">
+            <div class="direction-card" id="dirCard">
+              <div class="direction-icon" id="dirIcon">⚖️</div>
+              <div class="direction-body">
+                <div class="direction-title" id="dirTitle">分析中...</div>
+                <div class="direction-sub" id="dirSub">正在評估市場狀況</div>
+              </div>
+              <div class="direction-signal" id="dirSignal">
+                <span class="signal-pill neutral" id="dirPill">載入中</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ai-full-box">
+            <div class="ai-box-header">
+              <i class="ti ti-sparkles"></i>
+              <span>AI 市場完整分析報告</span>
+              <div class="spinner" id="aiSpinner" style="margin-left:8px"></div>
+            </div>
+            <div class="ai-content" id="aiAdvice">
+              <span class="hint">分析中，請稍候...</span>
+            </div>
+          </div>
+
+          <div class="ai-quick-btns">
+            <div class="quick-btn-label">快速提問：</div>
+            <button class="btn" onclick="askAI('目前台股整體市場環境下，最適合短線操作的策略是什麼？')">短線策略</button>
+            <button class="btn" onclick="askAI('目前台股哪些族群最強勢？有哪些主流題材可以追蹤？')">主流族群</button>
+            <button class="btn" onclick="askAI('以目前台股的外資動向來看，後市可能的走向為何？')">後市展望</button>
+            <button class="btn" onclick="askAI('目前台股適合波段操作嗎？有哪些需要注意的系統性風險？')">風險評估</button>
+            <button class="btn primary" onclick="refreshAiAnalysis()"><i class="ti ti-refresh"></i> 重新分析</button>
+          </div>
+
+          <div class="ai-pick-result" id="aiQuickResult" style="display:none">
+            <div class="ai-box-header"><i class="ti ti-sparkles"></i> AI 回覆 <div class="spinner" id="quickSpinner" style="display:none"></div></div>
+            <div class="ai-content" id="aiQuickContent"></div>
+          </div>
+        </section>
+
+      </div><!-- .content -->
+    </main>
+  </div><!-- .app -->
+
+  <script src="js/config.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
