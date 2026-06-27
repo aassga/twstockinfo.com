@@ -24,7 +24,7 @@ const stockStore = useStockStore();
 const portfolioStore = usePortfolioStore();
 const chartStore = useChartStore();
 const institutionalStore = useInstitutionalStore();
-const query = ref(stockStore.searchQuery || '2330');
+const query = ref(stockStore.searchQuery || '');
 const aiText = ref('點擊「AI 深度分析」取得個股分析報告');
 
 const stock = computed(() => stockStore.currentStock);
