@@ -116,6 +116,47 @@ button {
     padding-bottom: 126px;
   }
 
+  .page-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+
+  .page-title,
+  .page-title-row .page-title,
+  .chart-title {
+    width: 100%;
+    min-width: 0;
+    margin-bottom: 0;
+    white-space: normal;
+    line-height: 1.35;
+  }
+
+  .page-actions {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .page-actions .table-search-input {
+    flex: 1 1 180px;
+    min-width: 0;
+  }
+
+  .chart-header {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .chart-header > div:first-child,
+  .chart-controls,
+  .chart-search {
+    width: 100%;
+    min-width: 0;
+  }
+
   .mobile-bottom-nav {
     position: fixed;
     right: 0;
