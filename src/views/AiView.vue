@@ -13,6 +13,7 @@ const stockStore = useStockStore();
 const portfolioStore = usePortfolioStore();
 const institutionalStore = useInstitutionalStore();
 const quickAnswer = ref('');
+const isResetting = ref(false);
 
 const analysis = computed(() => buildMarketAnalysis({
   market: marketStore.market,
@@ -40,6 +41,15 @@ function askAI(topic) {
     risk: `風險評估：持股報酬 ${formatPct(portfolioStore.summary.returnPct)}，法人 ${formatSigned(institutionalStore.total, 2, '億')}。若同時出現法人賣超與市場買超比下滑，需提高現金水位。`
   };
   quickAnswer.value = text[topic];
+}
+
+function resetQuickAnswer() {
+  if (isResetting.value) return;
+  isResetting.value = true;
+  quickAnswer.value = '';
+  setTimeout(() => {
+    isResetting.value = false;
+  }, 500);
 }
 </script>
 
@@ -87,7 +97,13 @@ function askAI(topic) {
       <button class="btn" type="button" @click="askAI('theme')">主流族群</button>
       <button class="btn" type="button" @click="askAI('outlook')">後市展望</button>
       <button class="btn" type="button" @click="askAI('risk')">風險評估</button>
-      <button class="btn primary" type="button" @click="quickAnswer = ''">
+      <button
+        class="btn primary"
+        :class="{ 'is-refreshing': isResetting }"
+        type="button"
+        :disabled="isResetting"
+        @click="resetQuickAnswer"
+      >
         <IconRefresh class="btn-icon" :stroke-width="2" />
         重新分析
       </button>

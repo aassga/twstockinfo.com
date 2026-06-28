@@ -49,7 +49,13 @@ function flashClass(stock, key) {
       </div>
       <div class="page-actions">
         <input v-model="stockStore.hotSearch" class="table-search-input" placeholder="搜尋代號或名稱" />
-        <button class="btn" type="button" @click="stockStore.loadAllStocks()">
+        <button
+          class="btn"
+          :class="{ 'is-refreshing': stockStore.loadingAll }"
+          type="button"
+          :disabled="stockStore.loadingAll"
+          @click="stockStore.loadAllStocks()"
+        >
           <IconRefresh class="btn-icon" :stroke-width="2" />
           重新整理
         </button>

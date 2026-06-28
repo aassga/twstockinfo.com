@@ -19,6 +19,7 @@ const institutionalStore = useInstitutionalStore();
 const chartStore = useChartStore();
 const now = ref(new Date());
 const appIconSrc = `${import.meta.env.BASE_URL}icons/app.svg?v=20260628-2015`;
+const isRefreshingAll = ref(false);
 let clockTimer;
 
 const marketChangeClass = computed(() => moveClass(marketStore.market.change).replace('is-', ''));
@@ -35,13 +36,19 @@ onBeforeUnmount(() => {
 });
 
 async function refreshAll() {
-  await Promise.allSettled([
-    marketStore.loadMarket(),
-    stockStore.loadAllStocks({ silent: true }),
-    portfolioStore.refreshQuotes(),
-    institutionalStore.loadInstitutional({ silent: true }),
-    chartStore.stock ? chartStore.loadChart() : Promise.resolve()
-  ]);
+  if (isRefreshingAll.value) return;
+  isRefreshingAll.value = true;
+  try {
+    await Promise.allSettled([
+      marketStore.loadMarket(),
+      stockStore.loadAllStocks({ silent: true }),
+      portfolioStore.refreshQuotes(),
+      institutionalStore.loadInstitutional({ silent: true }),
+      chartStore.stock ? chartStore.loadChart() : Promise.resolve()
+    ]);
+  } finally {
+    isRefreshingAll.value = false;
+  }
 }
 
 function go(path) {
@@ -118,7 +125,7 @@ function go(path) {
 
         <div class="topbar-actions">
           <button class="icon-btn" title="重新整理" type="button" @click="refreshAll">
-            <IconRefresh class="btn-icon" :stroke-width="2" />
+            <IconRefresh class="btn-icon" :class="{ 'is-refreshing': isRefreshingAll }" :stroke-width="2" />
           </button>
         </div>
       </header>

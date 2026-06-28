@@ -210,6 +210,16 @@ html, body {
   background: var(--bg-4);
   color: var(--text-1);
 }
+.icon-btn:disabled,
+.btn:disabled {
+  cursor: wait;
+  opacity: 0.78;
+}
+.icon-btn.is-refreshing .btn-icon,
+.btn.is-refreshing .btn-icon,
+.btn-icon.is-refreshing {
+  animation: spin 0.75s linear infinite;
+}
 
 /* ========== Content & Tabs ========== */
 .content {
@@ -260,6 +270,10 @@ html, body {
   gap: 6px;
 }
 .btn:hover { background: var(--bg-4); border-color: var(--blue); }
+.btn:disabled:hover {
+  background: var(--bg-3);
+  border-color: var(--border-strong);
+}
 .btn.primary {
   background: var(--blue);
   border-color: var(--blue);

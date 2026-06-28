@@ -21,6 +21,7 @@ const chartStore = useChartStore();
 const stockStore = useStockStore();
 const form = reactive(createEmptyForm());
 const importInput = ref(null);
+const isRefreshingQuotes = ref(false);
 let codeLookupTimer = null;
 let codeLookupRun = 0;
 
@@ -99,7 +100,13 @@ function removeHolding(holding) {
 }
 
 async function refresh() {
-  await portfolioStore.refreshQuotes();
+  if (isRefreshingQuotes.value) return;
+  isRefreshingQuotes.value = true;
+  try {
+    await portfolioStore.refreshQuotes();
+  } finally {
+    isRefreshingQuotes.value = false;
+  }
 }
 
 async function openChart(holding) {
@@ -178,7 +185,13 @@ function holdingReturn(holding) {
         我的持股
       </div>
       <div class="page-actions">
-        <button class="btn" type="button" @click="refresh">
+        <button
+          class="btn"
+          :class="{ 'is-refreshing': isRefreshingQuotes }"
+          type="button"
+          :disabled="isRefreshingQuotes"
+          @click="refresh"
+        >
           <IconRefresh class="btn-icon" :stroke-width="2" />
           更新現價
         </button>

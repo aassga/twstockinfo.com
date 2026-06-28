@@ -29,7 +29,13 @@ async function openChart(stock) {
         買賣提醒
       </div>
       <div class="page-actions">
-        <button class="btn" type="button" @click="stockStore.loadAllStocks()">
+        <button
+          class="btn"
+          :class="{ 'is-refreshing': stockStore.loadingAll }"
+          type="button"
+          :disabled="stockStore.loadingAll"
+          @click="stockStore.loadAllStocks()"
+        >
           <IconRefresh class="btn-icon" :stroke-width="2" />
           重新整理
         </button>
