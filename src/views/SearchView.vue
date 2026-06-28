@@ -32,12 +32,19 @@ const inst = computed(() => institutionalStore.rows.find(row => row.code === sto
 const dominantBuy = computed(() => Number(stock.value?.buyPct || 0) >= Number(stock.value?.sellPct || 0));
 const changeClass = computed(() => moveClass(stock.value?.chgPct).replace('is-', ''));
 
+function formatInstValue(value) {
+  if (!inst.value && institutionalStore.loading) return '載入中';
+  if (!inst.value && institutionalStore.loaded) return '無資料';
+  return formatSigned(value || 0, 2, '億');
+}
+
 async function submit(value = query.value) {
   if (!value) return;
   const result = await stockStore.searchStock(value);
   query.value = result.code;
-  const row = institutionalStore.rows.find(item => item.code === result.code);
-  if (!row && !institutionalStore.loading) institutionalStore.loadInstitutional({ silent: true });
+  if (!institutionalStore.loaded) {
+    await institutionalStore.loadInstitutional({ silent: true });
+  }
 }
 
 function quickSearch(code) {
@@ -178,7 +185,7 @@ function analyze(type) {
               <div class="inst-info">
                 <div class="inst-name">外資</div>
                 <div class="inst-val" :class="moveClass(inst?.foreign).replace('is-', '')">
-                  {{ formatSigned(inst?.foreign || 0, 2, '億') }}
+                  {{ formatInstValue(inst?.foreign) }}
                 </div>
               </div>
             </div>
@@ -187,7 +194,7 @@ function analyze(type) {
               <div class="inst-info">
                 <div class="inst-name">投信</div>
                 <div class="inst-val" :class="moveClass(inst?.trust).replace('is-', '')">
-                  {{ formatSigned(inst?.trust || 0, 2, '億') }}
+                  {{ formatInstValue(inst?.trust) }}
                 </div>
               </div>
             </div>
@@ -196,7 +203,7 @@ function analyze(type) {
               <div class="inst-info">
                 <div class="inst-name">自營商</div>
                 <div class="inst-val" :class="moveClass(inst?.dealer).replace('is-', '')">
-                  {{ formatSigned(inst?.dealer || 0, 2, '億') }}
+                  {{ formatInstValue(inst?.dealer) }}
                 </div>
               </div>
             </div>

@@ -10,29 +10,37 @@ export const useInstitutionalStore = defineStore('institutional', () => {
     dealer: 0
   });
   const loading = ref(false);
+  const loaded = ref(false);
   const error = ref('');
+  let activeRequest = null;
 
   const total = computed(() => Number((summary.value.foreign + summary.value.trust + summary.value.dealer).toFixed(2)));
   const topBuy = computed(() => rows.value.filter(row => row.total > 0).slice(0, 10));
   const topSell = computed(() => rows.value.filter(row => row.total < 0).slice(0, 10));
 
   async function loadInstitutional({ silent = false } = {}) {
-    if (loading.value) return;
+    if (activeRequest) return activeRequest;
     loading.value = true;
     if (!silent) error.value = '';
 
-    try {
-      const [nextRows, nextSummary] = await Promise.all([
-        stockApi.institutional(),
-        stockApi.instSummary()
-      ]);
-      rows.value = nextRows;
-      summary.value = nextSummary;
-    } catch (err) {
-      error.value = err?.message || '法人資料讀取失敗';
-    } finally {
-      loading.value = false;
-    }
+    activeRequest = Promise.all([
+      stockApi.institutional(),
+      stockApi.instSummary()
+    ])
+      .then(([nextRows, nextSummary]) => {
+        rows.value = nextRows;
+        summary.value = nextSummary;
+        loaded.value = true;
+      })
+      .catch(err => {
+        error.value = err?.message || '法人資料讀取失敗';
+      })
+      .finally(() => {
+        loading.value = false;
+        activeRequest = null;
+      });
+
+    return activeRequest;
   }
 
   return {
@@ -42,6 +50,7 @@ export const useInstitutionalStore = defineStore('institutional', () => {
     topBuy,
     topSell,
     loading,
+    loaded,
     error,
     loadInstitutional
   };

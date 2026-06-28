@@ -173,7 +173,7 @@ function aggregateCandles(rows, size) {
 
 function parseInstitutional(data) {
   const rows = normalizeTwseRows(data);
-  return rows.slice(0, 160).map(row => {
+  return rows.map(row => {
     const foreign = toHundredMillion(read(row, ['外陸資買賣超股數(不含外資自營商)', '外資買賣超股數']));
     const trust = toHundredMillion(read(row, ['投信買賣超股數']));
     const dealer = toHundredMillion(read(row, ['自營商買賣超股數', '自營商買賣超股數(自行買賣)']));
@@ -186,8 +186,7 @@ function parseInstitutional(data) {
       total: Number((foreign + trust + dealer).toFixed(2))
     };
   }).filter(row => row.code && row.name)
-    .sort((a, b) => Math.abs(b.total) - Math.abs(a.total))
-    .slice(0, 40);
+    .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
 }
 
 function parseInstitutionalSummary(data) {
