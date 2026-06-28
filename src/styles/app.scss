@@ -58,6 +58,24 @@ button {
   text-decoration-color: var(--blue);
 }
 
+.result-metrics {
+  border-width: 0 0 1px;
+  border-radius: 0;
+}
+
+.result-metrics-table {
+  min-width: 720px;
+}
+
+.result-metrics-table th,
+.result-metrics-table td {
+  text-align: left;
+}
+
+.result-metrics-table tbody tr:hover td {
+  background: transparent;
+}
+
 .chart-frame .stock-chart-frame {
   width: 100%;
   height: 100%;

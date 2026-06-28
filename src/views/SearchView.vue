@@ -16,7 +16,7 @@ import { useChartStore } from '../stores/chartStore';
 import { useInstitutionalStore } from '../stores/institutionalStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useStockStore } from '../stores/stockStore';
-import { formatMoney, formatPct, formatSigned, moveClass } from '../utils/formatters';
+import { formatMoney, formatPct, formatSigned, formatVolume, moveClass } from '../utils/formatters';
 import { quickStocks } from '../utils/stockMeta';
 
 const router = useRouter();
@@ -148,6 +148,46 @@ function analyze(type) {
             {{ dominantBuy ? '買入主導' : '賣出主導' }}
           </span>
         </div>
+      </div>
+
+      <div class="table-wrapper result-metrics">
+        <table class="stock-table result-metrics-table">
+          <thead>
+            <tr>
+              <th>股價</th>
+              <th>漲跌%</th>
+              <th>成交量</th>
+              <th>買入%</th>
+              <th>賣出%</th>
+              <th>買賣力道</th>
+              <th>量比%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>{{ formatMoney(stock.price, 2) }}</td>
+              <td class="move-cell" :class="changeClass">
+                {{ stock.chgPct >= 0 ? '▲' : '▼' }} {{ formatPct(stock.chgPct) }}
+              </td>
+              <td>{{ formatVolume(stock.volume) }}</td>
+              <td>{{ Math.round(stock.buyPct) }}%</td>
+              <td>{{ Math.round(stock.sellPct) }}%</td>
+              <td>
+                <div class="bar-mini">
+                  <div class="bar-mini-track">
+                    <div
+                      class="bar-mini-fill"
+                      :class="dominantBuy ? 'buy' : 'sell'"
+                      :style="{ width: `${Math.max(stock.buyPct, stock.sellPct)}%` }"
+                    ></div>
+                  </div>
+                  <span>{{ Math.round(Math.max(stock.buyPct, stock.sellPct)) }}%</span>
+                </div>
+              </td>
+              <td>{{ Math.round(stock.volRatio) }}%</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div class="result-body">
