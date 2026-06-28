@@ -58,22 +58,82 @@ button {
   text-decoration-color: var(--blue);
 }
 
-.result-metrics {
-  border-width: 0 0 1px;
-  border-radius: 0;
+.quote-metrics-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(31, 38, 53, 0.92), rgba(22, 27, 39, 0.96));
 }
 
-.result-metrics-table {
-  min-width: 720px;
+.quote-metric-cell {
+  position: relative;
+  min-width: 0;
+  min-height: 96px;
+  padding: 16px 18px 14px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
-.result-metrics-table th,
-.result-metrics-table td {
-  text-align: left;
+.quote-metric-cell:nth-child(4n) {
+  border-right: 0;
 }
 
-.result-metrics-table tbody tr:hover td {
-  background: transparent;
+.quote-metric-cell::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--border-strong);
+}
+
+.quote-metric-cell.price::before,
+.quote-metric-cell.amount::before,
+.quote-metric-cell.volume::before {
+  background: var(--blue);
+}
+
+.quote-metric-cell.up::before,
+.quote-metric-cell.high::before {
+  background: var(--up);
+}
+
+.quote-metric-cell.down::before,
+.quote-metric-cell.low::before {
+  background: var(--dn);
+}
+
+.quote-metric-label {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.quote-metric-value {
+  margin-top: 10px;
+  color: var(--text-1);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.quote-metric-cell.up .quote-metric-value {
+  color: var(--up);
+}
+
+.quote-metric-cell.down .quote-metric-value {
+  color: var(--dn);
+}
+
+.quote-metric-detail {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .chart-frame .stock-chart-frame {
@@ -122,6 +182,20 @@ button {
 
 .mobile-bottom-nav {
   display: none;
+}
+
+@media (max-width: 900px) {
+  .quote-metrics-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quote-metric-cell:nth-child(4n) {
+    border-right: 1px solid var(--border);
+  }
+
+  .quote-metric-cell:nth-child(2n) {
+    border-right: 0;
+  }
 }
 
 @media (max-width: 640px) {
@@ -206,6 +280,19 @@ button {
   .chart-search {
     width: 100%;
     min-width: 0;
+  }
+
+  .quote-metric-cell {
+    min-height: 84px;
+    padding: 13px 14px 12px;
+  }
+
+  .quote-metric-value {
+    font-size: 18px;
+  }
+
+  .quote-metric-detail {
+    font-size: 10px;
   }
 
   .mobile-bottom-nav {

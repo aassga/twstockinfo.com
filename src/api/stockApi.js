@@ -57,12 +57,25 @@ function parseAllStocks(data) {
     const price = parseNumber(read(row, ['ClosingPrice', '收盤價']));
     const change = parseNumber(read(row, ['Change', '漲跌價差']));
     const volume = parseNumber(read(row, ['TradeVolume', '成交股數']));
+    const value = parseNumber(read(row, ['TradeValue', '成交金額']));
+    const high = parseNumber(read(row, ['HighestPrice', '最高價']), price);
+    const low = parseNumber(read(row, ['LowestPrice', '最低價']), price);
 
     if (!/^\d{4,6}$/.test(code) || price <= 0) continue;
 
     const prev = price - change;
     const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
-    result.push({ code, name, price, change, chgPct, volume });
+    result.push({
+      code,
+      name,
+      price,
+      change,
+      chgPct,
+      high,
+      low,
+      volume,
+      amountHundredMillion: Number((value / 100000000).toFixed(2))
+    });
   }
 
   return result.sort((a, b) => b.volume - a.volume).slice(0, 300);
@@ -83,6 +96,7 @@ function parseQuote(data, code) {
   const bidTotal = bidVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
   const askTotal = askVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
   const buyPct = bidTotal + askTotal > 0 ? Math.round((bidTotal / (bidTotal + askTotal)) * 100) : 50;
+  const volume = parseNumber(item.v);
 
   return {
     code: item.c || code,
@@ -95,7 +109,8 @@ function parseQuote(data, code) {
     open: parseNumber(item.o, price),
     high: parseNumber(item.h, price),
     low: parseNumber(item.l, price),
-    volume: parseNumber(item.v),
+    volume,
+    amountHundredMillion: Number(((price * volume * 1000) / 100000000).toFixed(2)),
     buyPct,
     sellPct: 100 - buyPct,
     volRatio: Math.min(100, Math.round((parseNumber(item.tv) / Math.max(parseNumber(item.v, 1), 1)) * 100)),

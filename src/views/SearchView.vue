@@ -16,7 +16,7 @@ import { useChartStore } from '../stores/chartStore';
 import { useInstitutionalStore } from '../stores/institutionalStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useStockStore } from '../stores/stockStore';
-import { formatMoney, formatPct, formatSigned, formatVolume, moveClass } from '../utils/formatters';
+import { formatMoney, formatNumber, formatPct, formatSigned, moveClass } from '../utils/formatters';
 import { quickStocks } from '../utils/stockMeta';
 
 const router = useRouter();
@@ -31,6 +31,37 @@ const stock = computed(() => stockStore.currentStock);
 const inst = computed(() => institutionalStore.rows.find(row => row.code === stock.value?.code) || null);
 const dominantBuy = computed(() => Number(stock.value?.buyPct || 0) >= Number(stock.value?.sellPct || 0));
 const changeClass = computed(() => moveClass(stock.value?.chgPct).replace('is-', ''));
+const quoteMetrics = computed(() => {
+  const current = stock.value;
+  if (!current) return [];
+
+  const trend = moveClass(current.change).replace('is-', '');
+  const high = Number(current.high || 0);
+  const low = Number(current.low || 0);
+  const range = high && low ? Number((high - low).toFixed(2)) : 0;
+  const amount = Number(current.amountHundredMillion || 0);
+
+  return [
+    { label: '股價', value: formatPriceValue(current.price), detail: '目前成交', tone: 'price' },
+    { label: '漲跌', value: formatSigned(current.change, 2), detail: '較昨收', tone: trend },
+    { label: '漲跌幅(%)', value: formatPct(current.chgPct), detail: '百分比變動', tone: trend },
+    { label: '最高', value: formatPriceValue(high), detail: '盤中高點', tone: 'high' },
+    { label: '最低', value: formatPriceValue(low), detail: '盤中低點', tone: 'low' },
+    { label: '價差', value: formatPriceValue(range), detail: '最高 - 最低', tone: 'range' },
+    { label: '成交量(張)', value: formatPlainNumber(current.volume), detail: '累計張數', tone: 'volume' },
+    { label: '成交金額(億)', value: formatPlainNumber(amount, 2), detail: '累計成交值', tone: 'amount' }
+  ];
+});
+
+function formatPriceValue(value) {
+  const number = Number(value || 0);
+  return number > 0 ? formatMoney(number, 2) : '--';
+}
+
+function formatPlainNumber(value, digits = 0) {
+  const number = Number(value || 0);
+  return number > 0 ? formatNumber(number, digits) : '--';
+}
 
 function formatInstValue(value) {
   if (!inst.value && institutionalStore.loading) return '載入中';
@@ -150,44 +181,17 @@ function analyze(type) {
         </div>
       </div>
 
-      <div class="table-wrapper result-metrics">
-        <table class="stock-table result-metrics-table">
-          <thead>
-            <tr>
-              <th>股價</th>
-              <th>漲跌%</th>
-              <th>成交量</th>
-              <th>買入%</th>
-              <th>賣出%</th>
-              <th>買賣力道</th>
-              <th>量比%</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>{{ formatMoney(stock.price, 2) }}</td>
-              <td class="move-cell" :class="changeClass">
-                {{ stock.chgPct >= 0 ? '▲' : '▼' }} {{ formatPct(stock.chgPct) }}
-              </td>
-              <td>{{ formatVolume(stock.volume) }}</td>
-              <td>{{ Math.round(stock.buyPct) }}%</td>
-              <td>{{ Math.round(stock.sellPct) }}%</td>
-              <td>
-                <div class="bar-mini">
-                  <div class="bar-mini-track">
-                    <div
-                      class="bar-mini-fill"
-                      :class="dominantBuy ? 'buy' : 'sell'"
-                      :style="{ width: `${Math.max(stock.buyPct, stock.sellPct)}%` }"
-                    ></div>
-                  </div>
-                  <span>{{ Math.round(Math.max(stock.buyPct, stock.sellPct)) }}%</span>
-                </div>
-              </td>
-              <td>{{ Math.round(stock.volRatio) }}%</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="quote-metrics-panel" aria-label="個股即時指標">
+        <div
+          v-for="metric in quoteMetrics"
+          :key="metric.label"
+          class="quote-metric-cell"
+          :class="metric.tone"
+        >
+          <div class="quote-metric-label">{{ metric.label }}</div>
+          <div class="quote-metric-value">{{ metric.value }}</div>
+          <div class="quote-metric-detail">{{ metric.detail }}</div>
+        </div>
       </div>
 
       <div class="result-body">

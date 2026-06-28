@@ -76,7 +76,8 @@ export const useStockStore = defineStore('stocks', () => {
       const quote = await stockApi.quoteAuto(code);
       currentStock.value = enrichStock({
         ...found,
-        ...quote
+        ...quote,
+        amountHundredMillion: found?.amountHundredMillion || quote.amountHundredMillion
       });
       return currentStock.value;
     } catch (err) {
