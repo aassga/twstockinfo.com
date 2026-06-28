@@ -9,19 +9,54 @@ import {
   IconInfoCircle,
   IconRefresh
 } from '@tabler/icons-vue';
+import { stockApi } from '../api/stockApi';
 import { useChartStore } from '../stores/chartStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
+import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, moveClass } from '../utils/formatters';
 
 const router = useRouter();
 const portfolioStore = usePortfolioStore();
 const chartStore = useChartStore();
+const stockStore = useStockStore();
 const form = reactive(createEmptyForm());
+let codeLookupTimer = null;
+let codeLookupRun = 0;
 
 watch(() => portfolioStore.draft, draft => {
   if (!draft) return;
   Object.assign(form, createEmptyForm(), draft);
 }, { deep: true });
+
+watch(() => form.code, code => {
+  const normalized = String(code || '').trim();
+  codeLookupRun += 1;
+  clearTimeout(codeLookupTimer);
+
+  if (!normalized) {
+    form.name = '';
+    return;
+  }
+
+  if (!/^\d{4,6}$/.test(normalized)) {
+    form.name = '';
+    return;
+  }
+
+  const cached = stockStore.findStock(normalized);
+  form.name = cached?.name || '';
+
+  const run = codeLookupRun;
+  codeLookupTimer = setTimeout(async () => {
+    try {
+      const quote = await stockApi.quoteAuto(normalized);
+      if (run !== codeLookupRun || String(form.code || '').trim() !== normalized) return;
+      if (quote?.name) form.name = quote.name;
+    } catch (error) {
+      // Keep the name field editable if the code cannot be resolved.
+    }
+  }, 350);
+});
 
 function createEmptyForm() {
   return {
@@ -144,7 +179,7 @@ function holdingReturn(holding) {
         <div class="form-grid">
           <label class="form-field">
             <span>股票代號</span>
-            <input v-model="form.code" class="form-input" inputmode="numeric" placeholder="2330" required />
+            <input v-model.trim="form.code" class="form-input" inputmode="numeric" placeholder="2330" required />
           </label>
           <label class="form-field">
             <span>股票名稱</span>
