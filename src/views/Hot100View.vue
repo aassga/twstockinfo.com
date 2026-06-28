@@ -3,7 +3,7 @@ import { useRouter } from 'vue-router';
 import { IconFlame, IconInfoCircle, IconRefresh, IconSelector, IconSparkles } from '@tabler/icons-vue';
 import { useChartStore } from '../stores/chartStore';
 import { useStockStore } from '../stores/stockStore';
-import { formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
+import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
 
 const router = useRouter();
 const stockStore = useStockStore();
@@ -21,7 +21,7 @@ const columns = [
   { key: 'vol', label: '成交量' },
   { key: 'buy', label: '買入%' },
   { key: 'sell', label: '賣出%' },
-  { key: 'force', label: '買賣力道' },
+  { key: 'force', label: '力道比例' },
   { key: 'volRatio', label: '量比%' }
 ];
 
@@ -37,6 +37,10 @@ function direction(stock) {
 }
 function flashClass(stock, key) {
   return stockStore.hotCellFlashClass(stock.code, key);
+}
+
+function realtimeMeta() {
+  return `前100檔即時報價 ${stockStore.hotRealtimeCount}/100`;
 }
 </script>
 
@@ -80,6 +84,11 @@ function flashClass(stock, key) {
       點擊股票名稱可以看走勢圖
     </div>
 
+    <div class="hot-data-meta">
+      <span>最後更新：{{ stockStore.hotUpdatedAt ? formatDateTime(stockStore.hotUpdatedAt) : '--' }}</span>
+      <span>資料來源：STOCK_DAY_ALL 股票池 + TWSE MIS 即時報價/五檔委買委賣（{{ realtimeMeta() }}）</span>
+    </div>
+
     <div class="table-wrapper">
       <table class="stock-table">
         <thead>
@@ -93,7 +102,7 @@ function flashClass(stock, key) {
                 <IconSelector class="inline-icon" :stroke-width="2" />
               </button>
             </th>
-            <th>主力方向</th>
+            <th>買賣力道</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -151,7 +160,7 @@ function flashClass(stock, key) {
           AI 精選結果
         </div>
         <div class="ai-content">
-          <span class="hint">依目前前100熱門股排序，優先觀察量價同步且主力方向明確的個股。</span>
+          <span class="hint">依目前前100熱門股排序，優先觀察量價同步且買賣力道明確的個股。</span>
         </div>
       </div>
     </div>

@@ -11,6 +11,8 @@ export const useStockStore = defineStore('stocks', () => {
   const hotFilter = ref('all');
   const hotSort = ref({ key: 'volume', direction: 'desc' });
   const hotCellFlashes = ref({});
+  const hotUpdatedAt = ref('');
+  const hotRealtimeCount = ref(0);
   const loadingAll = ref(false);
   const loadingQuote = ref(false);
   const error = ref('');
@@ -56,7 +58,11 @@ export const useStockStore = defineStore('stocks', () => {
 
     try {
       const rows = await stockApi.allStocks();
-      const nextRows = rows.map(enrichStock);
+      const poolRows = rows.map(enrichStock);
+      const result = await hydrateHotRealtimeQuotes(poolRows);
+      const nextRows = result.rows;
+      hotRealtimeCount.value = result.realtimeCount;
+      hotUpdatedAt.value = new Date().toISOString();
       markHotCellFlashes(allStocks.value, nextRows);
       allStocks.value = nextRows;
     } catch (err) {
@@ -113,6 +119,67 @@ export const useStockStore = defineStore('stocks', () => {
       return;
     }
     hotSort.value = { key, direction: 'desc' };
+  }
+
+  async function hydrateHotRealtimeQuotes(rows) {
+    const topRows = rows.slice()
+      .sort((a, b) => b.volume - a.volume)
+      .slice(0, 100);
+    const quoteByCode = new Map();
+
+    try {
+      const quotes = await stockApi.quotes(topRows.map(stock => stock.code));
+      quotes.forEach(quote => {
+        quoteByCode.set(String(quote.code), quote);
+      });
+    } catch (error) {
+      // Keep STOCK_DAY_ALL data if the batch quote endpoint is temporarily unavailable.
+    }
+
+    const missingRows = topRows.filter(stock => !quoteByCode.has(stock.code));
+    if (missingRows.length) {
+      const fallbackQuotes = await mapLimit(missingRows, 8, async stock => {
+        try {
+          return await stockApi.quoteAuto(stock.code);
+        } catch (error) {
+          return null;
+        }
+      });
+
+      fallbackQuotes.filter(Boolean).forEach(quote => {
+        quoteByCode.set(String(quote.code), quote);
+      });
+    }
+
+    return {
+      realtimeCount: quoteByCode.size,
+      rows: rows.map(stock => {
+        const quote = quoteByCode.get(stock.code);
+        if (!quote) return { ...stock, isRealtime: false };
+        return enrichStock({
+          ...stock,
+          ...quote,
+          sector: stock.sector,
+          isRealtime: true
+        });
+      })
+    };
+  }
+
+  async function mapLimit(items, limit, mapper) {
+    const results = [];
+    let nextIndex = 0;
+
+    async function worker() {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
   }
 
   function hotCellFlashClass(code, key) {
@@ -194,6 +261,8 @@ export const useStockStore = defineStore('stocks', () => {
     hotFilter,
     hotSort,
     hotCellFlashes,
+    hotUpdatedAt,
+    hotRealtimeCount,
     hotStocks,
     marketStats,
     loadingAll,

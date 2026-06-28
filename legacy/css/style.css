@@ -649,6 +649,14 @@ html, body {
   color: var(--blue);
   font-size: 15px;
 }
+.hot-data-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: -2px 0 12px;
+  color: var(--text-3);
+  font-size: 12px;
+}
 
 .table-wrapper { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); }
 

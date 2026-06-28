@@ -5,6 +5,7 @@ export const stockApi = {
   allStocks: () => apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks),
   quote: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quoteOtc: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
+  quotes: codes => fetchQuotes(codes),
   quoteAuto,
   institutional: () => fetchLatestTwseRwd('/rwd/zh/fund/T86', '&selectType=ALLBUT0999').then(parseInstitutional),
   instSummary: () => fetchLatestTwseRwd('/rwd/zh/fund/BFI82U').then(parseInstitutionalSummary),
@@ -19,6 +20,25 @@ async function quoteAuto(code) {
     // Listed stocks are tried first, then OTC.
   }
   return stockApi.quoteOtc(code);
+}
+
+async function fetchQuotes(codes, exchange = 'tse') {
+  const uniqueCodes = [...new Set(
+    codes
+      .map(code => String(code || '').trim())
+      .filter(code => /^\d{4,6}$/.test(code))
+  )];
+
+  if (!uniqueCodes.length) return [];
+
+  const chunks = chunkArray(uniqueCodes, 50);
+  const groups = await Promise.all(chunks.map(chunk => {
+    const exCh = chunk.map(code => `${exchange}_${code}.tw`).join('|');
+    return apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`)
+      .then(parseQuotes);
+  }));
+
+  return groups.flat();
 }
 
 function parseMarket(data) {
@@ -117,6 +137,52 @@ function parseQuote(data, code) {
     time: item.t || '',
     date: item.d || ''
   };
+}
+
+function parseQuotes(data) {
+  const rows = Array.isArray(data?.msgArray) ? data.msgArray : [];
+  return rows.map(item => {
+    if (!item?.c || !item?.n) return null;
+
+    const prev = parseNumber(item.y);
+    const price = parseNumber(item.z && item.z !== '-' ? item.z : item.y, prev);
+    const change = Number((price - prev).toFixed(2));
+    const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
+    const bidVol = String(item.g || '').split('_').filter(Boolean).map(Number);
+    const askVol = String(item.f || '').split('_').filter(Boolean).map(Number);
+    const bidTotal = bidVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
+    const askTotal = askVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
+    const buyPct = bidTotal + askTotal > 0 ? Math.round((bidTotal / (bidTotal + askTotal)) * 100) : 50;
+    const volume = parseNumber(item.v);
+
+    return {
+      code: item.c,
+      name: item.n || '',
+      exchange: item.ex || '',
+      price,
+      prev,
+      change,
+      chgPct,
+      open: parseNumber(item.o, price),
+      high: parseNumber(item.h, price),
+      low: parseNumber(item.l, price),
+      volume,
+      amountHundredMillion: Number(((price * volume * 1000) / 100000000).toFixed(2)),
+      buyPct,
+      sellPct: 100 - buyPct,
+      volRatio: Math.min(100, Math.round((parseNumber(item.tv) / Math.max(parseNumber(item.v, 1), 1)) * 100)),
+      time: item.t || '',
+      date: item.d || ''
+    };
+  }).filter(Boolean);
+}
+
+function chunkArray(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
 }
 
 async function fetchYahooChart(code, interval, exchange = '') {
