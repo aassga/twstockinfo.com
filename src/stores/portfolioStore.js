@@ -70,6 +70,30 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     persist();
   }
 
+  function importHoldings(payload) {
+    const rows = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.holdings)
+        ? payload.holdings
+        : null;
+
+    if (!rows) {
+      throw new Error('匯入檔案格式錯誤，請選擇先前匯出的 JSON。');
+    }
+
+    const now = new Date().toISOString();
+    const nextHoldings = rows.map((row, index) => normalizeImportedHolding(row, index, now));
+
+    if (!nextHoldings.length) {
+      throw new Error('匯入檔案沒有持股資料。');
+    }
+
+    holdings.value = nextHoldings;
+    draft.value = null;
+    persist();
+    return nextHoldings.length;
+  }
+
   function setDraftFromStock(stock) {
     if (!stock) return;
     draft.value = {
@@ -116,6 +140,36 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
+  function normalizeImportedHolding(row, index, now) {
+    const code = normalizeCode(row?.code);
+    const name = String(row?.name || '').trim();
+    const buyPrice = Number(row?.buyPrice || 0);
+    const shares = Number(row?.shares || 0);
+    const currentPrice = Number(row?.currentPrice || row?.price || buyPrice || 0);
+    const holding = {
+      id: String(row?.id || `${now}-${index}`),
+      code,
+      name,
+      buyPrice,
+      shares,
+      buyDate: row?.buyDate || new Date().toISOString().slice(0, 10),
+      currentPrice,
+      updatedAt: row?.updatedAt || now,
+      createdAt: row?.createdAt || now
+    };
+
+    if (!holding.code || !holding.name || holding.buyPrice <= 0 || holding.shares <= 0) {
+      throw new Error(`第 ${index + 1} 筆持股資料不完整，請確認代號、名稱、買進價與股數。`);
+    }
+
+    return holding;
+  }
+
+  function normalizeCode(value) {
+    const code = String(value || '').trim().toUpperCase();
+    return /^\d+$/.test(code) ? code.padStart(4, '0') : code;
+  }
+
   return {
     holdings,
     loading,
@@ -125,6 +179,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     loadPortfolio,
     saveHolding,
     removeHolding,
+    importHoldings,
     setDraftFromStock,
     clearDraft,
     refreshQuotes

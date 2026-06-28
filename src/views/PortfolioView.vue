@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, watch } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   IconBriefcase,
@@ -20,6 +20,7 @@ const portfolioStore = usePortfolioStore();
 const chartStore = useChartStore();
 const stockStore = useStockStore();
 const form = reactive(createEmptyForm());
+const importInput = ref(null);
 let codeLookupTimer = null;
 let codeLookupRun = 0;
 
@@ -114,6 +115,25 @@ function exportJson() {
   downloadFile('portfolio.json', JSON.stringify(portfolioStore.holdings, null, 2), 'application/json');
 }
 
+function triggerImport() {
+  importInput.value?.click();
+}
+
+async function importJson(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+
+  try {
+    const payload = JSON.parse(await file.text());
+    if (portfolioStore.holdings.length && !window.confirm('匯入 JSON 會取代目前持股，確定要繼續嗎？')) return;
+    const count = portfolioStore.importHoldings(payload);
+    window.alert(`已匯入 ${count} 筆持股`);
+  } catch (error) {
+    window.alert(error?.message || '匯入 JSON 失敗，請確認檔案格式。');
+  }
+}
+
 function exportCsv() {
   const rows = portfolioStore.holdings.map(holding => [
     holding.code,
@@ -161,6 +181,17 @@ function holdingReturn(holding) {
         <button class="btn" type="button" @click="refresh">
           <IconRefresh class="btn-icon" :stroke-width="2" />
           更新現價
+        </button>
+        <input
+          ref="importInput"
+          type="file"
+          accept="application/json,.json"
+          style="display:none"
+          @change="importJson"
+        />
+        <button class="btn" type="button" @click="triggerImport">
+          <IconFileCode class="btn-icon" :stroke-width="2" />
+          匯入 JSON
         </button>
         <button class="btn" type="button" @click="exportJson">
           <IconFileCode class="btn-icon" :stroke-width="2" />
