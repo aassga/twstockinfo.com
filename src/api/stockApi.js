@@ -3,6 +3,7 @@ import { apiFetch } from './http';
 export const stockApi = {
   market: () => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket),
   allStocks: () => apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks),
+  topVolume: () => apiFetch('/twse/exchangeReport/MI_INDEX20').then(parseTopVolume),
   quote: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quoteOtc: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quotes: codes => fetchQuotes(codes),
@@ -99,6 +100,34 @@ function parseAllStocks(data) {
   }
 
   return result.sort((a, b) => b.volume - a.volume).slice(0, 300);
+}
+
+function parseTopVolume(data) {
+  const rows = normalizeTwseRows(data);
+
+  return rows.map((row, index) => {
+    const code = String(read(row, ['Code', '證券代號']) || '').trim();
+    const name = String(read(row, ['Name', '證券名稱']) || '').trim();
+    const dir = read(row, ['Dir', '漲跌(+/-)']);
+
+    return {
+      rank: parseNumber(read(row, ['Rank', '排名']), index + 1),
+      date: String(read(row, ['Date', '日期']) || '').trim(),
+      code,
+      name,
+      volume: parseNumber(read(row, ['TradeVolume', '成交股數'])),
+      transaction: parseNumber(read(row, ['Transaction', '成交筆數'])),
+      open: parseNumber(read(row, ['OpeningPrice', '開盤價'])),
+      high: parseNumber(read(row, ['HighestPrice', '最高價'])),
+      low: parseNumber(read(row, ['LowestPrice', '最低價'])),
+      close: parseNumber(read(row, ['ClosingPrice', '收盤價'])),
+      change: signedChangeByDirection(read(row, ['Change', '漲跌價差']), dir),
+      bid: parseNumber(read(row, ['LastBestBidPrice', '最後揭示買價'])),
+      ask: parseNumber(read(row, ['LastBestAskPrice', '最後揭示賣價']))
+    };
+  }).filter(row => row.code && row.name)
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 20);
 }
 
 function parseQuote(data, code) {
@@ -338,6 +367,15 @@ function parseNumber(value, fallback = 0) {
 
 function isNegativeMarketMove(value) {
   return /-|－|−|▼|跌|down/i.test(String(value ?? ''));
+}
+
+function signedChangeByDirection(value, direction) {
+  const number = Math.abs(parseNumber(value));
+  const text = String(direction ?? '');
+  if (/X|不比價/i.test(text)) return 0;
+  if (isNegativeMarketMove(text)) return Number((-number).toFixed(2));
+  if (/\+|▲|漲|red|up/i.test(text)) return Number(number.toFixed(2));
+  return parseNumber(value);
 }
 
 function toHundredMillion(value) {

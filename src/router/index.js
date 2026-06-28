@@ -7,6 +7,7 @@ import InstitutionalView from '../views/InstitutionalView.vue';
 import PortfolioView from '../views/PortfolioView.vue';
 import SearchView from '../views/SearchView.vue';
 import SettingsView from '../views/SettingsView.vue';
+import TopVolumeView from '../views/TopVolumeView.vue';
 import { navItems } from './navItems';
 
 const titleOf = path => navItems.find(item => item.path === path)?.label || '台股資訊';
@@ -16,6 +17,7 @@ const routes = [
   { path: '/search', component: SearchView, meta: { title: titleOf('/search') } },
   { path: '/portfolio', component: PortfolioView, meta: { title: titleOf('/portfolio') } },
   { path: '/hot100', component: Hot100View, meta: { title: titleOf('/hot100') } },
+  { path: '/top-volume', component: TopVolumeView, meta: { title: titleOf('/top-volume') } },
   { path: '/chart', component: ChartView, meta: { title: titleOf('/chart') } },
   { path: '/alerts', component: AlertsView, meta: { title: titleOf('/alerts') } },
   { path: '/institutional', component: InstitutionalView, meta: { title: titleOf('/institutional') } },

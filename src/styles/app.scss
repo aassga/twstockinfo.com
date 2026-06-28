@@ -199,12 +199,105 @@ button {
   background: rgb(38 208 124 / 40%);
 }
 
+.volume-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0 18px;
+}
+
+.volume-overview-card {
+  position: relative;
+  min-width: 0;
+  min-height: 98px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-2);
+  overflow: hidden;
+}
+
+.volume-overview-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--border-strong);
+}
+
+.volume-overview-card.accent-blue::before {
+  background: var(--blue);
+}
+
+.volume-overview-card.accent-red::before {
+  background: var(--up);
+}
+
+.volume-overview-card.accent-green::before {
+  background: var(--dn);
+}
+
+.volume-overview-label {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.volume-overview-value {
+  margin-top: 12px;
+  color: var(--text-1);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.volume-overview-sub {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.volume-rank-table .rank-cell {
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.volume-stack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.2;
+}
+
+.volume-stack small {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.volume-loading-cell {
+  height: 96px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.volume-empty-state {
+  padding: 28px;
+  margin-top: 16px;
+}
+
 .mobile-bottom-nav {
   display: none;
 }
 
 @media (max-width: 900px) {
   .quote-metrics-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .volume-overview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

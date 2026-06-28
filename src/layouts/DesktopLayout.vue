@@ -8,6 +8,7 @@ import { useInstitutionalStore } from '../stores/institutionalStore';
 import { useMarketStore } from '../stores/marketStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useStockStore } from '../stores/stockStore';
+import { useTopVolumeStore } from '../stores/topVolumeStore';
 import { formatNumber, formatSigned, formatVolume, moveClass } from '../utils/formatters';
 
 const route = useRoute();
@@ -17,6 +18,7 @@ const stockStore = useStockStore();
 const portfolioStore = usePortfolioStore();
 const institutionalStore = useInstitutionalStore();
 const chartStore = useChartStore();
+const topVolumeStore = useTopVolumeStore();
 const now = ref(new Date());
 const appIconSrc = `${import.meta.env.BASE_URL}icons/app.svg?v=20260628-2015`;
 const isRefreshingAll = ref(false);
@@ -44,6 +46,7 @@ async function refreshAll() {
       stockStore.loadAllStocks({ silent: true }),
       portfolioStore.refreshQuotes(),
       institutionalStore.loadInstitutional({ silent: true }),
+      topVolumeStore.loadTopVolume({ silent: true }),
       chartStore.stock ? chartStore.loadChart() : Promise.resolve()
     ]);
   } finally {

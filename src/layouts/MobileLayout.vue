@@ -5,6 +5,7 @@ import { useChartStore } from '../stores/chartStore';
 import { useMarketStore } from '../stores/marketStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useStockStore } from '../stores/stockStore';
+import { useTopVolumeStore } from '../stores/topVolumeStore';
 import { visibleNavItems } from '../router/navItems';
 
 const route = useRoute();
@@ -12,6 +13,7 @@ const marketStore = useMarketStore();
 const stockStore = useStockStore();
 const portfolioStore = usePortfolioStore();
 const chartStore = useChartStore();
+const topVolumeStore = useTopVolumeStore();
 const title = computed(() => route.meta.title || '台股資訊');
 
 async function refresh() {
@@ -19,6 +21,7 @@ async function refresh() {
     marketStore.loadMarket(),
     stockStore.loadAllStocks({ silent: true }),
     portfolioStore.refreshQuotes(),
+    topVolumeStore.loadTopVolume({ silent: true }),
     chartStore.stock ? chartStore.loadChart() : Promise.resolve()
   ]);
 }
