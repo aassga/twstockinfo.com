@@ -18,7 +18,7 @@ const portfolioStore = usePortfolioStore();
 const institutionalStore = useInstitutionalStore();
 const chartStore = useChartStore();
 const now = ref(new Date());
-const appIconSrc = `${import.meta.env.BASE_URL}icons/app.svg`;
+const appIconSrc = `${import.meta.env.BASE_URL}icons/app.svg?v=20260628-2015`;
 let clockTimer;
 
 const marketChangeClass = computed(() => moveClass(marketStore.market.change).replace('is-', ''));
