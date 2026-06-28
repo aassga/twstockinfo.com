@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://aassga.github.io/twstockinfo.com/sitemap.xml
