@@ -35,6 +35,9 @@ function direction(stock) {
   if (stock.sellPct >= 65) return { text: '強賣', type: 'sell' };
   return { text: '均衡', type: 'neutral' };
 }
+function flashClass(stock, key) {
+  return stockStore.hotCellFlashClass(stock.code, key);
+}
 </script>
 
 <template>
@@ -98,14 +101,14 @@ function direction(stock) {
               </button>
               <span style="color:var(--text-3);font-size:11px;margin-left:4px">{{ stock.sector }}</span>
             </td>
-            <td>{{ formatMoney(stock.price, 2) }}</td>
-            <td class="move-cell" :class="moveClass(stock.chgPct).replace('is-', '')">
+            <td :class="flashClass(stock, 'price')">{{ formatMoney(stock.price, 2) }}</td>
+            <td class="move-cell" :class="[moveClass(stock.chgPct).replace('is-', ''), flashClass(stock, 'chg')]">
               {{ stock.chgPct > 0 ? '▲' : stock.chgPct < 0 ? '▼' : '' }} {{ formatPct(Math.abs(stock.chgPct)) }}
             </td>
-            <td>{{ formatVolume(stock.volume) }}</td>
-            <td>{{ Math.round(stock.buyPct) }}%</td>
-            <td>{{ Math.round(stock.sellPct) }}%</td>
-            <td>
+            <td :class="flashClass(stock, 'vol')">{{ formatVolume(stock.volume) }}</td>
+            <td :class="flashClass(stock, 'buy')">{{ Math.round(stock.buyPct) }}%</td>
+            <td :class="flashClass(stock, 'sell')">{{ Math.round(stock.sellPct) }}%</td>
+            <td :class="flashClass(stock, 'force')">
               <div class="bar-mini">
                 <div class="bar-mini-track">
                   <div
@@ -117,7 +120,7 @@ function direction(stock) {
                 <span>{{ Math.round(Math.max(stock.buyPct, stock.sellPct)) }}%</span>
               </div>
             </td>
-            <td>{{ Math.round(stock.volRatio) }}%</td>
+            <td :class="flashClass(stock, 'volRatio')">{{ Math.round(stock.volRatio) }}%</td>
             <td>
               <span class="direction-pill" :class="direction(stock).type">
                 {{ direction(stock).text }}
