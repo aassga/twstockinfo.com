@@ -181,6 +181,15 @@ button {
   background: rgb(242 92 92 / 40%);
 }
 
+.stock-table td.move-cell.flat {
+  color: var(--text-1);
+  background: transparent;
+}
+
+.stock-table tbody tr:hover td.move-cell.flat {
+  background: transparent;
+}
+
 .stock-table td.move-cell.down {
   color: #1bfc00;
   background: rgb(38 208 124 / 40%);

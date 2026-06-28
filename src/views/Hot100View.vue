@@ -100,7 +100,7 @@ function direction(stock) {
             </td>
             <td>{{ formatMoney(stock.price, 2) }}</td>
             <td class="move-cell" :class="moveClass(stock.chgPct).replace('is-', '')">
-              {{ stock.chgPct >= 0 ? '▲' : '▼' }} {{ formatPct(Math.abs(stock.chgPct)) }}
+              {{ stock.chgPct > 0 ? '▲' : stock.chgPct < 0 ? '▼' : '' }} {{ formatPct(Math.abs(stock.chgPct)) }}
             </td>
             <td>{{ formatVolume(stock.volume) }}</td>
             <td>{{ Math.round(stock.buyPct) }}%</td>
