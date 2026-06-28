@@ -118,7 +118,7 @@ function realtimeMeta() {
             </td>
             <td :class="flashClass(stock, 'price')">{{ formatMoney(stock.price, 2) }}</td>
             <td class="move-cell" :class="[moveClass(stock.chgPct).replace('is-', ''), flashClass(stock, 'chg')]">
-              {{ stock.chgPct > 0 ? '▲' : stock.chgPct < 0 ? '▼' : '' }} {{ formatPct(Math.abs(stock.chgPct)) }}
+              {{ stock.chgPct > 0 ? '▲' : stock.chgPct < 0 ? '▼' : '' }} {{ formatPct(stock.chgPct) }}
             </td>
             <td :class="flashClass(stock, 'vol')">{{ formatVolume(stock.volume) }}</td>
             <td :class="flashClass(stock, 'buy')">{{ Math.round(stock.buyPct) }}%</td>
