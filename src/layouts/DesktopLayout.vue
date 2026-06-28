@@ -18,6 +18,7 @@ const portfolioStore = usePortfolioStore();
 const institutionalStore = useInstitutionalStore();
 const chartStore = useChartStore();
 const now = ref(new Date());
+const appIconSrc = `${import.meta.env.BASE_URL}icons/app.svg`;
 let clockTimer;
 
 const marketChangeClass = computed(() => moveClass(marketStore.market.change).replace('is-', ''));
@@ -52,7 +53,7 @@ function go(path) {
   <div class="app">
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <span class="logo-icon">📈</span>
+        <img class="logo-icon" :src="appIconSrc" alt="" aria-hidden="true" />
         <span class="logo-text">台股分析</span>
       </div>
 

@@ -58,7 +58,13 @@ html, body {
   border-bottom: 1px solid var(--border);
 }
 
-.logo-icon { font-size: 22px; }
+.logo-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 6px;
+}
 .logo-text { font-size: 16px; font-weight: 600; color: var(--text-1); }
 
 .sidebar-nav {
