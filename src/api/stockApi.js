@@ -116,7 +116,7 @@ function parseQuote(data, code) {
   const bidTotal = bidVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
   const askTotal = askVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
   const buyPct = bidTotal + askTotal > 0 ? Math.round((bidTotal / (bidTotal + askTotal)) * 100) : 50;
-  const volume = parseNumber(item.v);
+  const volume = parseNumber(item.v) * 1000;
 
   return {
     code: item.c || code,
@@ -130,7 +130,7 @@ function parseQuote(data, code) {
     high: parseNumber(item.h, price),
     low: parseNumber(item.l, price),
     volume,
-    amountHundredMillion: Number(((price * volume * 1000) / 100000000).toFixed(2)),
+    amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
     buyPct,
     sellPct: 100 - buyPct,
     volRatio: Math.min(100, Math.round((parseNumber(item.tv) / Math.max(parseNumber(item.v, 1), 1)) * 100)),
@@ -153,7 +153,7 @@ function parseQuotes(data) {
     const bidTotal = bidVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
     const askTotal = askVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
     const buyPct = bidTotal + askTotal > 0 ? Math.round((bidTotal / (bidTotal + askTotal)) * 100) : 50;
-    const volume = parseNumber(item.v);
+    const volume = parseNumber(item.v) * 1000;
 
     return {
       code: item.c,
@@ -167,7 +167,7 @@ function parseQuotes(data) {
       high: parseNumber(item.h, price),
       low: parseNumber(item.l, price),
       volume,
-      amountHundredMillion: Number(((price * volume * 1000) / 100000000).toFixed(2)),
+      amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
       buyPct,
       sellPct: 100 - buyPct,
       volRatio: Math.min(100, Math.round((parseNumber(item.tv) / Math.max(parseNumber(item.v, 1), 1)) * 100)),
