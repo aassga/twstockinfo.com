@@ -11,8 +11,8 @@
   --text-1: #e8eaf0;
   --text-2: #9da5b4;
   --text-3: #6b7385;
-  --up: #f25c5c;
-  --dn: #26d07c;
+  --up: #fc0000;
+  --dn: #1bfc00;
   --blue: #4a9eff;
   --blue-bg: rgba(74,158,255,0.12);
   --accent: #4a9eff;
@@ -695,16 +695,18 @@ html, body {
   border-bottom-color: rgba(255,255,255,0.08);
 }
 .stock-table td.move-cell.up {
-  background: rgba(242,92,92,0.72);
+  color: #fc0000;
+  background: rgb(242 92 92 / 40%);
 }
 .stock-table td.move-cell.dn {
-  background: rgba(38,208,124,0.72);
+  color: #1bfc00;
+  background: rgb(38 208 124 / 40%);
 }
 .stock-table tbody tr:hover td.move-cell.up {
-  background: rgba(242,92,92,0.84);
+  background: rgb(242 92 92 / 40%);
 }
 .stock-table tbody tr:hover td.move-cell.dn {
-  background: rgba(38,208,124,0.84);
+  background: rgb(38 208 124 / 40%);
 }
 .stock-table tbody tr { cursor: default; }
 .stock-link {

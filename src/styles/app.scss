@@ -172,12 +172,22 @@ button {
   color: var(--text-3);
 }
 
+.stock-table td.move-cell.up {
+  color: #fc0000;
+  background: rgb(242 92 92 / 40%);
+}
+
+.stock-table tbody tr:hover td.move-cell.up {
+  background: rgb(242 92 92 / 40%);
+}
+
 .stock-table td.move-cell.down {
-  background: rgba(38, 208, 124, 0.72);
+  color: #1bfc00;
+  background: rgb(38 208 124 / 40%);
 }
 
 .stock-table tbody tr:hover td.move-cell.down {
-  background: rgba(38, 208, 124, 0.84);
+  background: rgb(38 208 124 / 40%);
 }
 
 .mobile-bottom-nav {
