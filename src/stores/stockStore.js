@@ -4,12 +4,13 @@ import { stockApi } from '../api/stockApi';
 import { getSector } from '../utils/stockMeta';
 
 export const useStockStore = defineStore('stocks', () => {
+  const defaultHotSort = { key: 'volume', direction: 'desc' };
   const allStocks = ref([]);
   const currentStock = ref(null);
   const searchQuery = ref('');
   const hotSearch = ref('');
   const hotFilter = ref('all');
-  const hotSort = ref({ key: 'volume', direction: 'desc' });
+  const hotSort = ref({ ...defaultHotSort });
   const hotCellFlashes = ref({});
   const hotUpdatedAt = ref('');
   const hotRealtimeCount = ref(0);
@@ -120,6 +121,13 @@ export const useStockStore = defineStore('stocks', () => {
       return;
     }
     hotSort.value = { key, direction: 'desc' };
+  }
+
+  function setHotFilter(key) {
+    hotFilter.value = key;
+    if (key === 'all') {
+      hotSort.value = { ...defaultHotSort };
+    }
   }
 
   async function hydrateHotRealtimeQuotes(rows) {
@@ -274,6 +282,7 @@ export const useStockStore = defineStore('stocks', () => {
     searchStock,
     refreshCurrentStock,
     findStock,
+    setHotFilter,
     setHotSort,
     hotCellFlashClass,
     enrichStock

@@ -75,7 +75,7 @@ function realtimeMeta() {
         class="filter-btn"
         :class="{ active: stockStore.hotFilter === filter.key }"
         type="button"
-        @click="stockStore.hotFilter = filter.key"
+        @click="stockStore.setHotFilter(filter.key)"
       >
         {{ filter.label }}
       </button>
