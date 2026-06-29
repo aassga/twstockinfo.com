@@ -1,7 +1,7 @@
 import { apiFetch } from './http';
 
 export const stockApi = {
-  market: () => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket),
+  market: () => fetchMarketRealtime().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket)),
   allStocks: () => apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks),
   topVolume: () => apiFetch('/twse/exchangeReport/MI_INDEX20').then(parseTopVolume),
   quote: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
@@ -20,7 +20,19 @@ async function quoteAuto(code) {
   } catch (error) {
     // Listed stocks are tried first, then OTC.
   }
-  return stockApi.quoteOtc(code);
+
+  try {
+    const quote = await stockApi.quoteOtc(code);
+    if (quote.name) return quote;
+  } catch (error) {
+    // Fall back to Yahoo chart metadata when TWSE MIS is temporarily blocked.
+  }
+
+  try {
+    return await fetchYahooRealtimeQuote(code, 'TW');
+  } catch (error) {
+    return fetchYahooRealtimeQuote(code, 'TWO');
+  }
 }
 
 async function fetchQuotes(codes, exchange = 'tse') {
@@ -33,13 +45,39 @@ async function fetchQuotes(codes, exchange = 'tse') {
   if (!uniqueCodes.length) return [];
 
   const chunks = chunkArray(uniqueCodes, 50);
-  const groups = await Promise.all(chunks.map(chunk => {
-    const exCh = chunk.map(code => `${exchange}_${code}.tw`).join('|');
-    return apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`)
-      .then(parseQuotes);
+  const groups = await Promise.all(chunks.map(async chunk => {
+    try {
+      const exCh = chunk.map(code => `${exchange}_${code}.tw`).join('|');
+      return await apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`)
+        .then(parseQuotes);
+    } catch (error) {
+      return fetchYahooRealtimeQuotes(chunk);
+    }
   }));
 
   return groups.flat();
+}
+
+async function fetchMarketRealtime() {
+  const data = await apiFetch(`/yahoo/v8/finance/chart/${encodeURIComponent('^TWII')}?range=1d&interval=1m&includePrePost=false&_=${Date.now()}`);
+  const result = data?.chart?.result?.[0];
+  const meta = result?.meta || {};
+  const price = parseNumber(meta.regularMarketPrice);
+  const prev = parseNumber(meta.chartPreviousClose ?? meta.previousClose);
+
+  if (!price || !prev) throw new Error('無法取得即時加權指數');
+
+  const change = Number((price - prev).toFixed(2));
+  const changePct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
+
+  return {
+    taiex: price,
+    change,
+    changePct,
+    sign: change < 0 ? '-' : '+',
+    source: 'yahoo',
+    time: meta.regularMarketTime ? formatUnixTime(meta.regularMarketTime) : ''
+  };
 }
 
 function parseMarket(data) {
@@ -206,12 +244,82 @@ function parseQuotes(data) {
   }).filter(Boolean);
 }
 
+async function fetchYahooRealtimeQuotes(codes) {
+  const results = await mapLimit(codes, 6, async code => {
+    try {
+      return await fetchYahooRealtimeQuote(code, 'TW');
+    } catch (error) {
+      try {
+        return await fetchYahooRealtimeQuote(code, 'TWO');
+      } catch (fallbackError) {
+        return null;
+      }
+    }
+  });
+
+  return results.filter(Boolean);
+}
+
+async function fetchYahooRealtimeQuote(code, market = 'TW') {
+  const data = await apiFetch(`/yahoo/v8/finance/chart/${encodeURIComponent(`${code}.${market}`)}?range=1d&interval=1m&includePrePost=false&_=${Date.now()}`);
+  const result = data?.chart?.result?.[0];
+  const meta = result?.meta || {};
+  const quote = result?.indicators?.quote?.[0] || {};
+  const symbol = String(meta.symbol || `${code}.${market}`);
+  const parsedCode = symbol.match(/^(\d{4,6})\./)?.[1] || String(code);
+  const price = parseNumber(meta.regularMarketPrice);
+  const prev = parseNumber(meta.chartPreviousClose ?? meta.previousClose);
+
+  if (!price || !prev) throw new Error(`無法取得 Yahoo 即時報價：${code}`);
+
+  const change = Number((price - prev).toFixed(2));
+  const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
+  const volume = parseNumber(meta.regularMarketVolume);
+
+  return {
+    code: parsedCode,
+    name: '',
+    exchange: market === 'TWO' ? 'otc' : 'tse',
+    price,
+    prev,
+    change,
+    chgPct,
+    open: firstFiniteNumber(quote.open, price),
+    high: parseNumber(meta.regularMarketDayHigh, price),
+    low: parseNumber(meta.regularMarketDayLow, price),
+    volume,
+    amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
+    buyPct: 50,
+    sellPct: 50,
+    volRatio: 50,
+    time: meta.regularMarketTime ? formatUnixTime(meta.regularMarketTime) : '',
+    date: meta.regularMarketTime ? formatUnixDate(meta.regularMarketTime) : '',
+    source: 'yahoo'
+  };
+}
+
 function chunkArray(items, size) {
   const chunks = [];
   for (let index = 0; index < items.length; index += size) {
     chunks.push(items.slice(index, index + size));
   }
   return chunks;
+}
+
+async function mapLimit(items, limit, mapper) {
+  const results = [];
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 async function fetchYahooChart(code, interval, exchange = '') {
@@ -363,6 +471,33 @@ function parseNumber(value, fallback = 0) {
   const match = normalized.match(/[+-]?\d+(?:\.\d+)?/);
   const number = match ? Number(match[0]) : NaN;
   return Number.isFinite(number) ? number : fallback;
+}
+
+function firstFiniteNumber(values, fallback = 0) {
+  if (!Array.isArray(values)) return fallback;
+  const value = values.find(item => Number.isFinite(Number(item)));
+  return value === undefined ? fallback : Number(value);
+}
+
+function formatUnixTime(seconds) {
+  return new Date(Number(seconds) * 1000).toLocaleTimeString('zh-TW', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Taipei'
+  });
+}
+
+function formatUnixDate(seconds) {
+  const date = new Date(Number(seconds) * 1000);
+  const formatter = new Intl.DateTimeFormat('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: 'Asia/Taipei'
+  });
+  return formatter.format(date).replace(/\//g, '');
 }
 
 function isNegativeMarketMove(value) {

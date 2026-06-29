@@ -22,6 +22,17 @@ const TWSE_HEADERS = {
   'Accept':     'application/json, text/plain, */*',
 };
 
+const MIS_HEADERS = {
+  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Referer':         'https://mis.twse.com.tw/stock/index.jsp',
+  'Origin':          'https://mis.twse.com.tw',
+  'Accept':          'application/json, text/javascript, */*; q=0.01',
+  'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Cache-Control':   'no-cache',
+  'Pragma':          'no-cache',
+  'X-Requested-With': 'XMLHttpRequest',
+};
+
 const YAHOO_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   'Accept':     'application/json, text/plain, */*',
@@ -81,7 +92,7 @@ export default {
     if (route.startsWith('/mis/')) {
       const path     = route.replace('/mis', '');
       const upstream = `https://mis.twse.com.tw${path}${params}`;
-      return proxyFetch(upstream);
+      return proxyFetch(upstream, MIS_HEADERS);
     }
 
     // ── Route: /rwd/*  → www.twse.com.tw/rwd/* ──

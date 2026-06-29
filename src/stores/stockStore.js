@@ -87,6 +87,7 @@ export const useStockStore = defineStore('stocks', () => {
       currentStock.value = enrichStock({
         ...found,
         ...quote,
+        name: quote.name || found?.name || '',
         amountHundredMillion: found?.amountHundredMillion || quote.amountHundredMillion
       });
       return currentStock.value;
@@ -159,6 +160,7 @@ export const useStockStore = defineStore('stocks', () => {
         return enrichStock({
           ...stock,
           ...quote,
+          name: quote.name || stock.name,
           sector: stock.sector,
           isRealtime: true
         });
