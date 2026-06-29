@@ -97,6 +97,12 @@ button {
   color: #ffc457 !important;
 }
 
+.btn.favorite-action-active {
+  border-color: rgba(255, 196, 87, 0.72);
+  background: rgba(255, 196, 87, 0.13);
+  color: #ffc457;
+}
+
 .btn.icon-only {
   width: 32px;
   min-width: 32px;

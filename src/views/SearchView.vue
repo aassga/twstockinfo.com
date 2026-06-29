@@ -8,11 +8,14 @@ import {
   IconSearch,
   IconShield,
   IconSparkles,
+  IconStar,
+  IconStarFilled,
   IconTrendingDown,
   IconTrendingUp,
   IconWorld
 } from '@tabler/icons-vue';
 import { useChartStore } from '../stores/chartStore';
+import { useFavoriteStore } from '../stores/favoriteStore';
 import { useInstitutionalStore } from '../stores/institutionalStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useStockStore } from '../stores/stockStore';
@@ -23,6 +26,7 @@ const router = useRouter();
 const stockStore = useStockStore();
 const portfolioStore = usePortfolioStore();
 const chartStore = useChartStore();
+const favoriteStore = useFavoriteStore();
 const institutionalStore = useInstitutionalStore();
 const query = ref(stockStore.searchQuery || '');
 const aiText = ref('點擊「AI 深度分析」取得個股分析報告');
@@ -86,6 +90,11 @@ function addToPortfolio() {
   if (!stock.value) return;
   portfolioStore.setDraftFromStock(stock.value);
   router.push('/portfolio');
+}
+
+function toggleFavorite() {
+  if (!stock.value) return;
+  favoriteStore.toggleFavorite(stock.value);
 }
 
 async function openChart() {
@@ -270,6 +279,16 @@ function analyze(type) {
         <button class="btn" type="button" @click="addToPortfolio">
           <IconBriefcase class="btn-icon" :stroke-width="2" />
           加入持股
+        </button>
+        <button
+          class="btn"
+          :class="{ 'favorite-action-active': favoriteStore.isFavorite(stock.code) }"
+          type="button"
+          @click="toggleFavorite"
+        >
+          <IconStarFilled v-if="favoriteStore.isFavorite(stock.code)" class="btn-icon" :stroke-width="2" />
+          <IconStar v-else class="btn-icon" :stroke-width="2" />
+          {{ favoriteStore.isFavorite(stock.code) ? '已加入我的最愛' : '加入我的最愛' }}
         </button>
         <button class="btn" type="button" @click="openChart">
           <IconChartCandle class="btn-icon" :stroke-width="2" />
