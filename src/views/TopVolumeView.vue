@@ -39,6 +39,10 @@ function changeMark(value) {
   if (number < 0) return '▼';
   return '';
 }
+
+function toLots(value) {
+  return Number(value || 0) / 1000;
+}
 </script>
 
 <template>
@@ -73,12 +77,12 @@ function changeMark(value) {
           {{ topVolumeStore.leader ? `${topVolumeStore.leader.code} ${topVolumeStore.leader.name}` : '--' }}
         </div>
         <div class="volume-overview-sub">
-          {{ topVolumeStore.leader ? formatVolume(topVolumeStore.leader.volume) : '--' }}
+          {{ topVolumeStore.leader ? `${formatNumber(toLots(topVolumeStore.leader.volume))} 張` : '--' }}
         </div>
       </div>
       <div class="volume-overview-card accent-green">
-        <div class="volume-overview-label">前20總股數</div>
-        <div class="volume-overview-value">{{ formatVolume(topVolumeStore.summary.totalVolume) }}</div>
+        <div class="volume-overview-label">前20總張數</div>
+        <div class="volume-overview-value">{{ formatNumber(toLots(topVolumeStore.summary.totalVolume)) }}</div>
       </div>
       <div class="volume-overview-card">
         <div class="volume-overview-label">前20成交筆數</div>
@@ -107,7 +111,7 @@ function changeMark(value) {
             <th>#</th>
             <th>代號</th>
             <th>名稱</th>
-            <th>成交股數</th>
+            <th>成交量(張)</th>
             <th>成交筆數</th>
             <th>開盤</th>
             <th>最高</th>
@@ -138,8 +142,8 @@ function changeMark(value) {
             </td>
             <td>
               <div class="volume-stack">
-                <span>{{ formatNumber(stock.volume) }}</span>
-                <small>{{ formatVolume(stock.volume) }}</small>
+                <span>{{ formatNumber(toLots(stock.volume)) }}</span>
+                <small>{{ formatVolume(stock.volume) }} 股</small>
               </div>
             </td>
             <td>{{ formatNumber(stock.transaction) }}</td>
