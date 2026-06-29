@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import AiView from '../views/AiView.vue';
 import AlertsView from '../views/AlertsView.vue';
 import ChartView from '../views/ChartView.vue';
+import FavoritesView from '../views/FavoritesView.vue';
 import Hot100View from '../views/Hot100View.vue';
 import InstitutionalView from '../views/InstitutionalView.vue';
 import PortfolioView from '../views/PortfolioView.vue';
@@ -16,6 +17,7 @@ const routes = [
   { path: '/', redirect: '/search' },
   { path: '/search', component: SearchView, meta: { title: titleOf('/search') } },
   { path: '/portfolio', component: PortfolioView, meta: { title: titleOf('/portfolio') } },
+  { path: '/favorites', component: FavoritesView, meta: { title: titleOf('/favorites') } },
   { path: '/hot100', component: Hot100View, meta: { title: titleOf('/hot100') } },
   { path: '/top-volume', component: TopVolumeView, meta: { title: titleOf('/top-volume') } },
   { path: '/chart', component: ChartView, meta: { title: titleOf('/chart') } },

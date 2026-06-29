@@ -58,6 +58,61 @@ button {
   text-decoration-color: var(--blue);
 }
 
+.table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.table-subtext {
+  margin-left: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.favorite-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.favorite-btn:hover,
+.favorite-btn.active {
+  border-color: rgba(255, 196, 87, 0.72);
+  background: rgba(255, 196, 87, 0.13);
+  color: #ffc457;
+}
+
+.favorite-title-icon {
+  color: #ffc457 !important;
+}
+
+.btn.icon-only {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.btn.danger {
+  color: var(--up);
+}
+
+.btn.danger:hover {
+  border-color: rgba(255, 90, 105, 0.58);
+  background: rgba(255, 90, 105, 0.12);
+}
+
 .quote-metrics-panel {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

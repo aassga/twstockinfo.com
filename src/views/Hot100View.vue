@@ -1,13 +1,15 @@
 <script setup>
 import { useRouter } from 'vue-router';
-import { IconFlame, IconInfoCircle, IconRefresh, IconSelector, IconSparkles } from '@tabler/icons-vue';
+import { IconFlame, IconInfoCircle, IconRefresh, IconSelector, IconSparkles, IconStar, IconStarFilled } from '@tabler/icons-vue';
 import { useChartStore } from '../stores/chartStore';
+import { useFavoriteStore } from '../stores/favoriteStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
 
 const router = useRouter();
 const stockStore = useStockStore();
 const chartStore = useChartStore();
+const favoriteStore = useFavoriteStore();
 const filters = [
   { key: 'all', label: '全部' },
   { key: 'buy', label: '🔴 強力買入' },
@@ -81,12 +83,12 @@ function realtimeMeta() {
 
     <div class="table-hint">
       <IconInfoCircle class="inline-icon" :stroke-width="2" />
-      點擊股票名稱可以看走勢圖
+      點擊股票名稱可以看走勢圖，按星星加入我的最愛
     </div>
 
     <div class="hot-data-meta">
       <span>最後更新：{{ stockStore.hotUpdatedAt ? formatDateTime(stockStore.hotUpdatedAt) : '--' }}</span>
-      <span>資料來源：STOCK_DAY_ALL 股票池 + TWSE MIS 即時報價/五檔委買委賣（{{ realtimeMeta() }}）</span>
+      <span>資料來源：STOCK_DAY_ALL 股票池 + TWSE MIS 即時報價/五檔委買委賣，Yahoo 即時報價備援（{{ realtimeMeta() }}）</span>
     </div>
 
     <div class="table-wrapper">
@@ -142,7 +144,19 @@ function realtimeMeta() {
               </span>
             </td>
             <td>
-              <button class="btn xs" type="button" @click="openChart(stock)">分析</button>
+              <div class="table-actions">
+                <button
+                  class="favorite-btn"
+                  :class="{ active: favoriteStore.isFavorite(stock.code) }"
+                  type="button"
+                  :title="favoriteStore.isFavorite(stock.code) ? '取消我的最愛' : '加入我的最愛'"
+                  @click="favoriteStore.toggleFavorite(stock)"
+                >
+                  <IconStarFilled v-if="favoriteStore.isFavorite(stock.code)" class="btn-icon" :stroke-width="2" />
+                  <IconStar v-else class="btn-icon" :stroke-width="2" />
+                </button>
+                <button class="btn xs" type="button" @click="openChart(stock)">分析</button>
+              </div>
             </td>
           </tr>
         </tbody>

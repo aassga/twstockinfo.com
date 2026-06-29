@@ -175,7 +175,7 @@ function parseQuote(data, code) {
   }
 
   const prev = parseNumber(item.y);
-  const price = parseNumber(item.z && item.z !== '-' ? item.z : item.y, prev);
+  const price = resolveMisPrice(item, prev);
   const change = Number((price - prev).toFixed(2));
   const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
   const bidVol = String(item.g || '').split('_').filter(Boolean).map(Number);
@@ -212,7 +212,7 @@ function parseQuotes(data) {
     if (!item?.c || !item?.n) return null;
 
     const prev = parseNumber(item.y);
-    const price = parseNumber(item.z && item.z !== '-' ? item.z : item.y, prev);
+    const price = resolveMisPrice(item, prev);
     const change = Number((price - prev).toFixed(2));
     const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
     const bidVol = String(item.g || '').split('_').filter(Boolean).map(Number);
@@ -242,6 +242,31 @@ function parseQuotes(data) {
       date: item.d || ''
     };
   }).filter(Boolean);
+}
+
+function resolveMisPrice(item, fallback = 0) {
+  const tradedPrice = parseNumber(firstMeaningful(item?.z), NaN);
+  if (Number.isFinite(tradedPrice) && tradedPrice > 0) return tradedPrice;
+
+  const previousTradePrice = parseNumber(firstMeaningful(item?.pz), NaN);
+  if (Number.isFinite(previousTradePrice) && previousTradePrice > 0) return previousTradePrice;
+
+  const bestBid = parseFirstBookPrice(item?.b);
+  const bestAsk = parseFirstBookPrice(item?.a);
+  if (bestBid > 0 && bestAsk > 0) return Number(((bestBid + bestAsk) / 2).toFixed(2));
+  if (bestBid > 0) return bestBid;
+  if (bestAsk > 0) return bestAsk;
+
+  return fallback;
+}
+
+function parseFirstBookPrice(value) {
+  return parseNumber(String(value || '').split('_').find(Boolean), 0);
+}
+
+function firstMeaningful(value) {
+  const text = String(value ?? '').trim();
+  return text && text !== '-' ? text : '';
 }
 
 async function fetchYahooRealtimeQuotes(codes) {
