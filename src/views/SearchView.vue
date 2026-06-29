@@ -32,7 +32,12 @@ const query = ref(stockStore.searchQuery || '');
 const aiText = ref('點擊「AI 深度分析」取得個股分析報告');
 
 const stock = computed(() => stockStore.currentStock);
-const inst = computed(() => institutionalStore.rows.find(row => row.code === stock.value?.code) || null);
+const inst = computed(() => {
+  const code = stock.value?.code;
+  if (!code) return null;
+  return institutionalStore.byCode[code] || institutionalStore.rows.find(row => row.code === code) || null;
+});
+const instLoading = computed(() => Boolean(stock.value?.code && institutionalStore.codeLoading[stock.value.code]));
 const dominantBuy = computed(() => Number(stock.value?.buyPct || 0) >= Number(stock.value?.sellPct || 0));
 const changeClass = computed(() => moveClass(stock.value?.chgPct).replace('is-', ''));
 const quoteMetrics = computed(() => {
@@ -68,9 +73,9 @@ function formatPlainNumber(value, digits = 0) {
 }
 
 function formatInstValue(value) {
-  if (!inst.value && institutionalStore.loading) return '載入中';
+  if (instLoading.value || (!inst.value && institutionalStore.loading)) return '載入中';
   if (!inst.value && institutionalStore.loaded) return '無資料';
-  return formatSigned(value || 0, 2, '億');
+  return formatSigned(value || 0, 0, '張');
 }
 
 function barWidth(value) {
@@ -84,6 +89,7 @@ async function submit(value = query.value) {
   if (!institutionalStore.loaded) {
     await institutionalStore.loadInstitutional({ silent: true });
   }
+  await institutionalStore.loadInstitutionalByCode(result.code, { force: true });
 }
 
 function quickSearch(code) {
@@ -123,7 +129,7 @@ function analyze(type) {
   if (type === 'risk') {
     aiText.value = [
       `${s.code} ${s.name} 風險評估`,
-      `法人合計 ${formatSigned(instTotal, 2, '億')}。`,
+      `法人合計 ${formatSigned(instTotal, 0, '張')}。`,
       s.sellPct >= 62 ? '賣方力道偏高，短線需提高防守。' : '目前未見明顯單邊賣壓。',
       '此分析為本機規則推估，不構成投資建議。'
     ].join('\n');
@@ -133,7 +139,7 @@ function analyze(type) {
     `${s.code} ${s.name} 個股深度分析`,
     `產業：${s.sector}，現價 ${formatMoney(s.price, 2)}，漲跌幅 ${formatPct(s.chgPct)}。`,
     `籌碼面：買入 ${Math.round(s.buyPct)}%，賣出 ${Math.round(s.sellPct)}%，${dominantBuy.value ? '買入主導' : '賣出主導'}。`,
-    `法人面：外資 ${formatSigned(inst.value?.foreign || 0, 2, '億')}，投信 ${formatSigned(inst.value?.trust || 0, 2, '億')}，自營商 ${formatSigned(inst.value?.dealer || 0, 2, '億')}。`,
+    `法人面：外資 ${formatSigned(inst.value?.foreign || 0, 0, '張')}，投信 ${formatSigned(inst.value?.trust || 0, 0, '張')}，自營商 ${formatSigned(inst.value?.dealer || 0, 0, '張')}。`,
     '操作上建議搭配走勢圖確認支撐壓力與量能延續。'
   ].join('\n');
 }

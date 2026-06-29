@@ -16,7 +16,7 @@ export const navItems = [
   { path: '/portfolio', label: '我的持股', icon: IconBriefcase },
   { path: '/favorites', label: '我的最愛', icon: IconStar },
   { path: '/hot100', label: '前100熱門', icon: IconFlame },
-  { path: '/top-volume', label: '成交量前20', icon: IconTable },
+  { path: '/top-volume', label: '每日成交量前二十名證券', icon: IconTable },
   { path: '/chart', label: '走勢圖', icon: IconAdjustmentsHorizontal },
   { path: '/alerts', label: '買賣提醒', icon: IconBell },
   { path: '/institutional', label: '三大法人', icon: IconBuildingBank },

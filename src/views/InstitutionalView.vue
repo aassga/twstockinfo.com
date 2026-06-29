@@ -107,10 +107,10 @@ function percent(value, positive = true) {
           <tr>
             <th>代號</th>
             <th>名稱</th>
-            <th>外資</th>
-            <th>投信</th>
-            <th>自營商</th>
-            <th>合計</th>
+            <th>外資(張)</th>
+            <th>投信(張)</th>
+            <th>自營商(張)</th>
+            <th>合計(張)</th>
             <th>連續買超</th>
             <th>訊號</th>
           </tr>
@@ -121,10 +121,10 @@ function percent(value, positive = true) {
             <td>
               <button class="stock-link" type="button" @click="openChart(row)">{{ row.name }}</button>
             </td>
-            <td :class="moveClass(row.foreign).replace('is-', '')">{{ formatSigned(row.foreign, 2, '億') }}</td>
-            <td :class="moveClass(row.trust).replace('is-', '')">{{ formatSigned(row.trust, 2, '億') }}</td>
-            <td :class="moveClass(row.dealer).replace('is-', '')">{{ formatSigned(row.dealer, 2, '億') }}</td>
-            <td :class="moveClass(row.total).replace('is-', '')">{{ formatSigned(row.total, 2, '億') }}</td>
+            <td :class="moveClass(row.foreign).replace('is-', '')">{{ formatSigned(row.foreign, 0, '張') }}</td>
+            <td :class="moveClass(row.trust).replace('is-', '')">{{ formatSigned(row.trust, 0, '張') }}</td>
+            <td :class="moveClass(row.dealer).replace('is-', '')">{{ formatSigned(row.dealer, 0, '張') }}</td>
+            <td :class="moveClass(row.total).replace('is-', '')">{{ formatSigned(row.total, 0, '張') }}</td>
             <td>當日</td>
             <td>
               <span class="direction-pill" :class="row.total > 0 ? 'buy' : row.total < 0 ? 'sell' : 'neutral'">

@@ -40,9 +40,6 @@ function changeMark(value) {
   return '';
 }
 
-function toLots(value) {
-  return Number(value || 0) / 1000;
-}
 </script>
 
 <template>
@@ -68,24 +65,24 @@ function toLots(value) {
 
     <div class="volume-overview-grid">
       <div class="volume-overview-card accent-blue">
-        <div class="volume-overview-label">資料日期</div>
+        <div class="volume-overview-label">資料更新日期</div>
         <div class="volume-overview-value">{{ formatTradeDate(topVolumeStore.tradeDate) }}</div>
       </div>
       <div class="volume-overview-card accent-red">
-        <div class="volume-overview-label">成交量第一</div>
+        <div class="volume-overview-label">成交量第一排名</div>
         <div class="volume-overview-value">
           {{ topVolumeStore.leader ? `${topVolumeStore.leader.code} ${topVolumeStore.leader.name}` : '--' }}
         </div>
         <div class="volume-overview-sub">
-          {{ topVolumeStore.leader ? `${formatNumber(toLots(topVolumeStore.leader.volume))} 張` : '--' }}
+          {{ topVolumeStore.leader ? `${formatNumber(topVolumeStore.leader.volume)} 股` : '--' }}
         </div>
       </div>
       <div class="volume-overview-card accent-green">
-        <div class="volume-overview-label">前20總張數</div>
-        <div class="volume-overview-value">{{ formatNumber(toLots(topVolumeStore.summary.totalVolume)) }}</div>
+        <div class="volume-overview-label">總股數</div>
+        <div class="volume-overview-value">{{ formatNumber(topVolumeStore.summary.totalVolume) }}</div>
       </div>
       <div class="volume-overview-card">
-        <div class="volume-overview-label">前20成交筆數</div>
+        <div class="volume-overview-label">前20成交總筆數</div>
         <div class="volume-overview-value">{{ formatNumber(topVolumeStore.summary.totalTransaction) }}</div>
       </div>
     </div>
@@ -97,7 +94,7 @@ function toLots(value) {
 
     <div class="hot-data-meta">
       <span>最後更新：{{ topVolumeStore.updatedAt ? formatDateTime(topVolumeStore.updatedAt) : '--' }}</span>
-      <span>資料來源：STOCK_DAY_ALL 股票池 + TWSE MIS/Yahoo 即時報價排序，MI_INDEX20 備援</span>
+      <span>資料來源：TWSE 每日成交量前二十名證券</span>
     </div>
 
     <div v-if="topVolumeStore.error" class="empty-state volume-empty-state">
@@ -111,7 +108,7 @@ function toLots(value) {
             <th>#</th>
             <th>代號</th>
             <th>名稱</th>
-            <th>成交量(張)</th>
+            <th>成交股數</th>
             <th>成交筆數</th>
             <th>開盤</th>
             <th>最高</th>
@@ -142,7 +139,7 @@ function toLots(value) {
             </td>
             <td>
               <div class="volume-stack">
-                <span>{{ formatNumber(toLots(stock.volume)) }}</span>
+                <span>{{ formatNumber(stock.volume) }}</span>
                 <small>{{ formatVolume(stock.volume) }} 股</small>
               </div>
             </td>

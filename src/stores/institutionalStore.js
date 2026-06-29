@@ -4,6 +4,8 @@ import { stockApi } from '../api/stockApi';
 
 export const useInstitutionalStore = defineStore('institutional', () => {
   const rows = ref([]);
+  const byCode = ref({});
+  const codeLoading = ref({});
   const summary = ref({
     foreign: 0,
     trust: 0,
@@ -43,8 +45,37 @@ export const useInstitutionalStore = defineStore('institutional', () => {
     return activeRequest;
   }
 
+  async function loadInstitutionalByCode(code, { force = false } = {}) {
+    const normalizedCode = String(code || '').trim();
+    if (!normalizedCode) return null;
+    if (!force && byCode.value[normalizedCode]) return byCode.value[normalizedCode];
+
+    codeLoading.value = { ...codeLoading.value, [normalizedCode]: true };
+    try {
+      const row = await stockApi.institutionalByCode(normalizedCode);
+      byCode.value = {
+        ...byCode.value,
+        [normalizedCode]: {
+          ...row,
+          name: row.name || rows.value.find(item => item.code === normalizedCode)?.name || ''
+        }
+      };
+      return byCode.value[normalizedCode];
+    } catch (err) {
+      const fallback = rows.value.find(item => item.code === normalizedCode) || null;
+      if (fallback) {
+        byCode.value = { ...byCode.value, [normalizedCode]: fallback };
+      }
+      return fallback;
+    } finally {
+      codeLoading.value = { ...codeLoading.value, [normalizedCode]: false };
+    }
+  }
+
   return {
     rows,
+    byCode,
+    codeLoading,
     summary,
     total,
     topBuy,
@@ -52,6 +83,7 @@ export const useInstitutionalStore = defineStore('institutional', () => {
     loading,
     loaded,
     error,
-    loadInstitutional
+    loadInstitutional,
+    loadInstitutionalByCode
   };
 });

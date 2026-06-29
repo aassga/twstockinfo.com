@@ -1,14 +1,15 @@
-import { apiFetch } from './http';
+import { apiFetch, apiTextFetch } from './http';
 
 export const stockApi = {
   market: () => fetchMarketRealtime().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket)),
   allStocks: () => apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks),
-  topVolume: () => fetchRealtimeTopVolume().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX20').then(parseTopVolume)),
+  topVolume: () => apiFetch('/rwd/zh/afterTrading/MI_INDEX20?response=json').then(parseTopVolume),
   quote: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quoteOtc: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quotes: codes => fetchQuotes(codes),
   quoteAuto,
   institutional: () => fetchLatestTwseRwd('/rwd/zh/fund/T86', '&selectType=ALLBUT0999').then(parseInstitutional),
+  institutionalByCode: code => fetchInstitutionalByCode(code),
   instSummary: () => fetchLatestTwseRwd('/rwd/zh/fund/BFI82U').then(parseInstitutionalSummary),
   chart: (code, interval = 'D', exchange = '') => fetchYahooChart(code, interval, exchange)
 };
@@ -84,42 +85,6 @@ async function fetchMarketRealtime() {
   };
 }
 
-async function fetchRealtimeTopVolume() {
-  const baseRows = await apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks);
-  const candidates = baseRows.slice(0, 300);
-  const quotes = await fetchQuotes(candidates.map(stock => stock.code));
-  const quoteByCode = new Map(quotes.map(quote => [String(quote.code), quote]));
-
-  const rows = candidates.map(stock => {
-    const quote = quoteByCode.get(stock.code);
-    if (!quote) return null;
-
-    const close = Number(quote.price || stock.price || 0);
-    return {
-      date: quote.date || todayTaiwanDate(),
-      code: stock.code,
-      name: quote.name || stock.name,
-      volume: Number(quote.volume || stock.volume || 0),
-      transaction: Number(quote.transaction || stock.transaction || 0),
-      open: Number(quote.open || stock.open || close),
-      high: Number(quote.high || stock.high || close),
-      low: Number(quote.low || stock.low || close),
-      close,
-      change: Number(quote.change || 0),
-      bid: Number(quote.bid || stock.bid || close),
-      ask: Number(quote.ask || stock.ask || close),
-      source: quote.source || 'realtime'
-    };
-  }).filter(row => row?.code && row.name && row.volume > 0);
-
-  if (!rows.length) throw new Error('無法取得即時成交量排行');
-
-  return rows
-    .sort((a, b) => b.volume - a.volume)
-    .slice(0, 20)
-    .map((row, index) => ({ ...row, rank: index + 1 }));
-}
-
 function parseMarket(data) {
   const rows = Array.isArray(data) ? data : [];
   const weighted = rows.find(row => Object.values(row).some(value => String(value).includes('發行量加權股價指數')));
@@ -189,7 +154,24 @@ function parseAllStocks(data) {
 }
 
 function parseTopVolume(data) {
-  const rows = normalizeTwseRows(data);
+  const rows = Array.isArray(data?.data)
+    ? data.data.map(row => ({
+      Rank: row[0],
+      Code: row[1],
+      Name: row[2],
+      TradeVolume: row[3],
+      Transaction: row[4],
+      OpeningPrice: row[5],
+      HighestPrice: row[6],
+      LowestPrice: row[7],
+      ClosingPrice: row[8],
+      Dir: row[9],
+      Change: row[10],
+      LastBestBidPrice: row[11],
+      LastBestAskPrice: row[12],
+      Date: data.date
+    }))
+    : normalizeTwseRows(data);
 
   return rows.map((row, index) => {
     const code = String(read(row, ['Code', '證券代號']) || '').trim();
@@ -511,19 +493,57 @@ function aggregateCandles(rows, size) {
 function parseInstitutional(data) {
   const rows = normalizeTwseRows(data);
   return rows.map(row => {
-    const foreign = toHundredMillion(read(row, ['外陸資買賣超股數(不含外資自營商)', '外資買賣超股數']));
-    const trust = toHundredMillion(read(row, ['投信買賣超股數']));
-    const dealer = toHundredMillion(read(row, ['自營商買賣超股數', '自營商買賣超股數(自行買賣)']));
+    const foreign = toLots(read(row, ['外陸資買賣超股數(不含外資自營商)', '外資買賣超股數']));
+    const trust = toLots(read(row, ['投信買賣超股數']));
+    const dealer = toLots(read(row, ['自營商買賣超股數', '自營商買賣超股數(自行買賣)']));
     return {
       code: String(read(row, ['證券代號']) || ''),
-      name: String(read(row, ['證券名稱']) || ''),
+      name: String(read(row, ['證券名稱']) || '').trim(),
       foreign,
       trust,
       dealer,
-      total: Number((foreign + trust + dealer).toFixed(2))
+      total: foreign + trust + dealer,
+      unit: '張',
+      source: 'twse'
     };
   }).filter(row => row.code && row.name)
     .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+}
+
+async function fetchInstitutionalByCode(code) {
+  const normalizedCode = String(code || '').trim();
+  if (!/^\d{4,6}$/.test(normalizedCode)) throw new Error('股票代號格式不正確');
+
+  const html = await apiTextFetch(`/histock/stock/chips.aspx?no=${encodeURIComponent(normalizedCode)}&_=${Date.now()}`);
+  return parseInstitutionalTrendHtml(html, normalizedCode);
+}
+
+function parseInstitutionalTrendHtml(html, code) {
+  const text = String(html || '');
+  const rowMatch = text.match(/<tr[^>]*>\s*<td[^>]*>\s*(20\d{2}\/\d{2}\/\d{2})\s*<\/td>([\s\S]*?)<\/tr>/i);
+  if (!rowMatch) throw new Error('無法解析法人買賣超資料');
+
+  const cells = [...rowMatch[2].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)]
+    .map(match => stripHtml(match[1]))
+    .map(value => parseNumber(value));
+
+  if (cells.length < 5) throw new Error('法人買賣超欄位不足');
+
+  const [foreign, trust, dealerSelf, dealerHedge, reportedTotal] = cells;
+  const dealer = dealerSelf + dealerHedge;
+  const total = Number.isFinite(reportedTotal) ? reportedTotal : foreign + trust + dealer;
+
+  return {
+    code,
+    name: '',
+    date: rowMatch[1],
+    foreign,
+    trust,
+    dealer,
+    total,
+    unit: '張',
+    source: 'histock'
+  };
 }
 
 function parseInstitutionalSummary(data) {
@@ -650,4 +670,16 @@ function signedChangeByDirection(value, direction) {
 
 function toHundredMillion(value) {
   return Number((parseNumber(value) / 100000000).toFixed(2));
+}
+
+function toLots(value) {
+  return Math.round(parseNumber(value) / 1000);
+}
+
+function stripHtml(value) {
+  return String(value || '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .trim();
 }

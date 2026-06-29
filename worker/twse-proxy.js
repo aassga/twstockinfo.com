@@ -38,12 +38,20 @@ const YAHOO_HEADERS = {
   'Accept':     'application/json, text/plain, */*',
 };
 
+const HISTOCK_HEADERS = {
+  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Referer':         'https://histock.tw/',
+  'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+};
+
 // 白名單：只允許打這些 domain
 const ALLOWED_UPSTREAM = [
   'openapi.twse.com.tw',
   'mis.twse.com.tw',
   'www.twse.com.tw',
   'query1.finance.yahoo.com',
+  'histock.tw',
 ];
 
 export default {
@@ -108,6 +116,14 @@ export default {
       return proxyFetch(upstream, YAHOO_HEADERS);
     }
 
+    // ── Route: /histock/*  → histock.tw/* ──
+    // Used for per-stock institutional investor chips, matching the Wantgoo-style lot unit.
+    if (route.startsWith('/histock/')) {
+      const path = route.replace('/histock', '');
+      const upstream = `https://histock.tw${path}${params}`;
+      return proxyFetch(upstream, HISTOCK_HEADERS, 'text/html; charset=utf-8');
+    }
+
     // ── Route: /claude  → Anthropic API ──
     if (route === '/claude' && request.method === 'POST') {
       const apiKey = env?.ANTHROPIC_API_KEY || request.headers.get('X-Api-Key') || '';
@@ -140,14 +156,14 @@ export default {
   }
 };
 
-async function proxyFetch(upstream, headers = TWSE_HEADERS) {
+async function proxyFetch(upstream, headers = TWSE_HEADERS, fallbackContentType = 'application/json; charset=utf-8') {
   try {
     const resp = await fetch(upstream, { headers });
     const body = await resp.text();
     return new Response(body, {
       status:  resp.status,
       headers: {
-        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Type': resp.headers.get('Content-Type') || fallbackContentType,
         ...CORS_HEADERS,
       },
     });

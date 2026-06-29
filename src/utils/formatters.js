@@ -24,7 +24,11 @@ export function formatVolume(value) {
 export function formatSigned(value, digits = 2, suffix = '') {
   const number = Number(value || 0);
   const sign = number > 0 ? '+' : '';
-  return `${sign}${number.toFixed(digits)}${suffix}`;
+  const text = Math.abs(number).toLocaleString('zh-TW', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
+  return `${number < 0 ? '-' : sign}${text}${suffix}`;
 }
 
 export function formatPct(value) {
