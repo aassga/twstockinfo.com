@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   IconBriefcase,
@@ -7,7 +7,8 @@ import {
   IconFileCode,
   IconFileSpreadsheet,
   IconInfoCircle,
-  IconRefresh
+  IconRefresh,
+  IconSelector
 } from '@tabler/icons-vue';
 import { stockApi } from '../api/stockApi';
 import { useChartStore } from '../stores/chartStore';
@@ -22,6 +23,29 @@ const stockStore = useStockStore();
 const form = reactive(createEmptyForm());
 const importInput = ref(null);
 const isRefreshingQuotes = ref(false);
+const portfolioSort = ref({ key: '', direction: 'desc' });
+const leadingSortableColumns = [
+  { key: 'buyPrice', label: '買進價' },
+  { key: 'shares', label: '股數' }
+];
+const trailingSortableColumns = [
+  { key: 'currentPrice', label: '現價' },
+  { key: 'marketValue', label: '市值' },
+  { key: 'pnl', label: '損益' },
+  { key: 'returnPct', label: '報酬率' }
+];
+const sortedHoldings = computed(() => {
+  const { key, direction } = portfolioSort.value;
+  if (!key) return portfolioStore.holdings;
+
+  const factor = direction === 'asc' ? 1 : -1;
+  return portfolioStore.holdings.slice().sort((a, b) => {
+    const left = portfolioSortValue(a, key);
+    const right = portfolioSortValue(b, key);
+    if (left === right) return String(a.code).localeCompare(String(b.code));
+    return (left > right ? 1 : -1) * factor;
+  });
+});
 let codeLookupTimer = null;
 let codeLookupRun = 0;
 
@@ -175,6 +199,24 @@ function holdingPnl(holding) {
 function holdingReturn(holding) {
   return holding.buyPrice ? (((holding.currentPrice || holding.buyPrice) - holding.buyPrice) / holding.buyPrice) * 100 : 0;
 }
+
+function setPortfolioSort(key) {
+  if (portfolioSort.value.key === key) {
+    portfolioSort.value.direction = portfolioSort.value.direction === 'asc' ? 'desc' : 'asc';
+    return;
+  }
+  portfolioSort.value = { key, direction: 'desc' };
+}
+
+function portfolioSortValue(holding, key) {
+  if (key === 'buyPrice') return Number(holding.buyPrice || 0);
+  if (key === 'shares') return Number(holding.shares || 0);
+  if (key === 'currentPrice') return Number(holding.currentPrice || holding.buyPrice || 0);
+  if (key === 'marketValue') return Number((holding.currentPrice || holding.buyPrice || 0) * (holding.shares || 0));
+  if (key === 'pnl') return holdingPnl(holding);
+  if (key === 'returnPct') return holdingReturn(holding);
+  return 0;
+}
 </script>
 
 <template>
@@ -285,13 +327,19 @@ function holdingReturn(holding) {
           <tr>
             <th>代號</th>
             <th>名稱</th>
-            <th>買進價</th>
-            <th>股數</th>
+            <th v-for="column in leadingSortableColumns" :key="column.key">
+              <button class="sort-th" type="button" :class="{ active: portfolioSort.key === column.key }" @click="setPortfolioSort(column.key)">
+                <span>{{ column.label }}</span>
+                <IconSelector class="inline-icon" :stroke-width="2" />
+              </button>
+            </th>
             <th>買進日期</th>
-            <th>現價</th>
-            <th>市值</th>
-            <th>損益</th>
-            <th>報酬率</th>
+            <th v-for="column in trailingSortableColumns" :key="column.key">
+              <button class="sort-th" type="button" :class="{ active: portfolioSort.key === column.key }" @click="setPortfolioSort(column.key)">
+                <span>{{ column.label }}</span>
+                <IconSelector class="inline-icon" :stroke-width="2" />
+              </button>
+            </th>
             <th>更新時間</th>
             <th>操作</th>
           </tr>
@@ -300,7 +348,7 @@ function holdingReturn(holding) {
           <tr v-if="!portfolioStore.holdings.length">
             <td colspan="11" style="text-align:center;color:var(--text-3);padding:28px">尚未新增持股</td>
           </tr>
-          <tr v-for="holding in portfolioStore.holdings" :key="holding.id">
+          <tr v-for="holding in sortedHoldings" :key="holding.id">
             <td>{{ holding.code }}</td>
             <td>
               <button class="stock-link" type="button" @click="openChart(holding)">{{ holding.name }}</button>
@@ -310,8 +358,8 @@ function holdingReturn(holding) {
             <td>{{ holding.buyDate }}</td>
             <td>{{ formatMoney(holding.currentPrice || holding.buyPrice, 2) }}</td>
             <td>{{ formatMoney((holding.currentPrice || holding.buyPrice) * holding.shares) }}</td>
-            <td :class="moveClass(holdingPnl(holding)).replace('is-', '')">{{ formatMoney(holdingPnl(holding)) }}</td>
-            <td :class="moveClass(holdingReturn(holding)).replace('is-', '')">{{ formatPct(holdingReturn(holding)) }}</td>
+            <td class="portfolio-pnl-cell" :class="moveClass(holdingPnl(holding)).replace('is-', '')">{{ formatMoney(holdingPnl(holding)) }}</td>
+            <td class="portfolio-pnl-cell" :class="moveClass(holdingReturn(holding)).replace('is-', '')">{{ formatPct(holdingReturn(holding)) }}</td>
             <td>{{ formatDateTime(holding.updatedAt) }}</td>
             <td>
               <div class="row-actions">

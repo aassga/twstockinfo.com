@@ -273,6 +273,31 @@ button {
   background: rgb(38 208 124 / 40%);
 }
 
+.stock-table td.portfolio-pnl-cell.up {
+  color: #fc0000;
+  background: rgb(242 92 92 / 40%);
+  font-weight: 700;
+}
+
+.stock-table tbody tr:hover td.portfolio-pnl-cell.up {
+  background: rgb(242 92 92 / 40%);
+}
+
+.stock-table td.portfolio-pnl-cell.down {
+  color: #1bfc00;
+  background: rgb(38 208 124 / 40%);
+  font-weight: 700;
+}
+
+.stock-table tbody tr:hover td.portfolio-pnl-cell.down {
+  background: rgb(38 208 124 / 40%);
+}
+
+.stock-table td.portfolio-pnl-cell.flat {
+  color: var(--text-1);
+  background: transparent;
+}
+
 .volume-overview-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
