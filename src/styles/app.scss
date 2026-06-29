@@ -104,6 +104,9 @@ button {
 }
 
 .btn.icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 32px;
   min-width: 32px;
   height: 32px;
@@ -117,6 +120,16 @@ button {
 .btn.danger:hover {
   border-color: rgba(255, 90, 105, 0.58);
   background: rgba(255, 90, 105, 0.12);
+}
+
+.favorites-view .stock-table th:last-child,
+.favorites-view .stock-table td:last-child {
+  text-align: center;
+}
+
+.favorites-view .table-actions {
+  width: 100%;
+  justify-content: center;
 }
 
 .quote-metrics-panel {
