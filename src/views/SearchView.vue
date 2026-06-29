@@ -52,7 +52,7 @@ const quoteMetrics = computed(() => {
     { label: '最高', value: formatPriceValue(high), detail: '盤中高點', tone: 'high' },
     { label: '最低', value: formatPriceValue(low), detail: '盤中低點', tone: 'low' },
     { label: '價差', value: formatPriceValue(range), detail: '最高 - 最低', tone: 'range' },
-    { label: '成交量(張)', value: formatPlainNumber(current.volume), detail: '累計張數', tone: 'volume' },
+    { label: '成交量(張)', value: formatPlainNumber(Number(current.volume || 0) / 1000), detail: '累計張數', tone: 'volume' },
     { label: '成交金額(億)', value: formatPlainNumber(amount, 2), detail: '累計成交值', tone: 'amount' }
   ];
 });
