@@ -73,6 +73,10 @@ function formatInstValue(value) {
   return formatSigned(value || 0, 2, '億');
 }
 
+function barWidth(value) {
+  return `${Math.min(Math.max(Number(value || 0), 0), 100)}%`;
+}
+
 async function submit(value = query.value) {
   if (!value) return;
   const result = await stockStore.searchStock(value);
@@ -219,7 +223,7 @@ function analyze(type) {
             </div>
             <div class="bs-row">
               <span class="bs-label vol">量比</span>
-              <div class="bs-track"><div class="bs-fill vol" :style="{ width: `${stock.volRatio}%` }"></div></div>
+              <div class="bs-track"><div class="bs-fill vol" :style="{ width: barWidth(stock.volRatio) }"></div></div>
               <span class="bs-pct vol">{{ Math.round(stock.volRatio) }}%</span>
             </div>
           </div>

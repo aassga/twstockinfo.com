@@ -84,7 +84,7 @@ export const useStockStore = defineStore('stocks', () => {
     try {
       const found = findStock(input);
       const code = found?.code || input.match(/\d{4,6}/)?.[0] || input;
-      const quote = await stockApi.quoteAuto(code);
+      const quote = await stockApi.quoteAuto(code, { withVolumeRatio: true });
       currentStock.value = enrichStock({
         ...found,
         ...quote,

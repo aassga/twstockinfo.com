@@ -13,25 +13,29 @@ export const stockApi = {
   chart: (code, interval = 'D', exchange = '') => fetchYahooChart(code, interval, exchange)
 };
 
-async function quoteAuto(code) {
+async function quoteAuto(code, { withVolumeRatio = false } = {}) {
+  let quote = null;
+
   try {
-    const quote = await stockApi.quote(code);
-    if (quote.name) return quote;
+    quote = await stockApi.quote(code);
+    if (quote.name) return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   } catch (error) {
     // Listed stocks are tried first, then OTC.
   }
 
   try {
-    const quote = await stockApi.quoteOtc(code);
-    if (quote.name) return quote;
+    quote = await stockApi.quoteOtc(code);
+    if (quote.name) return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   } catch (error) {
     // Fall back to Yahoo chart metadata when TWSE MIS is temporarily blocked.
   }
 
   try {
-    return await fetchYahooRealtimeQuote(code, 'TW');
+    quote = await fetchYahooRealtimeQuote(code, 'TW');
+    return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   } catch (error) {
-    return fetchYahooRealtimeQuote(code, 'TWO');
+    quote = await fetchYahooRealtimeQuote(code, 'TWO');
+    return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   }
 }
 
@@ -376,6 +380,43 @@ async function fetchYahooRealtimeQuote(code, market = 'TW') {
   };
 }
 
+async function enrichWithVolumeRatio(quote) {
+  try {
+    const market = String(quote.exchange || '').toLowerCase() === 'otc' ? 'TWO' : 'TW';
+    const avgVolume = await fetchAverageDailyVolume(quote.code, market, quote.date);
+    if (avgVolume > 0) {
+      return {
+        ...quote,
+        volRatio: Number(((Number(quote.volume || 0) / avgVolume) * 100).toFixed(1)),
+        avgVolume20: Math.round(avgVolume)
+      };
+    }
+  } catch (error) {
+    // Keep the realtime quote if historical volume is temporarily unavailable.
+  }
+  return quote;
+}
+
+async function fetchAverageDailyVolume(code, market = 'TW', currentDate = '') {
+  const data = await apiFetch(`/yahoo/v8/finance/chart/${encodeURIComponent(`${code}.${market}`)}?range=1mo&interval=1d&includePrePost=false&_=${Date.now()}`);
+  const result = data?.chart?.result?.[0];
+  const volumes = result?.indicators?.quote?.[0]?.volume || [];
+  const timestamps = result?.timestamp || [];
+  const normalizedCurrentDate = normalizeCompactDate(currentDate);
+
+  const rows = timestamps.map((timestamp, index) => ({
+    date: formatUnixDate(timestamp),
+    volume: Number(volumes[index] || 0)
+  })).filter(row =>
+    row.volume > 0 &&
+    (!normalizedCurrentDate || row.date !== normalizedCurrentDate)
+  );
+
+  const sample = rows.slice(-20);
+  if (!sample.length) return 0;
+  return sample.reduce((sum, row) => sum + row.volume, 0) / sample.length;
+}
+
 function chunkArray(items, size) {
   const chunks = [];
   for (let index = 0; index < items.length; index += size) {
@@ -586,6 +627,12 @@ function todayTaiwanDate() {
     timeZone: 'Asia/Taipei'
   });
   return formatter.format(new Date()).replace(/\//g, '');
+}
+
+function normalizeCompactDate(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length >= 8) return digits.slice(0, 8);
+  return '';
 }
 
 function isNegativeMarketMove(value) {
