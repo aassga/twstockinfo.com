@@ -93,7 +93,7 @@ function changeMark(value) {
 
     <div class="hot-data-meta">
       <span>最後更新：{{ topVolumeStore.updatedAt ? formatDateTime(topVolumeStore.updatedAt) : '--' }}</span>
-      <span>資料來源：TWSE MI_INDEX20 每日成交量前二十名證券</span>
+      <span>資料來源：STOCK_DAY_ALL 股票池 + TWSE MIS/Yahoo 即時報價排序，MI_INDEX20 備援</span>
     </div>
 
     <div v-if="topVolumeStore.error" class="empty-state volume-empty-state">

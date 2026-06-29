@@ -3,7 +3,7 @@ import { apiFetch } from './http';
 export const stockApi = {
   market: () => fetchMarketRealtime().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket)),
   allStocks: () => apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks),
-  topVolume: () => apiFetch('/twse/exchangeReport/MI_INDEX20').then(parseTopVolume),
+  topVolume: () => fetchRealtimeTopVolume().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX20').then(parseTopVolume)),
   quote: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quoteOtc: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quotes: codes => fetchQuotes(codes),
@@ -80,6 +80,42 @@ async function fetchMarketRealtime() {
   };
 }
 
+async function fetchRealtimeTopVolume() {
+  const baseRows = await apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks);
+  const candidates = baseRows.slice(0, 300);
+  const quotes = await fetchQuotes(candidates.map(stock => stock.code));
+  const quoteByCode = new Map(quotes.map(quote => [String(quote.code), quote]));
+
+  const rows = candidates.map(stock => {
+    const quote = quoteByCode.get(stock.code);
+    if (!quote) return null;
+
+    const close = Number(quote.price || stock.price || 0);
+    return {
+      date: quote.date || todayTaiwanDate(),
+      code: stock.code,
+      name: quote.name || stock.name,
+      volume: Number(quote.volume || stock.volume || 0),
+      transaction: Number(quote.transaction || stock.transaction || 0),
+      open: Number(quote.open || stock.open || close),
+      high: Number(quote.high || stock.high || close),
+      low: Number(quote.low || stock.low || close),
+      close,
+      change: Number(quote.change || 0),
+      bid: Number(quote.bid || stock.bid || close),
+      ask: Number(quote.ask || stock.ask || close),
+      source: quote.source || 'realtime'
+    };
+  }).filter(row => row?.code && row.name && row.volume > 0);
+
+  if (!rows.length) throw new Error('無法取得即時成交量排行');
+
+  return rows
+    .sort((a, b) => b.volume - a.volume)
+    .slice(0, 20)
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
 function parseMarket(data) {
   const rows = Array.isArray(data) ? data : [];
   const weighted = rows.find(row => Object.values(row).some(value => String(value).includes('發行量加權股價指數')));
@@ -117,8 +153,12 @@ function parseAllStocks(data) {
     const change = parseNumber(read(row, ['Change', '漲跌價差']));
     const volume = parseNumber(read(row, ['TradeVolume', '成交股數']));
     const value = parseNumber(read(row, ['TradeValue', '成交金額']));
+    const transaction = parseNumber(read(row, ['Transaction', '成交筆數']));
     const high = parseNumber(read(row, ['HighestPrice', '最高價']), price);
     const low = parseNumber(read(row, ['LowestPrice', '最低價']), price);
+    const open = parseNumber(read(row, ['OpeningPrice', '開盤價']), price);
+    const bid = parseNumber(read(row, ['LastBestBidPrice', '最後揭示買價']), price);
+    const ask = parseNumber(read(row, ['LastBestAskPrice', '最後揭示賣價']), price);
 
     if (!/^\d{4,6}$/.test(code) || price <= 0) continue;
 
@@ -130,9 +170,13 @@ function parseAllStocks(data) {
       price,
       change,
       chgPct,
+      open,
       high,
       low,
       volume,
+      transaction,
+      bid,
+      ask,
       amountHundredMillion: Number((value / 100000000).toFixed(2))
     });
   }
@@ -197,6 +241,9 @@ function parseQuote(data, code) {
     high: parseNumber(item.h, price),
     low: parseNumber(item.l, price),
     volume,
+    transaction: parseNumber(item.mt || item.m || item.tn),
+    bid: parseFirstBookPrice(item.b),
+    ask: parseFirstBookPrice(item.a),
     amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
     buyPct,
     sellPct: 100 - buyPct,
@@ -234,6 +281,9 @@ function parseQuotes(data) {
       high: parseNumber(item.h, price),
       low: parseNumber(item.l, price),
       volume,
+      transaction: parseNumber(item.mt || item.m || item.tn),
+      bid: parseFirstBookPrice(item.b),
+      ask: parseFirstBookPrice(item.a),
       amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
       buyPct,
       sellPct: 100 - buyPct,
@@ -313,6 +363,9 @@ async function fetchYahooRealtimeQuote(code, market = 'TW') {
     high: parseNumber(meta.regularMarketDayHigh, price),
     low: parseNumber(meta.regularMarketDayLow, price),
     volume,
+    transaction: 0,
+    bid: price,
+    ask: price,
     amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
     buyPct: 50,
     sellPct: 50,
@@ -523,6 +576,16 @@ function formatUnixDate(seconds) {
     timeZone: 'Asia/Taipei'
   });
   return formatter.format(date).replace(/\//g, '');
+}
+
+function todayTaiwanDate() {
+  const formatter = new Intl.DateTimeFormat('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: 'Asia/Taipei'
+  });
+  return formatter.format(new Date()).replace(/\//g, '');
 }
 
 function isNegativeMarketMove(value) {
