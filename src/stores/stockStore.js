@@ -157,29 +157,21 @@ export const useStockStore = defineStore('stocks', () => {
       .slice(0, 100);
     const quoteByCode = new Map();
 
-    try {
-      const quotes = await stockApi.quotes(topRows.map(stock => stock.code));
-      quotes.forEach(quote => {
-        quoteByCode.set(String(quote.code), quote);
-      });
-    } catch (error) {
-      // Keep STOCK_DAY_ALL data if the batch quote endpoint is temporarily unavailable.
-    }
+    const listedCodes = topRows
+      .filter(stock => String(stock.exchange || 'tse').toLowerCase() !== 'otc')
+      .map(stock => stock.code);
+    const otcCodes = topRows
+      .filter(stock => String(stock.exchange || '').toLowerCase() === 'otc')
+      .map(stock => stock.code);
 
-    const missingRows = topRows.filter(stock => !quoteByCode.has(stock.code));
-    if (missingRows.length) {
-      const fallbackQuotes = await mapLimit(missingRows, 8, async stock => {
-        try {
-          return await stockApi.quoteAuto(stock.code);
-        } catch (error) {
-          return null;
-        }
-      });
+    const quoteGroups = await Promise.all([
+      stockApi.quotes(listedCodes, 'tse'),
+      stockApi.quotes(otcCodes, 'otc')
+    ]);
 
-      fallbackQuotes.filter(Boolean).forEach(quote => {
-        quoteByCode.set(String(quote.code), quote);
-      });
-    }
+    quoteGroups.flat().forEach(quote => {
+      quoteByCode.set(String(quote.code), quote);
+    });
 
     return {
       realtimeCount: quoteByCode.size,
@@ -197,20 +189,39 @@ export const useStockStore = defineStore('stocks', () => {
     };
   }
 
-  async function mapLimit(items, limit, mapper) {
-    const results = [];
-    let nextIndex = 0;
+  async function refreshStocksByCodes(codes) {
+    const requestedCodes = new Set(
+      codes
+        .map(code => String(code || '').trim())
+        .filter(Boolean)
+    );
+    if (!requestedCodes.size) return [];
 
-    async function worker() {
-      while (nextIndex < items.length) {
-        const currentIndex = nextIndex;
-        nextIndex += 1;
-        results[currentIndex] = await mapper(items[currentIndex], currentIndex);
-      }
+    loadingAll.value = true;
+    error.value = '';
+    try {
+      const rows = (await stockApi.allStocks()).map(enrichStock);
+      const requestedRows = rows.filter(stock => requestedCodes.has(stock.code));
+      const nextByCode = new Map(allStocks.value.map(stock => [stock.code, stock]));
+
+      requestedRows.forEach(stock => {
+        nextByCode.set(stock.code, {
+          ...nextByCode.get(stock.code),
+          ...stock,
+          isRealtime: false
+        });
+      });
+
+      allStocks.value = [...nextByCode.values()]
+        .sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
+
+      return requestedRows;
+    } catch (err) {
+      error.value = err?.message || '股票報價更新失敗';
+      return [];
+    } finally {
+      loadingAll.value = false;
     }
-
-    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-    return results;
   }
 
   function hotCellFlashClass(code, key) {
@@ -309,6 +320,7 @@ export const useStockStore = defineStore('stocks', () => {
     loadAllStocks,
     searchStock,
     refreshCurrentStock,
+    refreshStocksByCodes,
     findStock,
     setHotFilter,
     setHotSort,

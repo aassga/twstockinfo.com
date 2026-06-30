@@ -22,10 +22,11 @@ async function openChart(stock) {
 }
 
 async function refreshFavorites() {
-  await stockStore.loadAllStocks({ silent: true });
+  const rows = await stockStore.refreshStocksByCodes(favoriteStore.favorites.map(stock => stock.code));
+  const latestByCode = new Map(rows.map(stock => [stock.code, stock]));
 
-  favoriteRows.value.forEach(stock => {
-    const latest = stockStore.allStocks.find(row => row.code === stock.code);
+  favoriteStore.favorites.forEach(stock => {
+    const latest = latestByCode.get(stock.code);
     if (latest) favoriteStore.addFavorite({ ...stock, ...latest, savedAt: stock.savedAt });
   });
 }

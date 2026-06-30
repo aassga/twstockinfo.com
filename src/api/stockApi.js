@@ -10,7 +10,7 @@ export const stockApi = {
   topVolume: () => apiFetch('/rwd/zh/afterTrading/MI_INDEX20?response=json').then(parseTopVolume),
   quote: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quoteOtc: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
-  quotes: codes => fetchQuotes(codes),
+  quotes: (codes, exchange = 'tse') => fetchQuotes(codes, exchange),
   quoteAuto,
   institutional: () => fetchLatestTwseRwd('/rwd/zh/fund/T86', '&selectType=ALLBUT0999').then(parseInstitutional),
   institutionalByCode: code => fetchInstitutionalByCode(code),
@@ -120,7 +120,7 @@ async function fetchQuotes(codes, exchange = 'tse') {
       return await apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`)
         .then(parseQuotes);
     } catch (error) {
-      return fetchYahooRealtimeQuotes(chunk);
+      return [];
     }
   }));
 
