@@ -1,5 +1,9 @@
 import { apiFetch, apiTextFetch } from './http';
 
+const STOCK_PROFILE_FALLBACKS = {
+  3289: { name: '宜特', exchange: 'otc', sector: '其他電' }
+};
+
 export const stockApi = {
   market: () => fetchMarketRealtime().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket)),
   allStocks: () => fetchAllStocks(),
@@ -29,25 +33,75 @@ async function quoteAuto(code, { withVolumeRatio = false } = {}) {
 
   try {
     quote = await stockApi.quote(code);
-    if (quote.name) return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
+    return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   } catch (error) {
     // Listed stocks are tried first, then OTC.
   }
 
   try {
     quote = await stockApi.quoteOtc(code);
-    if (quote.name) return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
+    return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   } catch (error) {
     // Fall back to Yahoo chart metadata when TWSE MIS is temporarily blocked.
   }
 
   try {
     quote = await fetchYahooRealtimeQuote(code, 'TW');
+    quote = await attachStockProfile(quote);
     return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   } catch (error) {
     quote = await fetchYahooRealtimeQuote(code, 'TWO');
+    quote = await attachStockProfile(quote);
     return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   }
+}
+
+async function attachStockProfile(quote) {
+  if (!quote || quote.name) return quote;
+
+  const fallback = STOCK_PROFILE_FALLBACKS[String(quote.code)] || {};
+  try {
+    const profile = await fetchSinotradeProfile(quote.code);
+    return {
+      ...quote,
+      ...profile,
+      name: profile.name || fallback.name || quote.name,
+      exchange: profile.exchange || fallback.exchange || quote.exchange,
+      sector: profile.sector || fallback.sector || quote.sector
+    };
+  } catch (error) {
+    return {
+      ...quote,
+      ...fallback,
+      name: fallback.name || quote.name
+    };
+  }
+}
+
+async function fetchSinotradeProfile(code) {
+  const normalizedCode = String(code || '').trim();
+  if (!/^\d{4,6}$/.test(normalizedCode)) throw new Error('股票代號格式不正確');
+
+  const html = await apiTextFetch(`/sinotrade/richclub/stock/${encodeURIComponent(normalizedCode)}?_=${Date.now()}`);
+  return parseSinotradeProfileHtml(html, normalizedCode);
+}
+
+function parseSinotradeProfileHtml(html, code) {
+  const match = String(html || '').match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+  if (!match) throw new Error('無法解析永豐個股資料');
+
+  const data = JSON.parse(decodeHtmlEntities(match[1]));
+  const result = data?.props?.pageProps?.result || {};
+  const stock = result.stock?.[0] || result.data?.[0] || result.souvenirData || {};
+  const name = String(stock.Name || stock.name || '').trim();
+  if (!name) throw new Error(`找不到股票名稱：${code}`);
+
+  return {
+    code,
+    name,
+    exchange: String(stock.Exchange || '').toLowerCase() === 'otc' ? 'otc' : '',
+    sector: String(stock.industry || stock.industryName || '').trim()
+  };
 }
 
 async function fetchQuotes(codes, exchange = 'tse') {
@@ -736,4 +790,14 @@ function stripHtml(value) {
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .trim();
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 }

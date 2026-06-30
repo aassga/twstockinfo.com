@@ -52,12 +52,20 @@ const HISTOCK_HEADERS = {
   'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
 };
 
+const SINOTRADE_HEADERS = {
+  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Referer':         'https://www.sinotrade.com.tw/richclub/',
+  'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+};
+
 // 白名單：只允許打這些 domain
 const ALLOWED_UPSTREAM = [
   'openapi.twse.com.tw',
   'mis.twse.com.tw',
   'www.twse.com.tw',
   'www.tpex.org.tw',
+  'www.sinotrade.com.tw',
   'query1.finance.yahoo.com',
   'histock.tw',
 ];
@@ -137,6 +145,13 @@ export default {
       const path = route.replace('/histock', '');
       const upstream = `https://histock.tw${path}${params}`;
       return proxyFetch(upstream, HISTOCK_HEADERS, 'text/html; charset=utf-8');
+    }
+
+    // ── Route: /sinotrade/*  → www.sinotrade.com.tw/* ──
+    if (route.startsWith('/sinotrade/')) {
+      const path = route.replace('/sinotrade', '');
+      const upstream = `https://www.sinotrade.com.tw${path}${params}`;
+      return proxyFetch(upstream, SINOTRADE_HEADERS, 'text/html; charset=utf-8');
     }
 
     // ── Route: /claude  → Anthropic API ──
