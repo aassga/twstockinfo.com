@@ -18,4 +18,18 @@ app.use(Vant);
 app.use(ElementPlus);
 app.mount('#app');
 
-registerSW({ immediate: true });
+let refreshing = false;
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+}
+
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    updateSW(true);
+  }
+});

@@ -47,16 +47,10 @@ export default defineConfig(({ command }) => ({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.hostname.includes('workers.dev'),
-            handler: 'NetworkOnly',
-            options: {
-              cacheName: 'stock-api-network-only'
-            }
-          }
-        ]
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+        globPatterns: ['**/*.{js,css,html,svg,png,ico}']
       }
     })
   ],

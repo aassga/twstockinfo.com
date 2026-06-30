@@ -170,7 +170,7 @@ export const useStockStore = defineStore('stocks', () => {
         nextByCode.set(stock.code, {
           ...nextByCode.get(stock.code),
           ...stock,
-          isRealtime: false
+          isRealtime: stock.source === 'histock-rank'
         });
       });
 
