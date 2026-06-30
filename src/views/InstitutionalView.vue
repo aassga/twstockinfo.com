@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconBuildingBank, IconInfoCircle, IconSparkles } from '@tabler/icons-vue';
 import { useChartStore } from '../stores/chartStore';
@@ -10,9 +10,32 @@ const router = useRouter();
 const institutionalStore = useInstitutionalStore();
 const chartStore = useChartStore();
 const showAi = ref(false);
+const pageSize = 20;
+const currentPage = ref(1);
+
+const totalRows = computed(() => institutionalStore.rows.length);
+const totalPages = computed(() => Math.max(1, Math.ceil(totalRows.value / pageSize)));
+const pageStart = computed(() => totalRows.value ? (currentPage.value - 1) * pageSize + 1 : 0);
+const pageEnd = computed(() => Math.min(currentPage.value * pageSize, totalRows.value));
+const pagedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize;
+  return institutionalStore.rows.slice(start, start + pageSize);
+});
+const visiblePages = computed(() => {
+  const pages = [];
+  const start = Math.max(1, currentPage.value - 2);
+  const end = Math.min(totalPages.value, start + 4);
+  const normalizedStart = Math.max(1, end - 4);
+  for (let page = normalizedStart; page <= end; page += 1) pages.push(page);
+  return pages;
+});
 
 onMounted(() => {
   institutionalStore.loadInstitutional();
+});
+
+watch(totalPages, pages => {
+  if (currentPage.value > pages) currentPage.value = pages;
 });
 
 async function openChart(row) {
@@ -23,6 +46,10 @@ async function openChart(row) {
 function percent(value, positive = true) {
   const number = Math.min(80, Math.max(20, 50 + Math.abs(Number(value || 0)) * 2));
   return positive ? Math.round(number) : Math.round(100 - number);
+}
+
+function setPage(page) {
+  currentPage.value = Math.min(totalPages.value, Math.max(1, page));
 }
 </script>
 
@@ -116,7 +143,7 @@ function percent(value, positive = true) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in institutionalStore.rows" :key="row.code">
+          <tr v-for="row in pagedRows" :key="row.code">
             <td>{{ row.code }}</td>
             <td>
               <button class="stock-link" type="button" @click="openChart(row)">{{ row.name }}</button>
@@ -134,6 +161,30 @@ function percent(value, positive = true) {
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div v-if="totalRows" class="pagination-bar">
+      <div class="pagination-info">
+        顯示第 {{ pageStart }}-{{ pageEnd }} 筆，共 {{ totalRows }} 筆
+      </div>
+      <div class="pagination-controls">
+        <button class="btn xs" type="button" :disabled="currentPage === 1" @click="setPage(currentPage - 1)">
+          上一頁
+        </button>
+        <button
+          v-for="page in visiblePages"
+          :key="page"
+          class="btn xs page-btn"
+          :class="{ active: page === currentPage }"
+          type="button"
+          @click="setPage(page)"
+        >
+          {{ page }}
+        </button>
+        <button class="btn xs" type="button" :disabled="currentPage === totalPages" @click="setPage(currentPage + 1)">
+          下一頁
+        </button>
+      </div>
     </div>
 
     <div class="table-footer">

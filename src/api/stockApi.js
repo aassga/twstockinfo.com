@@ -13,9 +13,11 @@ export const stockApi = {
   chart: (code, interval = 'D', exchange = '') => fetchYahooChart(code, interval, exchange)
 };
 
+const PRICE_ROWS_CACHE_MS = 15000;
 const HISTOCK_RANK_CACHE_MS = 15000;
-const MIS_BATCH_CODE_LIMIT = 45;
-const MIS_HOT_PRICE_LIMIT = 160;
+const MIS_QUOTE_CACHE_MS = 15000;
+const MIS_BATCH_CODE_LIMIT = 15;
+const MIS_HOT_PRICE_LIMIT = 100;
 const PRICE_VERIFY_TOLERANCE = 0.001;
 const FALLBACK_HOT_CODES = [
   '2330', '2406', '00830', '3105', '2409', '3481', '6770', '2303', '6116', '009816',
@@ -28,6 +30,12 @@ let histockRankCache = {
   promise: null,
   rows: []
 };
+let allPriceRowsCache = {
+  at: 0,
+  promise: null,
+  rows: []
+};
+const misQuoteCache = new Map();
 let proxyStatusCache = {
   at: 0,
   promise: null,
@@ -35,6 +43,34 @@ let proxyStatusCache = {
 };
 
 async function fetchPriceRows(codes = []) {
+  const wantedCodes = normalizeCodeSet(codes);
+  const now = Date.now();
+
+  if (!wantedCodes.size) {
+    if (allPriceRowsCache.promise && now - allPriceRowsCache.at < PRICE_ROWS_CACHE_MS) {
+      return allPriceRowsCache.promise;
+    }
+    if (allPriceRowsCache.rows.length && now - allPriceRowsCache.at < PRICE_ROWS_CACHE_MS) {
+      return allPriceRowsCache.rows;
+    }
+
+    allPriceRowsCache.at = now;
+    allPriceRowsCache.promise = fetchFreshPriceRows([])
+      .then(rows => {
+        allPriceRowsCache.rows = rows;
+        return rows;
+      })
+      .finally(() => {
+        allPriceRowsCache.promise = null;
+      });
+
+    return allPriceRowsCache.promise;
+  }
+
+  return fetchFreshPriceRows([...wantedCodes]);
+}
+
+async function fetchFreshPriceRows(codes = []) {
   const wantedCodes = normalizeCodeSet(codes);
   const rankRows = await fetchHistockRank().catch(() => []);
   const targetCodes = wantedCodes.size
@@ -124,14 +160,37 @@ async function fetchMisQuotes(codes = []) {
   const uniqueCodes = [...normalizeCodeSet(codes)].filter(code => /^\d{4,6}[A-Z]?$/.test(code));
   if (!uniqueCodes.length) return [];
 
-  const chunks = chunkArray(uniqueCodes, MIS_BATCH_CODE_LIMIT);
-  const responses = await Promise.all(chunks.map(fetchMisQuoteChunkSafely));
+  const now = Date.now();
+  const cachedRows = [];
+  const missingCodes = [];
+
+  uniqueCodes.forEach(code => {
+    const cached = misQuoteCache.get(code);
+    if (cached?.row && now - cached.at < MIS_QUOTE_CACHE_MS) {
+      cachedRows.push(cached.row);
+    } else {
+      missingCodes.push(code);
+    }
+  });
+
+  const chunks = chunkArray(missingCodes, MIS_BATCH_CODE_LIMIT);
+  const responses = [];
+  for (const chunk of chunks) {
+    const response = await fetchMisQuoteChunkSafely(chunk);
+    if (response) responses.push(response);
+    await sleep(120);
+  }
   const rowsByCode = new Map();
+
+  cachedRows.forEach(row => {
+    rowsByCode.set(row.code, row);
+  });
 
   responses
     .filter(Boolean)
     .flatMap(parseMisQuotes)
     .forEach(row => {
+      misQuoteCache.set(row.code, { at: Date.now(), row });
       if (!rowsByCode.has(row.code)) rowsByCode.set(row.code, row);
     });
 
@@ -139,17 +198,21 @@ async function fetchMisQuotes(codes = []) {
 }
 
 async function fetchMisQuoteChunkSafely(codes) {
+  if (!codes.length) return null;
+
   try {
     return await fetchMisQuoteChunk(codes);
   } catch (error) {
-    if (codes.length <= 1) return null;
+    if (isUpstreamServerError(error)) {
+      await sleep(350);
+      try {
+        return await fetchMisQuoteChunk(codes);
+      } catch (retryError) {
+        return null;
+      }
+    }
 
-    const rows = await Promise.all(codes.map(code => fetchMisQuoteChunkSafely([code])));
-    return {
-      msgArray: rows
-        .filter(Boolean)
-        .flatMap(row => row.msgArray || [])
-    };
+    return null;
   }
 }
 
@@ -284,6 +347,14 @@ function chunkArray(items, size) {
     result.push(items.slice(index, index + size));
   }
   return result;
+}
+
+function isUpstreamServerError(error) {
+  return /HTTP 5\d\d/.test(String(error?.message || error || ''));
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function fetchMarketRealtime() {

@@ -132,6 +132,39 @@ button {
   justify-content: center;
 }
 
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.pagination-controls {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pagination-controls .btn {
+  min-width: 34px;
+}
+
+.pagination-controls .page-btn.active {
+  border-color: var(--blue);
+  background: rgba(56, 145, 255, 0.18);
+  color: var(--text-1);
+}
+
+.pagination-controls .btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .quote-metrics-panel {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -446,6 +479,16 @@ button {
   .page-actions .table-search-input {
     flex: 1 1 180px;
     min-width: 0;
+  }
+
+  .pagination-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pagination-controls {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .page-title + .search-row {

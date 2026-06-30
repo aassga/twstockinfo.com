@@ -114,19 +114,21 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     loading.value = true;
     error.value = '';
     try {
-      const updated = await Promise.all(holdings.value.map(async holding => {
-        try {
-          const quote = await stockApi.quoteAuto(holding.code);
-          return {
-            ...holding,
-            name: quote.name || holding.name,
-            currentPrice: quote.price,
-            updatedAt: new Date().toISOString()
-          };
-        } catch (err) {
-          return holding;
-        }
-      }));
+      const codes = [...new Set(holdings.value.map(holding => holding.code).filter(Boolean))];
+      const quotes = await stockApi.priceRows(codes);
+      const quoteByCode = new Map(quotes.map(quote => [quote.code, quote]));
+      const now = new Date().toISOString();
+      const updated = holdings.value.map(holding => {
+        const quote = quoteByCode.get(holding.code);
+        if (!quote) return holding;
+
+        return {
+          ...holding,
+          name: quote.name || holding.name,
+          currentPrice: quote.price,
+          updatedAt: now
+        };
+      });
       holdings.value = updated;
       persist();
     } catch (err) {
