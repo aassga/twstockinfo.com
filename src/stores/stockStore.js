@@ -200,8 +200,16 @@ export const useStockStore = defineStore('stocks', () => {
     loadingAll.value = true;
     error.value = '';
     try {
-      const rows = (await stockApi.allStocks()).map(enrichStock);
-      const requestedRows = rows.filter(stock => requestedCodes.has(stock.code));
+      const rankRows = (await stockApi.histockRank([...requestedCodes])).map(enrichStock);
+      const rankCodes = new Set(rankRows.map(stock => stock.code));
+      let fallbackRows = [];
+
+      if (rankCodes.size < requestedCodes.size) {
+        const rows = (await stockApi.allStocks()).map(enrichStock);
+        fallbackRows = rows.filter(stock => requestedCodes.has(stock.code) && !rankCodes.has(stock.code));
+      }
+
+      const requestedRows = [...rankRows, ...fallbackRows];
       const nextByCode = new Map(allStocks.value.map(stock => [stock.code, stock]));
 
       requestedRows.forEach(stock => {

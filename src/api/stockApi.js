@@ -11,6 +11,7 @@ export const stockApi = {
   quote: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quoteOtc: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quotes: (codes, exchange = 'tse') => fetchQuotes(codes, exchange),
+  histockRank: codes => fetchHistockRank(codes),
   quoteAuto,
   institutional: () => fetchLatestTwseRwd('/rwd/zh/fund/T86', '&selectType=ALLBUT0999').then(parseInstitutional),
   institutionalByCode: code => fetchInstitutionalByCode(code),
@@ -26,6 +27,17 @@ async function fetchAllStocks() {
 
   return [...listed, ...otc]
     .sort((a, b) => b.volume - a.volume);
+}
+
+async function fetchHistockRank(codes = []) {
+  const wantedCodes = new Set(
+    codes
+      .map(code => String(code || '').trim())
+      .filter(Boolean)
+  );
+  const html = await apiTextFetch(`/histock/stock/rank.aspx?p=all&_=${Date.now()}`);
+  const rows = parseHistockRankHtml(html);
+  return wantedCodes.size ? rows.filter(row => wantedCodes.has(row.code)) : rows;
 }
 
 async function quoteAuto(code, { withVolumeRatio = false } = {}) {
@@ -304,6 +316,50 @@ function parseTopVolume(data) {
   }).filter(row => row.code && row.name)
     .sort((a, b) => a.rank - b.rank)
     .slice(0, 20);
+}
+
+function parseHistockRankHtml(html) {
+  const tableMatch = String(html || '').match(/<table[^>]+id="CPHB1_gv"[\s\S]*?<\/table>/i);
+  if (!tableMatch) return [];
+
+  return [...tableMatch[0].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+    .map(match => parseHistockRankRow(match[1]))
+    .filter(Boolean);
+}
+
+function parseHistockRankRow(html) {
+  const cells = [...String(html || '').matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)]
+    .map(match => stripHtml(match[1]));
+
+  if (cells.length < 13) return null;
+
+  const code = cells[0].trim();
+  const name = cells[1].trim();
+  const price = parseNumber(cells[2]);
+  const change = signedChangeByDirection(cells[3], cells[3]);
+  const chgPct = signedChangeByDirection(cells[4], cells[4]);
+  const prev = parseNumber(cells[10]);
+  const volumeLots = parseNumber(cells[11]);
+
+  if (!/^\d{4,6}[A-Z]?$/.test(code) || !name || price <= 0) return null;
+
+  return {
+    code,
+    name,
+    price,
+    prev,
+    change,
+    chgPct,
+    open: parseNumber(cells[7], price),
+    high: parseNumber(cells[8], price),
+    low: parseNumber(cells[9], price),
+    volume: Math.round(volumeLots * 1000),
+    amountHundredMillion: parseNumber(cells[12]),
+    buyPct: chgPct > 0 ? Math.min(80, 50 + Math.abs(chgPct) * 3) : Math.max(20, 50 - Math.abs(chgPct) * 3),
+    sellPct: chgPct > 0 ? Math.max(20, 50 - Math.abs(chgPct) * 3) : Math.min(80, 50 + Math.abs(chgPct) * 3),
+    volRatio: 50,
+    source: 'histock-rank'
+  };
 }
 
 function parseQuote(data, code) {
