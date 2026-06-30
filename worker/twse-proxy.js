@@ -38,6 +38,13 @@ const YAHOO_HEADERS = {
   'Accept':     'application/json, text/plain, */*',
 };
 
+const TPEX_HEADERS = {
+  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+  'Referer':         'https://www.tpex.org.tw/',
+  'Accept':          'application/json, text/plain, */*',
+  'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+};
+
 const HISTOCK_HEADERS = {
   'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
   'Referer':         'https://histock.tw/',
@@ -50,6 +57,7 @@ const ALLOWED_UPSTREAM = [
   'openapi.twse.com.tw',
   'mis.twse.com.tw',
   'www.twse.com.tw',
+  'www.tpex.org.tw',
   'query1.finance.yahoo.com',
   'histock.tw',
 ];
@@ -114,6 +122,13 @@ export default {
       const path = route.replace('/yahoo', '');
       const upstream = `https://query1.finance.yahoo.com${path}${params}`;
       return proxyFetch(upstream, YAHOO_HEADERS);
+    }
+
+    // ── Route: /tpex/*  → www.tpex.org.tw/* ──
+    if (route.startsWith('/tpex/')) {
+      const path = route.replace('/tpex', '');
+      const upstream = `https://www.tpex.org.tw${path}${params}`;
+      return proxyFetch(upstream, TPEX_HEADERS);
     }
 
     // ── Route: /histock/*  → histock.tw/* ──

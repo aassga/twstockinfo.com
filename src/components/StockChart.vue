@@ -23,6 +23,11 @@ const props = defineProps({
 
 let canvas;
 let resizeObserver;
+const hover = {
+  active: false,
+  x: 0,
+  y: 0
+};
 
 onMounted(() => {
   canvas = document.querySelector('[data-stock-chart]');
@@ -36,6 +41,20 @@ onBeforeUnmount(() => {
 });
 
 watch(() => [props.candles, props.interval, props.loading, props.error], () => nextTick(draw), { deep: true });
+
+function handlePointerMove(event) {
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  hover.active = true;
+  hover.x = event.clientX - rect.left;
+  hover.y = event.clientY - rect.top;
+  draw();
+}
+
+function handlePointerLeave() {
+  hover.active = false;
+  draw();
+}
 
 function draw() {
   if (!canvas) return;
@@ -102,6 +121,7 @@ function draw() {
   });
 
   drawAxes(ctx, layout, width, height, min, max);
+  drawHover(ctx, layout, width, height, min, max, step, volumeTop);
 }
 
 function drawBackground(ctx, width, height) {
@@ -153,6 +173,94 @@ function drawAxes(ctx, layout, width, height, min, max) {
   ctx.textAlign = 'left';
 }
 
+function drawHover(ctx, layout, width, height, min, max, step, volumeTop) {
+  if (!hover.active || !props.candles.length) return;
+
+  const plotLeft = layout.left;
+  const plotRight = width - layout.right;
+  const priceTop = layout.top;
+  const priceBottom = layout.top + layout.priceHeight;
+  const chartBottom = volumeTop + layout.volumeHeight;
+
+  if (
+    hover.x < plotLeft ||
+    hover.x > plotRight ||
+    hover.y < priceTop ||
+    hover.y > priceBottom
+  ) {
+    return;
+  }
+
+  const x = Math.min(Math.max(hover.x, plotLeft), plotRight);
+  const y = Math.min(Math.max(hover.y, priceTop), priceBottom);
+  const price = max - ((y - layout.top) / layout.priceHeight) * (max - min);
+  const nearestIndex = Math.min(
+    props.candles.length - 1,
+    Math.max(0, Math.round((x - layout.left - step / 2) / step))
+  );
+  const row = props.candles[nearestIndex];
+  const candleX = layout.left + nearestIndex * step + step / 2;
+
+  ctx.save();
+  ctx.strokeStyle = '#d7dce8';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 6]);
+  ctx.beginPath();
+  ctx.moveTo(candleX, layout.top);
+  ctx.lineTo(candleX, chartBottom);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(layout.left, y);
+  ctx.lineTo(plotRight, y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const label = formatNumber(price, 2);
+  ctx.font = '12px system-ui, sans-serif';
+  const labelWidth = Math.max(42, ctx.measureText(label).width + 16);
+  const labelHeight = 22;
+  const labelX = Math.min(plotRight + 6, width - labelWidth - 4);
+  const labelY = Math.min(Math.max(y - labelHeight / 2, 4), height - labelHeight - 4);
+  roundRect(ctx, labelX, labelY, labelWidth, labelHeight, 4);
+  ctx.fillStyle = '#2d3546';
+  ctx.fill();
+  ctx.strokeStyle = '#59657a';
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
+
+  const info = `${formatChartTime(row.time, props.interval)}  開 ${formatNumber(row.open, 2)}  高 ${formatNumber(row.high, 2)}  低 ${formatNumber(row.low, 2)}  收 ${formatNumber(row.close, 2)}`;
+  ctx.font = '12px system-ui, sans-serif';
+  const infoWidth = Math.min(ctx.measureText(info).width + 18, plotRight - layout.left);
+  const infoX = Math.min(Math.max(candleX - infoWidth / 2, layout.left), plotRight - infoWidth);
+  const infoY = height - layout.bottom - 30;
+  roundRect(ctx, infoX, infoY, infoWidth, 24, 6);
+  ctx.fillStyle = 'rgba(21, 26, 37, 0.92)';
+  ctx.fill();
+  ctx.strokeStyle = '#344058';
+  ctx.stroke();
+  ctx.fillStyle = '#dbe6f8';
+  ctx.textAlign = 'left';
+  ctx.fillText(info, infoX + 9, infoY + 12, infoWidth - 18);
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+}
+
 function drawMessage(ctx, width, height, message) {
   ctx.fillStyle = '#aeb8c8';
   ctx.font = '14px system-ui, sans-serif';
@@ -164,6 +272,11 @@ function drawMessage(ctx, width, height, message) {
 
 <template>
   <div class="stock-chart-frame">
-    <canvas data-stock-chart aria-label="股票走勢圖"></canvas>
+    <canvas
+      data-stock-chart
+      aria-label="股票走勢圖"
+      @pointermove="handlePointerMove"
+      @pointerleave="handlePointerLeave"
+    ></canvas>
   </div>
 </template>

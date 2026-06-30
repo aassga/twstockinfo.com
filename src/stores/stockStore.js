@@ -18,6 +18,7 @@ export const useStockStore = defineStore('stocks', () => {
   const loadingQuote = ref(false);
   const error = ref('');
   let hotFlashTimer = null;
+  let allStocksRequest = null;
 
   const marketStats = computed(() => {
     const rows = allStocks.value;
@@ -53,24 +54,29 @@ export const useStockStore = defineStore('stocks', () => {
   });
 
   async function loadAllStocks({ silent = false } = {}) {
-    if (loadingAll.value) return;
+    if (allStocksRequest) return allStocksRequest;
     loadingAll.value = true;
     if (!silent) error.value = '';
 
-    try {
-      const rows = await stockApi.allStocks();
-      const poolRows = rows.map(enrichStock);
-      const result = await hydrateHotRealtimeQuotes(poolRows);
-      const nextRows = result.rows;
-      hotRealtimeCount.value = result.realtimeCount;
-      hotUpdatedAt.value = new Date().toISOString();
-      markHotCellFlashes(allStocks.value, nextRows);
-      allStocks.value = nextRows;
-    } catch (err) {
-      error.value = err?.message || '股票清單讀取失敗';
-    } finally {
-      loadingAll.value = false;
-    }
+    allStocksRequest = stockApi.allStocks()
+      .then(async rows => {
+        const poolRows = rows.map(enrichStock);
+        const result = await hydrateHotRealtimeQuotes(poolRows);
+        const nextRows = result.rows;
+        hotRealtimeCount.value = result.realtimeCount;
+        hotUpdatedAt.value = new Date().toISOString();
+        markHotCellFlashes(allStocks.value, nextRows);
+        allStocks.value = nextRows;
+      })
+      .catch(err => {
+        error.value = err?.message || '股票清單讀取失敗';
+      })
+      .finally(() => {
+        loadingAll.value = false;
+        allStocksRequest = null;
+      });
+
+    return allStocksRequest;
   }
 
   async function searchStock(query = searchQuery.value) {
@@ -82,6 +88,9 @@ export const useStockStore = defineStore('stocks', () => {
     searchQuery.value = input;
 
     try {
+      if (!allStocks.value.length) {
+        await loadAllStocks({ silent: true });
+      }
       const found = findStock(input);
       const code = found?.code || input.match(/\d{4,6}/)?.[0] || input;
       const quote = await stockApi.quoteAuto(code, { withVolumeRatio: true });
@@ -106,13 +115,25 @@ export const useStockStore = defineStore('stocks', () => {
   }
 
   function findStock(query) {
-    const normalized = String(query || '').trim().toLowerCase();
+    const normalized = normalizeSearchText(query);
     if (!normalized) return null;
-    return allStocks.value.find(stock =>
-      stock.code === normalized ||
-      stock.name.toLowerCase().includes(normalized) ||
-      normalized.includes(stock.code)
-    ) || null;
+    const stocks = allStocks.value;
+    const exact = stocks.find(stock =>
+      normalizeSearchText(stock.code) === normalized ||
+      normalizeSearchText(stock.name) === normalized
+    );
+    if (exact) return exact;
+
+    const startsWith = stocks.find(stock =>
+      normalizeSearchText(stock.name).startsWith(normalized)
+    );
+    if (startsWith) return startsWith;
+
+    return stocks.find(stock => {
+      const code = normalizeSearchText(stock.code);
+      const name = normalizeSearchText(stock.name);
+      return code.includes(normalized) || name.includes(normalized) || normalized.includes(code);
+    }) || null;
   }
 
   function setHotSort(key) {
@@ -261,6 +282,13 @@ export const useStockStore = defineStore('stocks', () => {
     if (key === 'sell') return stock.sellPct;
     if (key === 'force') return Math.max(stock.buyPct, stock.sellPct);
     return stock[key] ?? 0;
+  }
+
+  function normalizeSearchText(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '');
   }
 
   return {

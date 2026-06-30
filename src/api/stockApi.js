@@ -2,7 +2,7 @@ import { apiFetch, apiTextFetch } from './http';
 
 export const stockApi = {
   market: () => fetchMarketRealtime().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket)),
-  allStocks: () => apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks),
+  allStocks: () => fetchAllStocks(),
   topVolume: () => apiFetch('/rwd/zh/afterTrading/MI_INDEX20?response=json').then(parseTopVolume),
   quote: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
   quoteOtc: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
@@ -13,6 +13,16 @@ export const stockApi = {
   instSummary: () => fetchLatestTwseRwd('/rwd/zh/fund/BFI82U').then(parseInstitutionalSummary),
   chart: (code, interval = 'D', exchange = '') => fetchYahooChart(code, interval, exchange)
 };
+
+async function fetchAllStocks() {
+  const [listed, otc] = await Promise.all([
+    apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks),
+    apiFetch('/tpex/openapi/v1/tpex_mainboard_daily_close_quotes').then(parseOtcStocks).catch(() => [])
+  ]);
+
+  return [...listed, ...otc]
+    .sort((a, b) => b.volume - a.volume);
+}
 
 async function quoteAuto(code, { withVolumeRatio = false } = {}) {
   let quote = null;
@@ -136,6 +146,7 @@ function parseAllStocks(data) {
     result.push({
       code,
       name,
+      exchange: 'tse',
       price,
       change,
       chgPct,
@@ -150,7 +161,50 @@ function parseAllStocks(data) {
     });
   }
 
-  return result.sort((a, b) => b.volume - a.volume).slice(0, 300);
+  return result.sort((a, b) => b.volume - a.volume);
+}
+
+function parseOtcStocks(data) {
+  const rows = Array.isArray(data) ? data : [];
+  const result = [];
+
+  for (const row of rows) {
+    const code = String(read(row, ['SecuritiesCompanyCode', '證券代號']) || '').trim();
+    const name = String(read(row, ['CompanyName', '證券名稱']) || '').trim();
+    const price = parseNumber(read(row, ['Close', '收盤']));
+    const change = parseNumber(read(row, ['Change', '漲跌']));
+    const volume = parseNumber(read(row, ['TradingShares', '成交股數']));
+    const value = parseNumber(read(row, ['TransactionAmount', '成交金額']));
+    const transaction = parseNumber(read(row, ['TransactionNumber', '成交筆數']));
+    const high = parseNumber(read(row, ['High', '最高']), price);
+    const low = parseNumber(read(row, ['Low', '最低']), price);
+    const open = parseNumber(read(row, ['Open', '開盤']), price);
+    const bid = parseNumber(read(row, ['LatestBidPrice', '最後買價']), price);
+    const ask = parseNumber(read(row, ['LatesAskPrice', 'LatestAskPrice', '最後賣價']), price);
+
+    if (!/^\d{4,6}[A-Z]?$/.test(code) || !name || price <= 0) continue;
+
+    const prev = price - change;
+    const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
+    result.push({
+      code,
+      name,
+      exchange: 'otc',
+      price,
+      change,
+      chgPct,
+      open,
+      high,
+      low,
+      volume,
+      transaction,
+      bid,
+      ask,
+      amountHundredMillion: Number((value / 100000000).toFixed(2))
+    });
+  }
+
+  return result;
 }
 
 function parseTopVolume(data) {
