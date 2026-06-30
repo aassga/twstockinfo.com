@@ -14,6 +14,8 @@ export const stockApi = {
 };
 
 const HISTOCK_RANK_CACHE_MS = 15000;
+const MIS_BATCH_CODE_LIMIT = 45;
+const MIS_HOT_PRICE_LIMIT = 160;
 let histockRankCache = {
   at: 0,
   promise: null,
@@ -23,9 +25,16 @@ let histockRankCache = {
 async function fetchPriceRows(codes = []) {
   const wantedCodes = normalizeCodeSet(codes);
   const rankRows = await fetchHistockRank();
-  if (!wantedCodes.size) return rankRows;
+  const targetCodes = wantedCodes.size
+    ? [...wantedCodes]
+    : rankRows.slice(0, MIS_HOT_PRICE_LIMIT).map(row => row.code);
+  const quoteRows = await fetchMisQuotes(targetCodes);
 
-  return rankRows.filter(row => wantedCodes.has(row.code));
+  if (wantedCodes.size) {
+    return mergeQuoteRows(rankRows.filter(row => wantedCodes.has(row.code)), quoteRows, targetCodes);
+  }
+
+  return mergeQuoteRows(rankRows, quoteRows, targetCodes);
 }
 
 async function fetchHistockRank(codes = []) {
@@ -69,9 +78,135 @@ async function getHistockRankRows() {
 
 async function quoteAuto(code, { withVolumeRatio = false } = {}) {
   const normalizedCode = String(code || '').trim();
-  const quote = (await fetchPriceRows([normalizedCode]))[0];
-  if (!quote) throw new Error(`無法從統一價格來源取得：${normalizedCode}`);
+  const quote = (await fetchMisQuotes([normalizedCode]))[0];
+  if (!quote) throw new Error(`無法從 TWSE MIS 即時報價取得：${normalizedCode}`);
   return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
+}
+
+async function fetchMisQuotes(codes = []) {
+  const uniqueCodes = [...normalizeCodeSet(codes)].filter(code => /^\d{4,6}[A-Z]?$/.test(code));
+  if (!uniqueCodes.length) return [];
+
+  const chunks = chunkArray(uniqueCodes, MIS_BATCH_CODE_LIMIT);
+  const responses = await Promise.all(chunks.map(fetchMisQuoteChunk));
+  const rowsByCode = new Map();
+
+  responses
+    .flatMap(parseMisQuotes)
+    .forEach(row => {
+      if (!rowsByCode.has(row.code)) rowsByCode.set(row.code, row);
+    });
+
+  return [...rowsByCode.values()];
+}
+
+function fetchMisQuoteChunk(codes) {
+  const exCh = codes
+    .flatMap(code => [`tse_${code}.tw`, `otc_${code}.tw`])
+    .join('|');
+  return apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`);
+}
+
+function parseMisQuotes(data) {
+  return (data?.msgArray || [])
+    .map(parseMisQuoteItem)
+    .filter(Boolean);
+}
+
+function parseMisQuoteItem(item) {
+  if (!item?.c || !item?.n || !item?.ex) return null;
+
+  const prev = parseNumber(item.y);
+  const price = resolveMisPrice(item, prev);
+  if (price <= 0) return null;
+
+  const change = Number((price - prev).toFixed(2));
+  const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
+  const bidVol = String(item.g || '').split('_').filter(Boolean).map(Number);
+  const askVol = String(item.f || '').split('_').filter(Boolean).map(Number);
+  const bidTotal = bidVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
+  const askTotal = askVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
+  const buyPct = bidTotal + askTotal > 0 ? Math.round((bidTotal / (bidTotal + askTotal)) * 100) : 50;
+  const volume = Math.round(parseNumber(item.v) * 1000);
+
+  return {
+    code: String(item.c),
+    name: String(item.n || ''),
+    exchange: String(item.ex || ''),
+    price,
+    prev,
+    change,
+    chgPct,
+    open: parseNumber(item.o, price),
+    high: parseNumber(item.h, price),
+    low: parseNumber(item.l, price),
+    volume,
+    transaction: parseNumber(item.ps || item.s),
+    bid: parseFirstBookPrice(item.b),
+    ask: parseFirstBookPrice(item.a),
+    amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
+    buyPct,
+    sellPct: 100 - buyPct,
+    volRatio: 50,
+    time: item.t || item.ot || '',
+    date: item.d || '',
+    source: 'twse-mis'
+  };
+}
+
+function mergeQuoteRows(baseRows, quoteRows, requestedCodes = []) {
+  const baseByCode = new Map(baseRows.map(row => [row.code, row]));
+  quoteRows.forEach(row => {
+    baseByCode.set(row.code, {
+      ...baseByCode.get(row.code),
+      ...row
+    });
+  });
+
+  requestedCodes.forEach(code => {
+    if (!baseByCode.has(code)) return;
+    const row = baseByCode.get(code);
+    baseByCode.set(code, {
+      ...row,
+      source: row.source || 'histock-rank'
+    });
+  });
+
+  return [...baseByCode.values()]
+    .sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
+}
+
+function resolveMisPrice(item, fallback = 0) {
+  const tradedPrice = parseNumber(firstMeaningful(item?.z), NaN);
+  if (Number.isFinite(tradedPrice) && tradedPrice > 0) return tradedPrice;
+
+  const previousTradePrice = parseNumber(firstMeaningful(item?.pz), NaN);
+  if (Number.isFinite(previousTradePrice) && previousTradePrice > 0) return previousTradePrice;
+
+  const bestBid = parseFirstBookPrice(item?.b);
+  const bestAsk = parseFirstBookPrice(item?.a);
+  if (bestBid > 0 && bestAsk > 0) return Number(((bestBid + bestAsk) / 2).toFixed(2));
+  if (bestBid > 0) return bestBid;
+  if (bestAsk > 0) return bestAsk;
+
+  return fallback;
+}
+
+function parseFirstBookPrice(value) {
+  return parseNumber(String(value || '').split('_').find(Boolean), 0);
+}
+
+function firstMeaningful(value) {
+  const text = String(value ?? '').trim();
+  return text && text !== '-' ? text : '';
+}
+
+function chunkArray(items, size) {
+  const result = [];
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
+  }
+  return result;
 }
 
 async function fetchMarketRealtime() {

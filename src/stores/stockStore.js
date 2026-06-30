@@ -62,7 +62,7 @@ export const useStockStore = defineStore('stocks', () => {
       .then(rows => {
         const nextRows = rows.map(stock => enrichStock({
           ...stock,
-          isRealtime: stock.source === 'histock-rank'
+          isRealtime: stock.source === 'twse-mis'
         }));
         hotRealtimeCount.value = nextRows.filter(stock => stock.isRealtime).length;
         hotUpdatedAt.value = new Date().toISOString();
@@ -170,7 +170,7 @@ export const useStockStore = defineStore('stocks', () => {
         nextByCode.set(stock.code, {
           ...nextByCode.get(stock.code),
           ...stock,
-          isRealtime: stock.source === 'histock-rank'
+          isRealtime: stock.source === 'twse-mis'
         });
       });
 

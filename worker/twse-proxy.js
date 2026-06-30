@@ -33,6 +33,15 @@ const MIS_HEADERS = {
   'X-Requested-With': 'XMLHttpRequest',
 };
 
+const MIS_RETRY_HEADERS = {
+  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Referer':         'https://mis.twse.com.tw/stock/index.jsp',
+  'Accept':          'application/json, text/javascript, */*; q=0.01',
+  'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Cache-Control':   'no-cache',
+  'Pragma':          'no-cache',
+};
+
 const YAHOO_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   'Accept':     'application/json, text/plain, */*',
@@ -119,7 +128,7 @@ export default {
     if (route.startsWith('/mis/')) {
       const path     = route.replace('/mis', '');
       const upstream = `https://mis.twse.com.tw${path}${params}`;
-      return proxyFetch(upstream, MIS_HEADERS);
+      return proxyFetch(upstream, MIS_HEADERS, 'application/json; charset=utf-8', [MIS_RETRY_HEADERS]);
     }
 
     // ── Route: /rwd/*  → www.twse.com.tw/rwd/* ──
@@ -189,14 +198,24 @@ export default {
   }
 };
 
-async function proxyFetch(upstream, headers = TWSE_HEADERS, fallbackContentType = 'application/json; charset=utf-8') {
+async function proxyFetch(upstream, headers = TWSE_HEADERS, fallbackContentType = 'application/json; charset=utf-8', retryHeaders = []) {
   try {
-    const resp = await fetch(upstream, { headers });
-    const body = await resp.text();
-    return new Response(body, {
-      status:  resp.status,
+    const attempts = [headers, ...retryHeaders];
+    let lastResp = null;
+    let lastBody = '';
+
+    for (const attemptHeaders of attempts) {
+      const resp = await fetch(upstream, { headers: attemptHeaders });
+      const body = await resp.text();
+      lastResp = resp;
+      lastBody = body;
+      if (resp.status < 500) break;
+    }
+
+    return new Response(lastBody, {
+      status:  lastResp.status,
       headers: {
-        'Content-Type': resp.headers.get('Content-Type') || fallbackContentType,
+        'Content-Type': lastResp.headers.get('Content-Type') || fallbackContentType,
         ...CORS_HEADERS,
       },
     });
