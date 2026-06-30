@@ -6,11 +6,9 @@ const STOCK_PROFILE_FALLBACKS = {
 
 export const stockApi = {
   market: () => fetchMarketRealtime().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket)),
-  allStocks: () => fetchAllStocks(),
+  allStocks: () => fetchPriceRows(),
+  priceRows: codes => fetchPriceRows(codes),
   topVolume: () => apiFetch('/rwd/zh/afterTrading/MI_INDEX20?response=json').then(parseTopVolume),
-  quote: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
-  quoteOtc: code => apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0&_=${Date.now()}`).then(data => parseQuote(data, code)),
-  quotes: (codes, exchange = 'tse') => fetchQuotes(codes, exchange),
   histockRank: codes => fetchHistockRank(codes),
   quoteAuto,
   institutional: () => fetchLatestTwseRwd('/rwd/zh/fund/T86', '&selectType=ALLBUT0999').then(parseInstitutional),
@@ -19,7 +17,14 @@ export const stockApi = {
   chart: (code, interval = 'D', exchange = '') => fetchYahooChart(code, interval, exchange)
 };
 
-async function fetchAllStocks() {
+const HISTOCK_RANK_CACHE_MS = 15000;
+let histockRankCache = {
+  at: 0,
+  promise: null,
+  rows: []
+};
+
+async function fetchExchangeCloseRows() {
   const [listed, otc] = await Promise.all([
     apiFetch('/twse/exchangeReport/STOCK_DAY_ALL').then(parseAllStocks),
     apiFetch('/tpex/openapi/v1/tpex_mainboard_daily_close_quotes').then(parseOtcStocks).catch(() => [])
@@ -29,29 +34,86 @@ async function fetchAllStocks() {
     .sort((a, b) => b.volume - a.volume);
 }
 
+async function fetchPriceRows(codes = []) {
+  const wantedCodes = normalizeCodeSet(codes);
+
+  try {
+    const rankRows = await fetchHistockRank();
+    if (!wantedCodes.size) return rankRows;
+
+    const rankCodes = new Set(rankRows.map(row => row.code));
+    const matchedRows = rankRows.filter(row => wantedCodes.has(row.code));
+    if (matchedRows.length === wantedCodes.size) return matchedRows;
+
+    const fallbackRows = await fetchExchangeCloseRows();
+    return [
+      ...matchedRows,
+      ...fallbackRows.filter(row => wantedCodes.has(row.code) && !rankCodes.has(row.code))
+    ];
+  } catch (error) {
+    const rows = await fetchExchangeCloseRows();
+    return wantedCodes.size ? rows.filter(row => wantedCodes.has(row.code)) : rows;
+  }
+}
+
 async function fetchHistockRank(codes = []) {
+  const rows = await getHistockRankRows();
+  const wantedCodes = normalizeCodeSet(codes);
+  return wantedCodes.size ? rows.filter(row => wantedCodes.has(row.code)) : rows;
+}
+
+function normalizeCodeSet(codes = []) {
   const wantedCodes = new Set(
     codes
       .map(code => String(code || '').trim())
       .filter(Boolean)
   );
-  const html = await apiTextFetch(`/histock/stock/rank.aspx?p=all&_=${Date.now()}`);
-  const rows = parseHistockRankHtml(html);
-  return wantedCodes.size ? rows.filter(row => wantedCodes.has(row.code)) : rows;
+  return wantedCodes;
+}
+
+async function getHistockRankRows() {
+  const now = Date.now();
+  if (histockRankCache.promise && now - histockRankCache.at < HISTOCK_RANK_CACHE_MS) {
+    return histockRankCache.promise;
+  }
+  if (histockRankCache.rows.length && now - histockRankCache.at < HISTOCK_RANK_CACHE_MS) {
+    return histockRankCache.rows;
+  }
+
+  histockRankCache.at = now;
+  histockRankCache.promise = apiTextFetch(`/histock/stock/rank.aspx?p=all&_=${now}`)
+    .then(html => {
+      const rows = parseHistockRankHtml(html);
+      if (!rows.length) throw new Error('HiStock rank 無資料');
+      histockRankCache.rows = rows;
+      return rows;
+    })
+    .finally(() => {
+      histockRankCache.promise = null;
+    });
+
+  return histockRankCache.promise;
 }
 
 async function quoteAuto(code, { withVolumeRatio = false } = {}) {
   let quote = null;
 
   try {
-    quote = await stockApi.quote(code);
+    quote = (await fetchPriceRows([code]))[0];
+    if (quote) return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
+  } catch (error) {
+    // Unified HiStock quote is preferred; MIS/Yahoo are last-resort fallbacks.
+  }
+
+  try {
+    quote = await fetchMisQuote(code, 'tse');
     return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   } catch (error) {
     // Listed stocks are tried first, then OTC.
   }
 
   try {
-    quote = await stockApi.quoteOtc(code);
+    quote = await fetchMisQuote(code, 'otc');
     return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   } catch (error) {
     // Fall back to Yahoo chart metadata when TWSE MIS is temporarily blocked.
@@ -66,6 +128,11 @@ async function quoteAuto(code, { withVolumeRatio = false } = {}) {
     quote = await attachStockProfile(quote);
     return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
   }
+}
+
+function fetchMisQuote(code, exchange = 'tse') {
+  return apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=${exchange}_${code}.tw&json=1&delay=0&_=${Date.now()}`)
+    .then(data => parseQuote(data, code));
 }
 
 async function attachStockProfile(quote) {
@@ -114,29 +181,6 @@ function parseSinotradeProfileHtml(html, code) {
     exchange: String(stock.Exchange || '').toLowerCase() === 'otc' ? 'otc' : '',
     sector: String(stock.industry || stock.industryName || '').trim()
   };
-}
-
-async function fetchQuotes(codes, exchange = 'tse') {
-  const uniqueCodes = [...new Set(
-    codes
-      .map(code => String(code || '').trim())
-      .filter(code => /^\d{4,6}$/.test(code))
-  )];
-
-  if (!uniqueCodes.length) return [];
-
-  const chunks = chunkArray(uniqueCodes, 50);
-  const groups = await Promise.all(chunks.map(async chunk => {
-    try {
-      const exCh = chunk.map(code => `${exchange}_${code}.tw`).join('|');
-      return await apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`)
-        .then(parseQuotes);
-    } catch (error) {
-      return [];
-    }
-  }));
-
-  return groups.flat();
 }
 
 async function fetchMarketRealtime() {
@@ -403,47 +447,6 @@ function parseQuote(data, code) {
   };
 }
 
-function parseQuotes(data) {
-  const rows = Array.isArray(data?.msgArray) ? data.msgArray : [];
-  return rows.map(item => {
-    if (!item?.c || !item?.n) return null;
-
-    const prev = parseNumber(item.y);
-    const price = resolveMisPrice(item, prev);
-    const change = Number((price - prev).toFixed(2));
-    const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
-    const bidVol = String(item.g || '').split('_').filter(Boolean).map(Number);
-    const askVol = String(item.f || '').split('_').filter(Boolean).map(Number);
-    const bidTotal = bidVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
-    const askTotal = askVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
-    const buyPct = bidTotal + askTotal > 0 ? Math.round((bidTotal / (bidTotal + askTotal)) * 100) : 50;
-    const volume = parseNumber(item.v) * 1000;
-
-    return {
-      code: item.c,
-      name: item.n || '',
-      exchange: item.ex || '',
-      price,
-      prev,
-      change,
-      chgPct,
-      open: parseNumber(item.o, price),
-      high: parseNumber(item.h, price),
-      low: parseNumber(item.l, price),
-      volume,
-      transaction: parseNumber(item.mt || item.m || item.tn),
-      bid: parseFirstBookPrice(item.b),
-      ask: parseFirstBookPrice(item.a),
-      amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
-      buyPct,
-      sellPct: 100 - buyPct,
-      volRatio: Math.min(100, Math.round((parseNumber(item.tv) / Math.max(parseNumber(item.v, 1), 1)) * 100)),
-      time: item.t || '',
-      date: item.d || ''
-    };
-  }).filter(Boolean);
-}
-
 function resolveMisPrice(item, fallback = 0) {
   const tradedPrice = parseNumber(firstMeaningful(item?.z), NaN);
   if (Number.isFinite(tradedPrice) && tradedPrice > 0) return tradedPrice;
@@ -467,22 +470,6 @@ function parseFirstBookPrice(value) {
 function firstMeaningful(value) {
   const text = String(value ?? '').trim();
   return text && text !== '-' ? text : '';
-}
-
-async function fetchYahooRealtimeQuotes(codes) {
-  const results = await mapLimit(codes, 6, async code => {
-    try {
-      return await fetchYahooRealtimeQuote(code, 'TW');
-    } catch (error) {
-      try {
-        return await fetchYahooRealtimeQuote(code, 'TWO');
-      } catch (fallbackError) {
-        return null;
-      }
-    }
-  });
-
-  return results.filter(Boolean);
 }
 
 async function fetchYahooRealtimeQuote(code, market = 'TW') {
@@ -561,30 +548,6 @@ async function fetchAverageDailyVolume(code, market = 'TW', currentDate = '') {
   const sample = rows.slice(-20);
   if (!sample.length) return 0;
   return sample.reduce((sum, row) => sum + row.volume, 0) / sample.length;
-}
-
-function chunkArray(items, size) {
-  const chunks = [];
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-  return chunks;
-}
-
-async function mapLimit(items, limit, mapper) {
-  const results = [];
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const currentIndex = nextIndex;
-      nextIndex += 1;
-      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
 }
 
 async function fetchYahooChart(code, interval, exchange = '') {

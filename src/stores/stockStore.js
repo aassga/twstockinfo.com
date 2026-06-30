@@ -59,11 +59,12 @@ export const useStockStore = defineStore('stocks', () => {
     if (!silent) error.value = '';
 
     allStocksRequest = stockApi.allStocks()
-      .then(async rows => {
-        const poolRows = rows.map(enrichStock);
-        const result = await hydrateHotRealtimeQuotes(poolRows);
-        const nextRows = result.rows;
-        hotRealtimeCount.value = result.realtimeCount;
+      .then(rows => {
+        const nextRows = rows.map(stock => enrichStock({
+          ...stock,
+          isRealtime: stock.source === 'histock-rank'
+        }));
+        hotRealtimeCount.value = nextRows.filter(stock => stock.isRealtime).length;
         hotUpdatedAt.value = new Date().toISOString();
         markHotCellFlashes(allStocks.value, nextRows);
         allStocks.value = nextRows;
@@ -151,44 +152,6 @@ export const useStockStore = defineStore('stocks', () => {
     }
   }
 
-  async function hydrateHotRealtimeQuotes(rows) {
-    const topRows = rows.slice()
-      .sort((a, b) => b.volume - a.volume)
-      .slice(0, 100);
-    const quoteByCode = new Map();
-
-    const listedCodes = topRows
-      .filter(stock => String(stock.exchange || 'tse').toLowerCase() !== 'otc')
-      .map(stock => stock.code);
-    const otcCodes = topRows
-      .filter(stock => String(stock.exchange || '').toLowerCase() === 'otc')
-      .map(stock => stock.code);
-
-    const quoteGroups = await Promise.all([
-      stockApi.quotes(listedCodes, 'tse'),
-      stockApi.quotes(otcCodes, 'otc')
-    ]);
-
-    quoteGroups.flat().forEach(quote => {
-      quoteByCode.set(String(quote.code), quote);
-    });
-
-    return {
-      realtimeCount: quoteByCode.size,
-      rows: rows.map(stock => {
-        const quote = quoteByCode.get(stock.code);
-        if (!quote) return { ...stock, isRealtime: false };
-        return enrichStock({
-          ...stock,
-          ...quote,
-          name: quote.name || stock.name,
-          sector: stock.sector,
-          isRealtime: true
-        });
-      })
-    };
-  }
-
   async function refreshStocksByCodes(codes) {
     const requestedCodes = new Set(
       codes
@@ -200,16 +163,7 @@ export const useStockStore = defineStore('stocks', () => {
     loadingAll.value = true;
     error.value = '';
     try {
-      const rankRows = (await stockApi.histockRank([...requestedCodes])).map(enrichStock);
-      const rankCodes = new Set(rankRows.map(stock => stock.code));
-      let fallbackRows = [];
-
-      if (rankCodes.size < requestedCodes.size) {
-        const rows = (await stockApi.allStocks()).map(enrichStock);
-        fallbackRows = rows.filter(stock => requestedCodes.has(stock.code) && !rankCodes.has(stock.code));
-      }
-
-      const requestedRows = [...rankRows, ...fallbackRows];
+      const requestedRows = (await stockApi.priceRows([...requestedCodes])).map(enrichStock);
       const nextByCode = new Map(allStocks.value.map(stock => [stock.code, stock]));
 
       requestedRows.forEach(stock => {

@@ -42,7 +42,7 @@ function flashClass(stock, key) {
 }
 
 function realtimeMeta() {
-  return `前100檔即時報價 ${stockStore.hotRealtimeCount}/100`;
+  return `HiStock 價格列 ${stockStore.hotRealtimeCount} 檔`;
 }
 </script>
 
@@ -88,7 +88,7 @@ function realtimeMeta() {
 
     <div class="hot-data-meta">
       <span>最後更新：{{ stockStore.hotUpdatedAt ? formatDateTime(stockStore.hotUpdatedAt) : '--' }}</span>
-      <span>資料來源：STOCK_DAY_ALL 股票池 + TWSE MIS 即時報價/五檔委買委賣，Yahoo 即時報價備援（{{ realtimeMeta() }}）</span>
+      <span>資料來源：HiStock 台股排行統一價格來源；走勢圖另使用 Yahoo 圖表資料（{{ realtimeMeta() }}）</span>
     </div>
 
     <div class="table-wrapper">
