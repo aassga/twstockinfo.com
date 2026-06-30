@@ -271,12 +271,26 @@ button {
   color-scheme: dark;
 }
 
+.up {
+  color: var(--up);
+}
+
 .down {
   color: var(--dn);
 }
 
 .flat {
   color: var(--text-3);
+}
+
+.stock-table td.up {
+  color: var(--up);
+  font-weight: 700;
+}
+
+.stock-table td.down {
+  color: var(--dn);
+  font-weight: 700;
 }
 
 .stock-table td.move-cell.up {
