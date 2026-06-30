@@ -84,12 +84,16 @@ function barWidth(value) {
 
 async function submit(value = query.value) {
   if (!value) return;
-  const result = await stockStore.searchStock(value);
-  query.value = result.code;
-  if (!institutionalStore.loaded) {
-    await institutionalStore.loadInstitutional({ silent: true });
+  try {
+    const result = await stockStore.searchStock(value);
+    query.value = result.code;
+    if (!institutionalStore.loaded) {
+      await institutionalStore.loadInstitutional({ silent: true });
+    }
+    await institutionalStore.loadInstitutionalByCode(result.code, { force: true });
+  } catch (error) {
+    aiText.value = error?.message || '無法取得股票資料，請稍後再試。';
   }
-  await institutionalStore.loadInstitutionalByCode(result.code, { force: true });
 }
 
 function quickSearch(code) {
@@ -198,6 +202,26 @@ function analyze(type) {
             {{ dominantBuy ? '買入主導' : '賣出主導' }}
           </span>
         </div>
+        <div class="result-toolbar" aria-label="股票操作">
+          <button class="btn" type="button" @click="addToPortfolio">
+            <IconBriefcase class="btn-icon" :stroke-width="2" />
+            加入持股
+          </button>
+          <button
+            class="btn"
+            :class="{ 'favorite-action-active': favoriteStore.isFavorite(stock.code) }"
+            type="button"
+            @click="toggleFavorite"
+          >
+            <IconStarFilled v-if="favoriteStore.isFavorite(stock.code)" class="btn-icon" :stroke-width="2" />
+            <IconStar v-else class="btn-icon" :stroke-width="2" />
+            {{ favoriteStore.isFavorite(stock.code) ? '已加入我的最愛' : '加入我的最愛' }}
+          </button>
+          <button class="btn" type="button" @click="openChart">
+            <IconChartCandle class="btn-icon" :stroke-width="2" />
+            走勢圖
+          </button>
+        </div>
       </div>
 
       <div class="quote-metrics-panel" aria-label="個股即時指標">
@@ -210,6 +234,33 @@ function analyze(type) {
           <div class="quote-metric-label">{{ metric.label }}</div>
           <div class="quote-metric-value">{{ metric.value }}</div>
           <div class="quote-metric-detail">{{ metric.detail }}</div>
+        </div>
+      </div>
+
+      <div class="ai-box search-analysis-box">
+        <div class="ai-box-header analysis-header">
+          <div class="analysis-title">
+            <IconSparkles class="inline-icon" :stroke-width="2" />
+            AI 個股深度分析
+          </div>
+          <div class="analysis-toolbar" aria-label="分析工具">
+            <button class="btn primary" type="button" @click="analyze('deep')">
+              <IconSparkles class="btn-icon" :stroke-width="2" />
+              AI 深度分析
+            </button>
+            <button class="btn" type="button" @click="analyze('tech')">
+              <IconTrendingUp class="btn-icon" :stroke-width="2" />
+              技術面分析
+            </button>
+            <button class="btn" type="button" @click="analyze('risk')">
+              <IconShield class="btn-icon" :stroke-width="2" />
+              風險評估
+            </button>
+          </div>
+        </div>
+        <div class="ai-content">
+          <span v-if="!aiText" class="hint">點擊「AI 深度分析」取得個股分析報告</span>
+          <span v-else>{{ aiText }}</span>
         </div>
       </div>
 
@@ -272,50 +323,6 @@ function analyze(type) {
             </div>
           </div>
         </div>
-      </div>
-
-      <div class="ai-box">
-        <div class="ai-box-header">
-          <IconSparkles class="inline-icon" :stroke-width="2" />
-          AI 個股深度分析
-        </div>
-        <div class="ai-content">
-          <span v-if="!aiText" class="hint">點擊「AI 深度分析」取得個股分析報告</span>
-          <span v-else>{{ aiText }}</span>
-        </div>
-      </div>
-
-      <div class="result-actions">
-        <button class="btn" type="button" @click="addToPortfolio">
-          <IconBriefcase class="btn-icon" :stroke-width="2" />
-          加入持股
-        </button>
-        <button
-          class="btn"
-          :class="{ 'favorite-action-active': favoriteStore.isFavorite(stock.code) }"
-          type="button"
-          @click="toggleFavorite"
-        >
-          <IconStarFilled v-if="favoriteStore.isFavorite(stock.code)" class="btn-icon" :stroke-width="2" />
-          <IconStar v-else class="btn-icon" :stroke-width="2" />
-          {{ favoriteStore.isFavorite(stock.code) ? '已加入我的最愛' : '加入我的最愛' }}
-        </button>
-        <button class="btn" type="button" @click="openChart">
-          <IconChartCandle class="btn-icon" :stroke-width="2" />
-          走勢圖
-        </button>
-        <button class="btn primary" type="button" @click="analyze('deep')">
-          <IconSparkles class="btn-icon" :stroke-width="2" />
-          AI 深度分析
-        </button>
-        <button class="btn" type="button" @click="analyze('tech')">
-          <IconTrendingUp class="btn-icon" :stroke-width="2" />
-          技術面分析
-        </button>
-        <button class="btn" type="button" @click="analyze('risk')">
-          <IconShield class="btn-icon" :stroke-width="2" />
-          風險評估
-        </button>
       </div>
     </div>
 

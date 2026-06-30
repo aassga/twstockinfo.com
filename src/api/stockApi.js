@@ -16,6 +16,7 @@ export const stockApi = {
 const PRICE_ROWS_CACHE_MS = 15000;
 const HISTOCK_RANK_CACHE_MS = 15000;
 const MIS_QUOTE_CACHE_MS = 15000;
+const MIS_OUTAGE_COOLDOWN_MS = 60000;
 const MIS_BATCH_CODE_LIMIT = 15;
 const MIS_HOT_PRICE_LIMIT = 100;
 const PRICE_VERIFY_TOLERANCE = 0.001;
@@ -35,7 +36,13 @@ let allPriceRowsCache = {
   promise: null,
   rows: []
 };
+let stockDayAllCache = {
+  at: 0,
+  promise: null,
+  rows: []
+};
 const misQuoteCache = new Map();
+let misOutageUntil = 0;
 let proxyStatusCache = {
   at: 0,
   promise: null,
@@ -77,12 +84,14 @@ async function fetchFreshPriceRows(codes = []) {
     ? [...wantedCodes]
     : (rankRows.length ? rankRows.slice(0, MIS_HOT_PRICE_LIMIT).map(row => row.code) : FALLBACK_HOT_CODES);
   const quoteRows = await fetchMisQuotes(targetCodes).catch(() => []);
+  const fallbackRows = await fetchFallbackStockRows(targetCodes, quoteRows).catch(() => []);
+  const mergedQuoteRows = mergeFallbackRows(quoteRows, fallbackRows);
 
   if (wantedCodes.size) {
-    return mergeQuoteRows(rankRows.filter(row => wantedCodes.has(row.code)), quoteRows, targetCodes);
+    return mergeQuoteRows(rankRows.filter(row => wantedCodes.has(row.code)), mergedQuoteRows, targetCodes);
   }
 
-  return mergeQuoteRows(rankRows, quoteRows, targetCodes);
+  return mergeQuoteRows(rankRows, mergedQuoteRows, targetCodes);
 }
 
 async function fetchHistockRank(codes = []) {
@@ -173,11 +182,16 @@ async function fetchMisQuotes(codes = []) {
     }
   });
 
+  if (Date.now() < misOutageUntil) {
+    return cachedRows;
+  }
+
   const chunks = chunkArray(missingCodes, MIS_BATCH_CODE_LIMIT);
   const responses = [];
   for (const chunk of chunks) {
     const response = await fetchMisQuoteChunkSafely(chunk);
     if (response) responses.push(response);
+    if (Date.now() < misOutageUntil) break;
     await sleep(120);
   }
   const rowsByCode = new Map();
@@ -204,12 +218,7 @@ async function fetchMisQuoteChunkSafely(codes) {
     return await fetchMisQuoteChunk(codes);
   } catch (error) {
     if (isUpstreamServerError(error)) {
-      await sleep(350);
-      try {
-        return await fetchMisQuoteChunk(codes);
-      } catch (retryError) {
-        return null;
-      }
+      misOutageUntil = Date.now() + MIS_OUTAGE_COOLDOWN_MS;
     }
 
     return null;
@@ -227,6 +236,112 @@ function parseMisQuotes(data) {
   return (data?.msgArray || [])
     .map(parseMisQuoteItem)
     .filter(Boolean);
+}
+
+async function fetchFallbackStockRows(targetCodes = [], quoteRows = []) {
+  const quoteCodes = new Set(quoteRows.map(row => row.code));
+  const missingCodes = [...normalizeCodeSet(targetCodes)].filter(code => !quoteCodes.has(code));
+  if (!missingCodes.length && quoteRows.length) return [];
+
+  const yahooRows = missingCodes.length <= 10
+    ? await fetchYahooFallbackQuotes(missingCodes).catch(() => [])
+    : [];
+  const yahooCodes = new Set(yahooRows.map(row => row.code));
+  const remainingCodes = missingCodes.filter(code => !yahooCodes.has(code));
+  const rows = await fetchStockDayAllRows();
+  const wantedCodes = normalizeCodeSet(remainingCodes.length ? remainingCodes : targetCodes);
+  const stockDayRows = rows
+    .filter(row => !wantedCodes.size || wantedCodes.has(row.code))
+    .map(row => ({
+      ...row,
+      source: 'twse-openapi-fallback'
+    }));
+  return mergeFallbackRows(yahooRows, stockDayRows);
+}
+
+async function fetchYahooFallbackQuotes(codes = []) {
+  const rows = [];
+  for (const code of codes) {
+    const row = await fetchYahooFallbackQuote(code).catch(() => null);
+    if (row) rows.push(row);
+    await sleep(80);
+  }
+  return rows;
+}
+
+async function fetchYahooFallbackQuote(code) {
+  try {
+    return await fetchYahooFallbackQuoteBySymbol(code, 'TW');
+  } catch (error) {
+    return fetchYahooFallbackQuoteBySymbol(code, 'TWO');
+  }
+}
+
+async function fetchYahooFallbackQuoteBySymbol(code, market) {
+  const data = await apiFetch(`/yahoo/v8/finance/chart/${encodeURIComponent(`${code}.${market}`)}?range=1d&interval=1m&includePrePost=false&_=${Date.now()}`);
+  const result = data?.chart?.result?.[0];
+  const meta = result?.meta || {};
+  const price = parseNumber(meta.regularMarketPrice);
+  const prev = parseNumber(meta.chartPreviousClose ?? meta.previousClose);
+  if (price <= 0 || prev <= 0) throw new Error('Yahoo quote unavailable');
+
+  const change = Number((price - prev).toFixed(2));
+  const chgPct = Number(((change / prev) * 100).toFixed(2));
+  const volumeSeries = result?.indicators?.quote?.[0]?.volume || [];
+  const volume = Number(volumeSeries[volumeSeries.length - 1] || meta.regularMarketVolume || 0);
+
+  return {
+    code,
+    name: '',
+    exchange: market === 'TWO' ? 'otc' : 'tse',
+    price,
+    prev,
+    change,
+    chgPct,
+    open: parseNumber(meta.regularMarketDayOpen, price),
+    high: parseNumber(meta.regularMarketDayHigh, price),
+    low: parseNumber(meta.regularMarketDayLow, price),
+    volume,
+    transaction: 0,
+    bid: price,
+    ask: price,
+    amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
+    buyPct: chgPct >= 0 ? 60 : 40,
+    sellPct: chgPct >= 0 ? 40 : 60,
+    volRatio: 50,
+    source: 'yahoo-fallback'
+  };
+}
+
+async function fetchStockDayAllRows() {
+  const now = Date.now();
+  if (stockDayAllCache.promise && now - stockDayAllCache.at < 60000) {
+    return stockDayAllCache.promise;
+  }
+  if (stockDayAllCache.rows.length && now - stockDayAllCache.at < 60000) {
+    return stockDayAllCache.rows;
+  }
+
+  stockDayAllCache.at = now;
+  stockDayAllCache.promise = apiFetch('/twse/exchangeReport/STOCK_DAY_ALL')
+    .then(parseAllStocks)
+    .then(rows => {
+      stockDayAllCache.rows = rows;
+      return rows;
+    })
+    .finally(() => {
+      stockDayAllCache.promise = null;
+    });
+
+  return stockDayAllCache.promise;
+}
+
+function mergeFallbackRows(quoteRows, fallbackRows) {
+  const rowsByCode = new Map(fallbackRows.map(row => [row.code, row]));
+  quoteRows.forEach(row => {
+    rowsByCode.set(row.code, row);
+  });
+  return [...rowsByCode.values()];
 }
 
 function parseMisQuoteItem(item) {

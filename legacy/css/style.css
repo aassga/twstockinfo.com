@@ -368,6 +368,39 @@ html, body {
 .dominant-tag.buy { background: rgba(242,92,92,0.15); color: var(--up); }
 .dominant-tag.sell { background: rgba(38,208,124,0.15); color: var(--dn); }
 
+.result-toolbar,
+.analysis-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.result-toolbar {
+  margin-left: auto;
+}
+
+.search-analysis-box {
+  border-top: 0;
+  border-bottom: 1px solid var(--border);
+  background: rgba(22, 27, 39, 0.5);
+}
+
+.analysis-header {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.analysis-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 160px;
+}
+
 .result-body {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1120,6 +1153,19 @@ html, body {
 /* ========== Responsive ========== */
 @media (max-width: 900px) {
   .result-body { grid-template-columns: 1fr; }
+  .result-toolbar {
+    justify-content: flex-start;
+    width: 100%;
+    margin-left: 0;
+  }
+  .analysis-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .analysis-toolbar {
+    justify-content: flex-start;
+    width: 100%;
+  }
   .result-col:first-child { border-right: none; border-bottom: 1px solid var(--border); }
   .alerts-grid { grid-template-columns: 1fr; }
   .portfolio-grid { grid-template-columns: 1fr; }
