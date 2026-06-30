@@ -16,19 +16,31 @@ export const stockApi = {
 const HISTOCK_RANK_CACHE_MS = 15000;
 const MIS_BATCH_CODE_LIMIT = 45;
 const MIS_HOT_PRICE_LIMIT = 160;
+const PRICE_VERIFY_TOLERANCE = 0.001;
+const FALLBACK_HOT_CODES = [
+  '2330', '2406', '00830', '3105', '2409', '3481', '6770', '2303', '6116', '009816',
+  '2344', '0050', '00919', '2408', '5274', '2883', '2887', '2337', '2454', '2317',
+  '2382', '2308', '6669', '2345', '3034', '3231', '2357', '2379', '3711', '2603',
+  '2618', '2609', '2615', '2610', '2002', '1301', '1303', '2881', '2882', '2891'
+];
 let histockRankCache = {
   at: 0,
   promise: null,
   rows: []
 };
+let proxyStatusCache = {
+  at: 0,
+  promise: null,
+  features: null
+};
 
 async function fetchPriceRows(codes = []) {
   const wantedCodes = normalizeCodeSet(codes);
-  const rankRows = await fetchHistockRank();
+  const rankRows = await fetchHistockRank().catch(() => []);
   const targetCodes = wantedCodes.size
     ? [...wantedCodes]
-    : rankRows.slice(0, MIS_HOT_PRICE_LIMIT).map(row => row.code);
-  const quoteRows = await fetchMisQuotes(targetCodes);
+    : (rankRows.length ? rankRows.slice(0, MIS_HOT_PRICE_LIMIT).map(row => row.code) : FALLBACK_HOT_CODES);
+  const quoteRows = await fetchMisQuotes(targetCodes).catch(() => []);
 
   if (wantedCodes.size) {
     return mergeQuoteRows(rankRows.filter(row => wantedCodes.has(row.code)), quoteRows, targetCodes);
@@ -54,6 +66,9 @@ function normalizeCodeSet(codes = []) {
 
 async function getHistockRankRows() {
   const now = Date.now();
+  const supportsHistock = await proxySupports('histock');
+  if (!supportsHistock) throw new Error('Worker 尚未部署 /histock/*');
+
   if (histockRankCache.promise && now - histockRankCache.at < HISTOCK_RANK_CACHE_MS) {
     return histockRankCache.promise;
   }
@@ -76,9 +91,31 @@ async function getHistockRankRows() {
   return histockRankCache.promise;
 }
 
+async function proxySupports(feature) {
+  const now = Date.now();
+  if (proxyStatusCache.features && now - proxyStatusCache.at < 60000) {
+    return proxyStatusCache.features[feature] === true;
+  }
+  if (!proxyStatusCache.promise) {
+    proxyStatusCache.promise = apiFetch('/proxy-status')
+      .then(data => {
+        proxyStatusCache.at = Date.now();
+        proxyStatusCache.features = data?.features || {};
+        return proxyStatusCache.features;
+      })
+      .catch(() => ({}))
+      .finally(() => {
+        proxyStatusCache.promise = null;
+      });
+  }
+
+  const features = await proxyStatusCache.promise;
+  return features[feature] === true;
+}
+
 async function quoteAuto(code, { withVolumeRatio = false } = {}) {
   const normalizedCode = String(code || '').trim();
-  const quote = (await fetchMisQuotes([normalizedCode]))[0];
+  const quote = (await fetchPriceRows([normalizedCode]))[0];
   if (!quote) throw new Error(`無法從 TWSE MIS 即時報價取得：${normalizedCode}`);
   return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
 }
@@ -88,16 +125,32 @@ async function fetchMisQuotes(codes = []) {
   if (!uniqueCodes.length) return [];
 
   const chunks = chunkArray(uniqueCodes, MIS_BATCH_CODE_LIMIT);
-  const responses = await Promise.all(chunks.map(fetchMisQuoteChunk));
+  const responses = await Promise.all(chunks.map(fetchMisQuoteChunkSafely));
   const rowsByCode = new Map();
 
   responses
+    .filter(Boolean)
     .flatMap(parseMisQuotes)
     .forEach(row => {
       if (!rowsByCode.has(row.code)) rowsByCode.set(row.code, row);
     });
 
   return [...rowsByCode.values()];
+}
+
+async function fetchMisQuoteChunkSafely(codes) {
+  try {
+    return await fetchMisQuoteChunk(codes);
+  } catch (error) {
+    if (codes.length <= 1) return null;
+
+    const rows = await Promise.all(codes.map(code => fetchMisQuoteChunkSafely([code])));
+    return {
+      msgArray: rows
+        .filter(Boolean)
+        .flatMap(row => row.msgArray || [])
+    };
+  }
 }
 
 function fetchMisQuoteChunk(codes) {
@@ -157,9 +210,10 @@ function parseMisQuoteItem(item) {
 function mergeQuoteRows(baseRows, quoteRows, requestedCodes = []) {
   const baseByCode = new Map(baseRows.map(row => [row.code, row]));
   quoteRows.forEach(row => {
+    const base = baseByCode.get(row.code);
     baseByCode.set(row.code, {
-      ...baseByCode.get(row.code),
-      ...row
+      ...base,
+      ...verifyQuoteWithRank(base, row)
     });
   });
 
@@ -174,6 +228,29 @@ function mergeQuoteRows(baseRows, quoteRows, requestedCodes = []) {
 
   return [...baseByCode.values()]
     .sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
+}
+
+function verifyQuoteWithRank(rankRow, quoteRow) {
+  if (!rankRow?.price || !quoteRow?.price) return quoteRow;
+
+  const rankPrice = Number(rankRow.price);
+  const quotePrice = Number(quoteRow.price);
+  if (!Number.isFinite(rankPrice) || !Number.isFinite(quotePrice)) return quoteRow;
+  if (Math.abs(rankPrice - quotePrice) <= PRICE_VERIFY_TOLERANCE) return quoteRow;
+
+  return {
+    ...quoteRow,
+    price: rankRow.price,
+    prev: rankRow.prev || quoteRow.prev,
+    change: rankRow.change,
+    chgPct: rankRow.chgPct,
+    open: rankRow.open || quoteRow.open,
+    high: rankRow.high || quoteRow.high,
+    low: rankRow.low || quoteRow.low,
+    volume: rankRow.volume || quoteRow.volume,
+    amountHundredMillion: rankRow.amountHundredMillion || quoteRow.amountHundredMillion,
+    source: 'twse-mis-histock-verified'
+  };
 }
 
 function resolveMisPrice(item, fallback = 0) {
