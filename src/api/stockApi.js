@@ -3,6 +3,7 @@ import { apiFetch, apiTextFetch } from './http';
 export const stockApi = {
   market: () => fetchMarketRealtime().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket)),
   allStocks: () => fetchPriceRows(),
+  stockList: () => fetchStockDayAllRows(),
   priceRows: codes => fetchPriceRows(codes),
   topVolume: () => apiFetch('/rwd/zh/afterTrading/MI_INDEX20?response=json').then(parseTopVolume),
   histockRank: codes => fetchHistockRank(codes),
@@ -20,6 +21,7 @@ const MIS_OUTAGE_COOLDOWN_MS = 60000;
 const MIS_BATCH_CODE_LIMIT = 15;
 const MIS_HOT_PRICE_LIMIT = 100;
 const PRICE_VERIFY_TOLERANCE = 0.001;
+const STOCK_CODE_PATTERN = /^\d{4,6}[A-Z]?$/;
 const FALLBACK_HOT_CODES = [
   '2330', '2406', '00830', '3105', '2409', '3481', '6770', '2303', '6116', '009816',
   '2344', '0050', '00919', '2408', '5274', '2883', '2887', '2337', '2454', '2317',
@@ -103,7 +105,7 @@ async function fetchHistockRank(codes = []) {
 function normalizeCodeSet(codes = []) {
   const wantedCodes = new Set(
     codes
-      .map(code => String(code || '').trim())
+      .map(code => String(code || '').trim().toUpperCase())
       .filter(Boolean)
   );
   return wantedCodes;
@@ -159,14 +161,14 @@ async function proxySupports(feature) {
 }
 
 async function quoteAuto(code, { withVolumeRatio = false } = {}) {
-  const normalizedCode = String(code || '').trim();
+  const normalizedCode = String(code || '').trim().toUpperCase();
   const quote = (await fetchPriceRows([normalizedCode]))[0];
   if (!quote) throw new Error(`無法從 TWSE MIS 即時報價取得：${normalizedCode}`);
   return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
 }
 
 async function fetchMisQuotes(codes = []) {
-  const uniqueCodes = [...normalizeCodeSet(codes)].filter(code => /^\d{4,6}[A-Z]?$/.test(code));
+  const uniqueCodes = [...normalizeCodeSet(codes)].filter(code => STOCK_CODE_PATTERN.test(code));
   if (!uniqueCodes.length) return [];
 
   const now = Date.now();
@@ -538,7 +540,7 @@ function parseAllStocks(data) {
     const bid = parseNumber(read(row, ['LastBestBidPrice', '最後揭示買價']), price);
     const ask = parseNumber(read(row, ['LastBestAskPrice', '最後揭示賣價']), price);
 
-    if (!/^\d{4,6}$/.test(code) || price <= 0) continue;
+    if (!STOCK_CODE_PATTERN.test(code) || price <= 0) continue;
 
     const prev = price - change;
     const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
@@ -581,7 +583,7 @@ function parseOtcStocks(data) {
     const bid = parseNumber(read(row, ['LatestBidPrice', '最後買價']), price);
     const ask = parseNumber(read(row, ['LatesAskPrice', 'LatestAskPrice', '最後賣價']), price);
 
-    if (!/^\d{4,6}[A-Z]?$/.test(code) || !name || price <= 0) continue;
+    if (!STOCK_CODE_PATTERN.test(code) || !name || price <= 0) continue;
 
     const prev = price - change;
     const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
@@ -820,8 +822,8 @@ function parseInstitutional(data) {
 }
 
 async function fetchInstitutionalByCode(code) {
-  const normalizedCode = String(code || '').trim();
-  if (!/^\d{4,6}$/.test(normalizedCode)) throw new Error('股票代號格式不正確');
+  const normalizedCode = String(code || '').trim().toUpperCase();
+  if (!STOCK_CODE_PATTERN.test(normalizedCode)) throw new Error('股票代號格式不正確');
 
   const html = await apiTextFetch(`/histock/stock/chips.aspx?no=${encodeURIComponent(normalizedCode)}&_=${Date.now()}`);
   return parseInstitutionalTrendHtml(html, normalizedCode);

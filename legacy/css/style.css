@@ -301,6 +301,90 @@ html, body {
 }
 .search-input:focus { outline: none; border-color: var(--blue); }
 
+.search-candidates {
+  margin: -4px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  max-height: min(430px, 52vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.search-candidates::-webkit-scrollbar {
+  width: 8px;
+}
+
+.search-candidates::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.search-candidates::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+.candidate-item {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 96px 96px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.candidate-item:last-of-type {
+  border-bottom: 0;
+}
+
+.candidate-item:hover,
+.candidate-item:focus {
+  outline: none;
+  background: var(--bg-3);
+}
+
+.candidate-code {
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.candidate-name {
+  min-width: 0;
+  color: var(--text-1);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-sector,
+.candidate-price {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.candidate-price {
+  text-align: right;
+}
+
+.candidate-empty,
+.candidate-note {
+  padding: 12px 14px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.candidate-note {
+  border-top: 1px solid var(--border);
+  background: rgba(74, 158, 255, 0.06);
+}
+
 .quick-picks {
   display: flex;
   align-items: center;
@@ -1181,6 +1265,21 @@ html, body {
   .sidebar { display: none; }
   .form-grid,
   .portfolio-summary { grid-template-columns: 1fr; }
+  .search-candidates {
+    max-height: 360px;
+  }
+
+  .candidate-item {
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 4px 10px;
+  }
+  .candidate-sector,
+  .candidate-price {
+    font-size: 11px;
+  }
+  .candidate-price {
+    text-align: left;
+  }
   .chart-search,
   .chart-search-input { width: 100%; }
 }

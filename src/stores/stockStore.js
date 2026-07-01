@@ -5,6 +5,7 @@ import { getSector } from '../utils/stockMeta';
 
 export const useStockStore = defineStore('stocks', () => {
   const defaultHotSort = { key: 'volume', direction: 'desc' };
+  const stockCodePattern = /\d{4,6}[a-z]?/i;
   const allStocks = ref([]);
   const currentStock = ref(null);
   const searchQuery = ref('');
@@ -17,8 +18,10 @@ export const useStockStore = defineStore('stocks', () => {
   const loadingAll = ref(false);
   const loadingQuote = ref(false);
   const error = ref('');
+  const stockList = ref([]);
   let hotFlashTimer = null;
   let allStocksRequest = null;
+  let stockListRequest = null;
 
   const marketStats = computed(() => {
     const rows = allStocks.value;
@@ -93,7 +96,7 @@ export const useStockStore = defineStore('stocks', () => {
         await loadAllStocks({ silent: true });
       }
       const found = findStock(input);
-      const code = found?.code || input.match(/\d{4,6}/)?.[0] || input;
+      const code = found?.code || input.match(stockCodePattern)?.[0]?.toUpperCase() || input.toUpperCase();
       const quote = await stockApi.quoteAuto(code, { withVolumeRatio: true });
       currentStock.value = enrichStock({
         ...found,
@@ -113,6 +116,47 @@ export const useStockStore = defineStore('stocks', () => {
   async function refreshCurrentStock() {
     if (!currentStock.value) return null;
     return searchStock(currentStock.value.code);
+  }
+
+  async function findStockCandidates(query, limit = 8) {
+    const normalized = normalizeSearchText(query);
+    if (!normalized) return [];
+
+    const rows = await getSearchRows();
+    return rows
+      .map(stock => ({ stock, score: candidateScore(stock, normalized) }))
+      .filter(item => item.score < 99)
+      .sort((a, b) => {
+        if (a.score !== b.score) return a.score - b.score;
+        return Number(b.stock.volume || 0) - Number(a.stock.volume || 0);
+      })
+      .slice(0, limit)
+      .map(item => item.stock);
+  }
+
+  async function getSearchRows() {
+    if (!stockList.value.length) {
+      if (!stockListRequest) {
+        stockListRequest = stockApi.stockList()
+          .then(rows => {
+            stockList.value = rows.map(enrichStock);
+            return stockList.value;
+          })
+          .finally(() => {
+            stockListRequest = null;
+          });
+      }
+      await stockListRequest.catch(() => []);
+    }
+
+    const rowsByCode = new Map(stockList.value.map(stock => [stock.code, stock]));
+    allStocks.value.forEach(stock => {
+      rowsByCode.set(stock.code, {
+        ...rowsByCode.get(stock.code),
+        ...stock
+      });
+    });
+    return [...rowsByCode.values()];
   }
 
   function findStock(query) {
@@ -264,6 +308,18 @@ export const useStockStore = defineStore('stocks', () => {
       .replace(/\s+/g, '');
   }
 
+  function candidateScore(stock, normalized) {
+    const code = normalizeSearchText(stock.code);
+    const name = normalizeSearchText(stock.name);
+    if (code === normalized || name === normalized) return 0;
+    if (code.startsWith(normalized)) return 1;
+    if (name.startsWith(normalized)) return 2;
+    if (code.includes(normalized)) return 3;
+    if (name.includes(normalized)) return 4;
+    if (normalized.includes(code)) return 5;
+    return 99;
+  }
+
   return {
     allStocks,
     currentStock,
@@ -281,6 +337,7 @@ export const useStockStore = defineStore('stocks', () => {
     error,
     loadAllStocks,
     searchStock,
+    findStockCandidates,
     refreshCurrentStock,
     refreshStocksByCodes,
     findStock,

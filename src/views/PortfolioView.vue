@@ -64,7 +64,7 @@ watch(() => form.code, code => {
     return;
   }
 
-  if (!/^\d{4,6}$/.test(normalized)) {
+  if (!/^\d{4,6}[A-Z]?$/i.test(normalized)) {
     form.name = '';
     return;
   }

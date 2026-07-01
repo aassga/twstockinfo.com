@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   IconBriefcase,
@@ -30,6 +30,11 @@ const favoriteStore = useFavoriteStore();
 const institutionalStore = useInstitutionalStore();
 const query = ref(stockStore.searchQuery || '');
 const aiText = ref('點擊「AI 深度分析」取得個股分析報告');
+const candidateLimit = 30;
+const candidates = ref([]);
+const showCandidates = ref(false);
+const candidateMessage = ref('');
+let candidateTimer = null;
 
 const stock = computed(() => stockStore.currentStock);
 const inst = computed(() => {
@@ -83,14 +88,33 @@ function barWidth(value) {
 }
 
 async function submit(value = query.value) {
-  if (!value) return;
+  const input = String(value || '').trim();
+  if (!input) return;
   try {
-    const result = await stockStore.searchStock(value);
-    query.value = result.code;
-    if (!institutionalStore.loaded) {
-      await institutionalStore.loadInstitutional({ silent: true });
+    const rows = await stockStore.findStockCandidates(input, candidateLimit);
+    const normalized = normalizeSearchText(input);
+    const exact = rows.find(row => normalizeSearchText(row.code) === normalized || normalizeSearchText(row.name) === normalized);
+
+    if (exact) {
+      await runSearch(exact.code);
+      return;
     }
-    await institutionalStore.loadInstitutionalByCode(result.code, { force: true });
+
+    if (rows.length === 1) {
+      await runSearch(rows[0].code);
+      return;
+    }
+
+    if (rows.length > 1) {
+      candidates.value = rows;
+      showCandidates.value = true;
+      candidateMessage.value = '找到多筆相近結果，請選擇一檔股票。';
+      return;
+    }
+
+    candidates.value = [];
+    showCandidates.value = true;
+    candidateMessage.value = '找不到符合的股票。';
   } catch (error) {
     aiText.value = error?.message || '無法取得股票資料，請稍後再試。';
   }
@@ -99,6 +123,48 @@ async function submit(value = query.value) {
 function quickSearch(code) {
   submit(code);
 }
+
+async function runSearch(value) {
+  const result = await stockStore.searchStock(value);
+  query.value = result.code;
+  showCandidates.value = false;
+  candidates.value = [];
+  candidateMessage.value = '';
+  if (!institutionalStore.loaded) {
+    await institutionalStore.loadInstitutional({ silent: true });
+  }
+  await institutionalStore.loadInstitutionalByCode(result.code, { force: true });
+}
+
+function selectCandidate(stock) {
+  runSearch(stock.code).catch(error => {
+    aiText.value = error?.message || '無法取得股票資料，請稍後再試。';
+  });
+}
+
+function normalizeSearchText(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+watch(query, value => {
+  clearTimeout(candidateTimer);
+  const input = String(value || '').trim();
+  if (!input) {
+    candidates.value = [];
+    showCandidates.value = false;
+    candidateMessage.value = '';
+    return;
+  }
+
+  candidateTimer = setTimeout(async () => {
+    const rows = await stockStore.findStockCandidates(input, candidateLimit).catch(() => []);
+    const normalized = normalizeSearchText(input);
+    const exact = rows.find(row => normalizeSearchText(row.code) === normalized || normalizeSearchText(row.name) === normalized);
+    candidates.value = exact ? [] : rows;
+    showCandidates.value = !exact && rows.length > 0;
+    candidateMessage.value = '';
+  }, 180);
+});
 
 function addToPortfolio() {
   if (!stock.value) return;
@@ -167,6 +233,27 @@ function analyze(type) {
         <IconSearch class="btn-icon" :stroke-width="2" />
         搜尋
       </button>
+    </div>
+
+    <div v-if="showCandidates" class="search-candidates">
+      <button
+        v-for="item in candidates"
+        :key="item.code"
+        class="candidate-item"
+        type="button"
+        @click="selectCandidate(item)"
+      >
+        <span class="candidate-code">{{ item.code }}</span>
+        <span class="candidate-name">{{ item.name }}</span>
+        <span class="candidate-sector">{{ item.sector }}</span>
+        <span class="candidate-price">{{ item.price ? formatMoney(item.price, 2) : '--' }}</span>
+      </button>
+      <div v-if="candidateMessage && !candidates.length" class="candidate-empty">
+        {{ candidateMessage }}
+      </div>
+      <div v-else-if="candidateMessage" class="candidate-note">
+        {{ candidateMessage }}
+      </div>
     </div>
 
     <div class="quick-picks">
