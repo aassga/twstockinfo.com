@@ -457,13 +457,22 @@ button {
 }
 
 @media (max-width: 640px) {
+  :root {
+    --mobile-bottom-nav-space: 188px;
+  }
+
   html,
   body {
     overflow: auto;
   }
 
   .content {
-    padding-bottom: 126px;
+    padding-bottom: calc(var(--mobile-bottom-nav-space) + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(var(--mobile-bottom-nav-space) + env(safe-area-inset-bottom));
+  }
+
+  .mobile-content {
+    padding-bottom: calc(var(--mobile-bottom-nav-space) + env(safe-area-inset-bottom));
   }
 
   .page-title-row {
@@ -572,7 +581,9 @@ button {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    min-height: 146px;
+    box-sizing: border-box;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
     background: rgba(22, 27, 39, 0.98);
     border-top: 1px solid var(--border);
     box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.28);
