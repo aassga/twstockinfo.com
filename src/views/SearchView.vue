@@ -88,6 +88,11 @@ function barWidth(value) {
   return `${Math.min(Math.max(Number(value || 0), 0), 100)}%`;
 }
 
+function formatVolRatioValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? `${Math.round(number)}%` : '--';
+}
+
 async function submit(value = query.value) {
   const input = String(value || '').trim();
   if (!input) return;
@@ -196,7 +201,7 @@ function analyze(type) {
   if (type === 'tech') {
     aiText.value = [
       `${s.code} ${s.name} 技術面觀察`,
-      `目前漲跌幅 ${formatPct(s.chgPct)}，量比 ${Math.round(s.volRatio || 0)}%。`,
+      `目前漲跌幅 ${formatPct(s.chgPct)}，量比 ${formatVolRatioValue(s.volRatio)}。`,
       `買賣力道為買入 ${Math.round(s.buyPct)}% / 賣出 ${Math.round(s.sellPct)}%。`,
       s.chgPct >= 0 ? '價格偏強，若量能延續可觀察突破後是否站穩。' : '價格偏弱，先觀察是否止跌並守住前低。'
     ].join('\n');
@@ -374,7 +379,7 @@ function analyze(type) {
             <div class="bs-row">
               <span class="bs-label vol">量比</span>
               <div class="bs-track"><div class="bs-fill vol" :style="{ width: barWidth(stock.volRatio) }"></div></div>
-              <span class="bs-pct vol">{{ Math.round(stock.volRatio) }}%</span>
+              <span class="bs-pct vol">{{ formatVolRatioValue(stock.volRatio) }}</span>
             </div>
           </div>
           <div class="vs-summary">

@@ -48,6 +48,11 @@ function flashClass(stock, key) {
 function realtimeMeta() {
   return `MIS 即時報價 ${stockStore.hotRealtimeCount} 檔`;
 }
+
+function formatVolRatio(stock) {
+  const value = Number(stock?.volRatio);
+  return Number.isFinite(value) && value > 0 ? `${Math.round(value)}%` : '--';
+}
 </script>
 
 <template>
@@ -141,7 +146,7 @@ function realtimeMeta() {
                 <span>{{ Math.round(Math.max(stock.buyPct, stock.sellPct)) }}%</span>
               </div>
             </td>
-            <td :class="flashClass(stock, 'volRatio')">{{ Math.round(stock.volRatio) }}%</td>
+            <td :class="flashClass(stock, 'volRatio')">{{ formatVolRatio(stock) }}</td>
             <td>
               <span class="direction-pill" :class="direction(stock).type">
                 {{ direction(stock).text }}

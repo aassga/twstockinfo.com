@@ -70,7 +70,7 @@ export const useFavoriteStore = defineStore('favorites', () => {
       volume: Number(stock?.volume || 0),
       buyPct: Number(stock?.buyPct || 50),
       sellPct: Number(stock?.sellPct || 50),
-      volRatio: Number(stock?.volRatio || 50),
+      volRatio: normalizeOptionalNumber(stock?.volRatio),
       savedAt: stock?.savedAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -90,6 +90,11 @@ export const useFavoriteStore = defineStore('favorites', () => {
       sellPct: previous.sellPct,
       volRatio: previous.volRatio
     };
+  }
+
+  function normalizeOptionalNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : null;
   }
 
   return {

@@ -46,6 +46,11 @@ function shouldUseLatestQuote(saved, latest) {
   if (!Number(saved?.price || 0)) return true;
   return String(latest.source || '') !== 'histock-rank';
 }
+
+function formatVolRatio(stock) {
+  const value = Number(stock?.volRatio);
+  return Number.isFinite(value) && value > 0 ? `${Math.round(value)}%` : '--';
+}
 </script>
 
 <template>
@@ -108,7 +113,7 @@ function shouldUseLatestQuote(saved, latest) {
             <td>{{ formatVolume(stock.volume) }}</td>
             <td>{{ Math.round(stock.buyPct) }}%</td>
             <td>{{ Math.round(stock.sellPct) }}%</td>
-            <td>{{ Math.round(stock.volRatio) }}%</td>
+            <td>{{ formatVolRatio(stock) }}</td>
             <td>
               <span class="direction-pill" :class="direction(stock).type">
                 {{ direction(stock).text }}

@@ -22,6 +22,7 @@ export const useStockStore = defineStore('stocks', () => {
   let hotFlashTimer = null;
   let allStocksRequest = null;
   let stockListRequest = null;
+  let volumeRatioRequestId = 0;
 
   const marketStats = computed(() => {
     const rows = allStocks.value;
@@ -68,6 +69,7 @@ export const useStockStore = defineStore('stocks', () => {
         hotUpdatedAt.value = new Date().toISOString();
         markHotCellFlashes(allStocks.value, nextRows);
         allStocks.value = nextRows;
+        refreshVolumeRatios(nextRows);
       })
       .catch(err => {
         error.value = err?.message || '股票清單讀取失敗';
@@ -218,6 +220,21 @@ export const useStockStore = defineStore('stocks', () => {
     return '';
   }
 
+  async function refreshVolumeRatios(rows) {
+    const requestId = ++volumeRatioRequestId;
+    const enrichedRows = await stockApi.volumeRatios(rows).catch(() => []);
+    if (requestId !== volumeRatioRequestId || !enrichedRows.length) return;
+
+    const enrichedByCode = new Map(enrichedRows.map(stock => [stock.code, stock]));
+    const nextRows = allStocks.value.map(stock => {
+      const enriched = enrichedByCode.get(stock.code);
+      return enriched ? enrichStock({ ...stock, ...enriched }) : stock;
+    });
+
+    markHotCellFlashes(allStocks.value, nextRows);
+    allStocks.value = nextRows;
+  }
+
   async function refreshStocksByCodes(codes) {
     const requestedCodes = new Set(
       codes
@@ -310,8 +327,13 @@ export const useStockStore = defineStore('stocks', () => {
       sector: stock.sector || getSector(stock.code),
       buyPct,
       sellPct,
-      volRatio: Number(stock.volRatio || 50)
+      volRatio: normalizeOptionalNumber(stock.volRatio)
     };
+  }
+
+  function normalizeOptionalNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : null;
   }
 
   function sortValue(stock, key) {

@@ -6,6 +6,7 @@ export const stockApi = {
   allStocks: () => fetchPriceRows(),
   stockList: () => fetchStockListRows(),
   priceRows: codes => fetchPriceRows(codes),
+  volumeRatios: rows => enrichRowsWithVolumeRatio(rows),
   topVolume: () => apiFetch('/rwd/zh/afterTrading/MI_INDEX20?response=json').then(parseTopVolume),
   histockRank: codes => fetchHistockRank(codes),
   quoteAuto,
@@ -22,6 +23,8 @@ const MIS_OUTAGE_COOLDOWN_MS = 180000;
 const MIS_OUTAGE_STORAGE_KEY = 'tw_stock_mis_outage_until';
 const MIS_BATCH_CODE_LIMIT = 15;
 const MIS_HOT_PRICE_LIMIT = 100;
+const VOLUME_RATIO_CACHE_MS = 30 * 60 * 1000;
+const VOLUME_RATIO_CONCURRENCY = 3;
 const STOCK_CODE_PATTERN = /^\d{4,6}[A-Z]?$/;
 const OTC_CODE_SET = new Set(
   otcStockNames
@@ -55,6 +58,7 @@ let otcDailyCloseCache = {
   rows: []
 };
 const misQuoteCache = new Map();
+const volumeRatioCache = new Map();
 let misOutageUntil = readMisOutageUntil();
 let proxyStatusCache = {
   at: 0,
@@ -327,7 +331,7 @@ async function fetchYahooFallbackQuoteBySymbol(code, market) {
     amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
     buyPct: chgPct >= 0 ? 60 : 40,
     sellPct: chgPct >= 0 ? 40 : 60,
-    volRatio: 50,
+    volRatio: null,
     source: 'yahoo-fallback'
   };
 }
@@ -461,7 +465,7 @@ function parseMisQuoteItem(item) {
     amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
     buyPct,
     sellPct: 100 - buyPct,
-    volRatio: 50,
+    volRatio: null,
     time: item.t || item.ot || '',
     date: item.d || '',
     source: 'twse-mis'
@@ -771,26 +775,74 @@ function parseHistockRankRow(html) {
     amountHundredMillion: parseNumber(cells[12]),
     buyPct: chgPct > 0 ? Math.min(80, 50 + Math.abs(chgPct) * 3) : Math.max(20, 50 - Math.abs(chgPct) * 3),
     sellPct: chgPct > 0 ? Math.max(20, 50 - Math.abs(chgPct) * 3) : Math.min(80, 50 + Math.abs(chgPct) * 3),
-    volRatio: 50,
+    volRatio: null,
     source: 'histock-rank'
   };
 }
 
 async function enrichWithVolumeRatio(quote) {
   try {
-    const market = String(quote.exchange || '').toLowerCase() === 'otc' ? 'TWO' : 'TW';
-    const avgVolume = await fetchAverageDailyVolume(quote.code, market, quote.date);
-    if (avgVolume > 0) {
-      return {
-        ...quote,
-        volRatio: Number(((Number(quote.volume || 0) / avgVolume) * 100).toFixed(1)),
-        avgVolume20: Math.round(avgVolume)
-      };
-    }
+    return await enrichQuoteWithVolumeRatio(quote);
   } catch (error) {
     // Keep the realtime quote if historical volume is temporarily unavailable.
   }
   return quote;
+}
+
+async function enrichRowsWithVolumeRatio(rows = []) {
+  const result = [];
+  const targets = rows.filter(row => row?.code && Number(row.volume || 0) > 0);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < targets.length) {
+      const index = cursor;
+      cursor += 1;
+      const row = targets[index];
+      const enriched = await enrichWithVolumeRatioCached(row);
+      if (enriched?.avgVolume20 > 0) result.push(enriched);
+      await sleep(80);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(VOLUME_RATIO_CONCURRENCY, targets.length) }, worker));
+
+  const byCode = new Map(result.map(row => [row.code, row]));
+  return rows.map(row => byCode.has(row.code) ? { ...row, ...byCode.get(row.code) } : row);
+}
+
+async function enrichWithVolumeRatioCached(quote) {
+  const key = `${String(quote.exchange || '').toLowerCase()}:${String(quote.code || '').toUpperCase()}:${normalizeCompactDate(quote.date)}`;
+  const cached = volumeRatioCache.get(key);
+  if (cached?.row && Date.now() - cached.at < VOLUME_RATIO_CACHE_MS) return { ...quote, ...cached.row };
+  if (cached?.promise) return cached.promise.then(row => ({ ...quote, ...row }));
+
+  const promise = enrichQuoteWithVolumeRatio(quote)
+    .then(row => ({
+      code: row.code,
+      volRatio: row.volRatio,
+      avgVolume20: row.avgVolume20
+    }))
+    .then(row => {
+      volumeRatioCache.set(key, { at: Date.now(), row });
+      return row;
+    })
+    .catch(() => null);
+
+  volumeRatioCache.set(key, { at: Date.now(), promise });
+  const row = await promise;
+  return row ? { ...quote, ...row } : quote;
+}
+
+async function enrichQuoteWithVolumeRatio(quote) {
+  const market = String(quote.exchange || '').toLowerCase() === 'otc' ? 'TWO' : 'TW';
+  const avgVolume = await fetchAverageDailyVolume(quote.code, market, quote.date);
+  if (avgVolume <= 0) return quote;
+  return {
+    ...quote,
+    volRatio: Number(((Number(quote.volume || 0) / avgVolume) * 100).toFixed(1)),
+    avgVolume20: Math.round(avgVolume)
+  };
 }
 
 async function fetchAverageDailyVolume(code, market = 'TW', currentDate = '') {
