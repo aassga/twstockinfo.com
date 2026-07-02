@@ -13,7 +13,7 @@ const favoriteStore = useFavoriteStore();
 const stockStore = useStockStore();
 const favoriteRows = computed(() => favoriteStore.favorites.map(stock => {
   const latest = stockStore.allStocks.find(row => row.code === stock.code);
-  return latest ? { ...stock, ...latest, savedAt: stock.savedAt } : stock;
+  return shouldUseLatestQuote(stock, latest) ? { ...stock, ...latest, savedAt: stock.savedAt } : stock;
 }));
 
 async function openChart(stock) {
@@ -35,6 +35,11 @@ function direction(stock) {
   if (stock.buyPct >= 65) return { text: '強買', type: 'buy' };
   if (stock.sellPct >= 65) return { text: '強賣', type: 'sell' };
   return { text: '均衡', type: 'neutral' };
+}
+function shouldUseLatestQuote(saved, latest) {
+  if (!latest) return false;
+  if (!Number(saved?.price || 0)) return true;
+  return String(latest.source || '') !== 'histock-rank';
 }
 </script>
 

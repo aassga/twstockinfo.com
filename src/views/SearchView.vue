@@ -31,6 +31,7 @@ const institutionalStore = useInstitutionalStore();
 const query = ref(stockStore.searchQuery || '');
 const aiText = ref('點擊「AI 深度分析」取得個股分析報告');
 const candidateLimit = 30;
+const stockCodePattern = /^\d{4,6}[a-z]?$/i;
 const candidates = ref([]);
 const showCandidates = ref(false);
 const candidateMessage = ref('');
@@ -91,6 +92,11 @@ async function submit(value = query.value) {
   const input = String(value || '').trim();
   if (!input) return;
   try {
+    if (stockCodePattern.test(input)) {
+      await runSearch(input.toUpperCase());
+      return;
+    }
+
     const rows = await stockStore.findStockCandidates(input, candidateLimit);
     const normalized = normalizeSearchText(input);
     const exact = rows.find(row => normalizeSearchText(row.code) === normalized || normalizeSearchText(row.name) === normalized);

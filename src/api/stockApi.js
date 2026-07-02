@@ -1,9 +1,10 @@
 import { apiFetch, apiTextFetch } from './http';
+import otcStockNames from '../data/otcStockNames.json';
 
 export const stockApi = {
   market: () => fetchMarketRealtime().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket)),
   allStocks: () => fetchPriceRows(),
-  stockList: () => fetchStockDayAllRows(),
+  stockList: () => fetchStockListRows(),
   priceRows: codes => fetchPriceRows(codes),
   topVolume: () => apiFetch('/rwd/zh/afterTrading/MI_INDEX20?response=json').then(parseTopVolume),
   histockRank: codes => fetchHistockRank(codes),
@@ -17,11 +18,16 @@ export const stockApi = {
 const PRICE_ROWS_CACHE_MS = 15000;
 const HISTOCK_RANK_CACHE_MS = 15000;
 const MIS_QUOTE_CACHE_MS = 15000;
-const MIS_OUTAGE_COOLDOWN_MS = 60000;
+const MIS_OUTAGE_COOLDOWN_MS = 180000;
+const MIS_OUTAGE_STORAGE_KEY = 'tw_stock_mis_outage_until';
 const MIS_BATCH_CODE_LIMIT = 15;
 const MIS_HOT_PRICE_LIMIT = 100;
-const PRICE_VERIFY_TOLERANCE = 0.001;
 const STOCK_CODE_PATTERN = /^\d{4,6}[A-Z]?$/;
+const OTC_CODE_SET = new Set(
+  otcStockNames
+    .map(row => String(row.code || '').trim().toUpperCase())
+    .filter(Boolean)
+);
 const FALLBACK_HOT_CODES = [
   '2330', '2406', '00830', '3105', '2409', '3481', '6770', '2303', '6116', '009816',
   '2344', '0050', '00919', '2408', '5274', '2883', '2887', '2337', '2454', '2317',
@@ -43,8 +49,13 @@ let stockDayAllCache = {
   promise: null,
   rows: []
 };
+let otcDailyCloseCache = {
+  at: 0,
+  promise: null,
+  rows: []
+};
 const misQuoteCache = new Map();
-let misOutageUntil = 0;
+let misOutageUntil = readMisOutageUntil();
 let proxyStatusCache = {
   at: 0,
   promise: null,
@@ -184,7 +195,7 @@ async function fetchMisQuotes(codes = []) {
     }
   });
 
-  if (Date.now() < misOutageUntil) {
+  if (isMisInOutage()) {
     return cachedRows;
   }
 
@@ -193,7 +204,7 @@ async function fetchMisQuotes(codes = []) {
   for (const chunk of chunks) {
     const response = await fetchMisQuoteChunkSafely(chunk);
     if (response) responses.push(response);
-    if (Date.now() < misOutageUntil) break;
+    if (isMisInOutage()) break;
     await sleep(120);
   }
   const rowsByCode = new Map();
@@ -220,7 +231,7 @@ async function fetchMisQuoteChunkSafely(codes) {
     return await fetchMisQuoteChunk(codes);
   } catch (error) {
     if (isUpstreamServerError(error)) {
-      misOutageUntil = Date.now() + MIS_OUTAGE_COOLDOWN_MS;
+      markMisOutage();
     }
 
     return null;
@@ -229,9 +240,13 @@ async function fetchMisQuoteChunkSafely(codes) {
 
 function fetchMisQuoteChunk(codes) {
   const exCh = codes
-    .flatMap(code => [`tse_${code}.tw`, `otc_${code}.tw`])
+    .map(code => `${getMisExchangePrefix(code)}_${code}.tw`)
     .join('|');
   return apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`);
+}
+
+function getMisExchangePrefix(code) {
+  return OTC_CODE_SET.has(String(code || '').trim().toUpperCase()) ? 'otc' : 'tse';
 }
 
 function parseMisQuotes(data) {
@@ -250,13 +265,13 @@ async function fetchFallbackStockRows(targetCodes = [], quoteRows = []) {
     : [];
   const yahooCodes = new Set(yahooRows.map(row => row.code));
   const remainingCodes = missingCodes.filter(code => !yahooCodes.has(code));
-  const rows = await fetchStockDayAllRows();
+  const rows = await fetchStockListRows();
   const wantedCodes = normalizeCodeSet(remainingCodes.length ? remainingCodes : targetCodes);
   const stockDayRows = rows
     .filter(row => !wantedCodes.size || wantedCodes.has(row.code))
     .map(row => ({
       ...row,
-      source: 'twse-openapi-fallback'
+      source: `${row.exchange || 'twse'}-openapi-fallback`
     }));
   return mergeFallbackRows(yahooRows, stockDayRows);
 }
@@ -294,7 +309,7 @@ async function fetchYahooFallbackQuoteBySymbol(code, market) {
 
   return {
     code,
-    name: '',
+    name: meta.shortName || meta.longName || '',
     exchange: market === 'TWO' ? 'otc' : 'tse',
     price,
     prev,
@@ -338,10 +353,74 @@ async function fetchStockDayAllRows() {
   return stockDayAllCache.promise;
 }
 
+async function fetchStockListRows() {
+  const [twseRows, otcRows] = await Promise.all([
+    fetchStockDayAllRows().catch(() => []),
+    fetchOtcDailyCloseRows().catch(() => [])
+  ]);
+  const rowsByCode = new Map();
+
+  [...getLocalOtcNameRows(), ...twseRows, ...otcRows].forEach(row => {
+    if (!row?.code) return;
+    const current = rowsByCode.get(row.code);
+    rowsByCode.set(row.code, {
+      ...current,
+      ...row,
+      name: row.name || current?.name || ''
+    });
+  });
+
+  return [...rowsByCode.values()]
+    .sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
+}
+
+async function fetchOtcDailyCloseRows() {
+  const now = Date.now();
+  if (otcDailyCloseCache.promise && now - otcDailyCloseCache.at < 60000) {
+    return otcDailyCloseCache.promise;
+  }
+  if (otcDailyCloseCache.rows.length && now - otcDailyCloseCache.at < 60000) {
+    return otcDailyCloseCache.rows;
+  }
+
+  otcDailyCloseCache.at = now;
+  otcDailyCloseCache.promise = fetchOtcDailyCloseData()
+    .then(parseOtcStocks)
+    .then(rows => {
+      otcDailyCloseCache.rows = rows;
+      return rows;
+    })
+    .finally(() => {
+      otcDailyCloseCache.promise = null;
+    });
+
+  return otcDailyCloseCache.promise;
+}
+
+async function fetchOtcDailyCloseData() {
+  const supportsTpex = await proxySupports('tpex');
+  if (!supportsTpex) throw new Error('Worker does not support /tpex/*');
+  return apiFetch('/tpex/openapi/v1/tpex_mainboard_daily_close_quotes');
+}
+
+function getLocalOtcNameRows() {
+  return otcStockNames.map(row => ({
+    code: String(row.code || '').trim().toUpperCase(),
+    name: String(row.name || '').trim(),
+    exchange: row.exchange || 'otc',
+    source: 'local-tpex-name-index'
+  })).filter(row => STOCK_CODE_PATTERN.test(row.code) && row.name);
+}
+
 function mergeFallbackRows(quoteRows, fallbackRows) {
   const rowsByCode = new Map(fallbackRows.map(row => [row.code, row]));
   quoteRows.forEach(row => {
-    rowsByCode.set(row.code, row);
+    const base = rowsByCode.get(row.code);
+    rowsByCode.set(row.code, {
+      ...base,
+      ...row,
+      name: base?.name || row.name || ''
+    });
   });
   return [...rowsByCode.values()];
 }
@@ -393,7 +472,8 @@ function mergeQuoteRows(baseRows, quoteRows, requestedCodes = []) {
     const base = baseByCode.get(row.code);
     baseByCode.set(row.code, {
       ...base,
-      ...verifyQuoteWithRank(base, row)
+      ...row,
+      name: row.name || base?.name || ''
     });
   });
 
@@ -408,29 +488,6 @@ function mergeQuoteRows(baseRows, quoteRows, requestedCodes = []) {
 
   return [...baseByCode.values()]
     .sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
-}
-
-function verifyQuoteWithRank(rankRow, quoteRow) {
-  if (!rankRow?.price || !quoteRow?.price) return quoteRow;
-
-  const rankPrice = Number(rankRow.price);
-  const quotePrice = Number(quoteRow.price);
-  if (!Number.isFinite(rankPrice) || !Number.isFinite(quotePrice)) return quoteRow;
-  if (Math.abs(rankPrice - quotePrice) <= PRICE_VERIFY_TOLERANCE) return quoteRow;
-
-  return {
-    ...quoteRow,
-    price: rankRow.price,
-    prev: rankRow.prev || quoteRow.prev,
-    change: rankRow.change,
-    chgPct: rankRow.chgPct,
-    open: rankRow.open || quoteRow.open,
-    high: rankRow.high || quoteRow.high,
-    low: rankRow.low || quoteRow.low,
-    volume: rankRow.volume || quoteRow.volume,
-    amountHundredMillion: rankRow.amountHundredMillion || quoteRow.amountHundredMillion,
-    source: 'twse-mis-histock-verified'
-  };
 }
 
 function resolveMisPrice(item, fallback = 0) {
@@ -468,6 +525,26 @@ function chunkArray(items, size) {
 
 function isUpstreamServerError(error) {
   return /HTTP 5\d\d/.test(String(error?.message || error || ''));
+}
+
+function isMisInOutage() {
+  return Date.now() < misOutageUntil;
+}
+
+function markMisOutage() {
+  misOutageUntil = Date.now() + MIS_OUTAGE_COOLDOWN_MS;
+  writeMisOutageUntil(misOutageUntil);
+}
+
+function readMisOutageUntil() {
+  if (typeof sessionStorage === 'undefined') return 0;
+  const value = Number(sessionStorage.getItem(MIS_OUTAGE_STORAGE_KEY) || 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function writeMisOutageUntil(value) {
+  if (typeof sessionStorage === 'undefined') return;
+  sessionStorage.setItem(MIS_OUTAGE_STORAGE_KEY, String(value));
 }
 
 function sleep(ms) {
