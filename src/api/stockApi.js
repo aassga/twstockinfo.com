@@ -287,10 +287,12 @@ async function fetchYahooFallbackQuotes(codes = []) {
 }
 
 async function fetchYahooFallbackQuote(code) {
+  const market = getYahooMarket(code);
   try {
-    return await fetchYahooFallbackQuoteBySymbol(code, 'TW');
+    return await fetchYahooFallbackQuoteBySymbol(code, market);
   } catch (error) {
-    return fetchYahooFallbackQuoteBySymbol(code, 'TWO');
+    if (market === 'TW') return fetchYahooFallbackQuoteBySymbol(code, 'TWO');
+    throw error;
   }
 }
 
@@ -812,13 +814,19 @@ async function fetchAverageDailyVolume(code, market = 'TW', currentDate = '') {
 }
 
 async function fetchYahooChart(code, interval, exchange = '') {
-  const market = String(exchange || '').toLowerCase() === 'otc' ? 'TWO' : 'TW';
+  const market = getYahooMarket(code, exchange);
   try {
     return await fetchYahooChartBySymbol(`${code}.${market}`, interval);
   } catch (error) {
     if (market === 'TW') return fetchYahooChartBySymbol(`${code}.TWO`, interval);
     throw error;
   }
+}
+
+function getYahooMarket(code, exchange = '') {
+  if (String(exchange || '').toLowerCase() === 'otc') return 'TWO';
+  if (String(exchange || '').toLowerCase() === 'tse') return 'TW';
+  return OTC_CODE_SET.has(String(code || '').trim().toUpperCase()) ? 'TWO' : 'TW';
 }
 
 async function fetchYahooChartBySymbol(symbol, interval) {
