@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconRefresh, IconStarFilled, IconTrash } from '@tabler/icons-vue';
 import { useChartStore } from '../stores/chartStore';
@@ -16,6 +16,10 @@ const favoriteRows = computed(() => favoriteStore.favorites.map(stock => {
   return shouldUseLatestQuote(stock, latest) ? { ...stock, ...latest, savedAt: stock.savedAt } : stock;
 }));
 
+onMounted(() => {
+  refreshFavorites();
+});
+
 async function openChart(stock) {
   await chartStore.openStock(stock);
   router.push('/chart');
@@ -27,7 +31,7 @@ async function refreshFavorites() {
 
   favoriteStore.favorites.forEach(stock => {
     const latest = latestByCode.get(stock.code);
-    if (latest) favoriteStore.addFavorite({ ...stock, ...latest, savedAt: stock.savedAt });
+    if (Number(latest?.price || 0) > 0) favoriteStore.addFavorite({ ...stock, ...latest, savedAt: stock.savedAt });
   });
 }
 
@@ -38,6 +42,7 @@ function direction(stock) {
 }
 function shouldUseLatestQuote(saved, latest) {
   if (!latest) return false;
+  if (Number(latest.price || 0) <= 0) return false;
   if (!Number(saved?.price || 0)) return true;
   return String(latest.source || '') !== 'histock-rank';
 }

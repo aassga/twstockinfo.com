@@ -42,7 +42,7 @@ export const useFavoriteStore = defineStore('favorites', () => {
     if (!next) return null;
 
     const index = favorites.value.findIndex(item => item.code === next.code);
-    if (index >= 0) favorites.value[index] = { ...favorites.value[index], ...next };
+    if (index >= 0) favorites.value[index] = mergeFavorite(favorites.value[index], next);
     else favorites.value.unshift(next);
 
     persist();
@@ -73,6 +73,22 @@ export const useFavoriteStore = defineStore('favorites', () => {
       volRatio: Number(stock?.volRatio || 50),
       savedAt: stock?.savedAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
+    };
+  }
+
+  function mergeFavorite(previous, next) {
+    const merged = { ...previous, ...next };
+    if (Number(next.price || 0) > 0) return merged;
+
+    return {
+      ...merged,
+      price: previous.price,
+      change: previous.change,
+      chgPct: previous.chgPct,
+      volume: previous.volume,
+      buyPct: previous.buyPct,
+      sellPct: previous.sellPct,
+      volRatio: previous.volRatio
     };
   }
 
