@@ -40,10 +40,7 @@ export const useStockStore = defineStore('stocks', () => {
 
     return allStocks.value
       .filter(stock => {
-        if (hotFilter.value === 'up' && stock.chgPct < 0) return false;
-        if (hotFilter.value === 'down' && stock.chgPct >= 0) return false;
-        if (hotFilter.value === 'buy' && stock.buyPct < 65) return false;
-        if (hotFilter.value === 'sell' && stock.sellPct < 65) return false;
+        if (!matchesHotFilter(stock, hotFilter.value)) return false;
         if (!keyword) return true;
         return stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
       })
@@ -194,6 +191,31 @@ export const useStockStore = defineStore('stocks', () => {
     if (key === 'all') {
       hotSort.value = { ...defaultHotSort };
     }
+  }
+
+  function matchesHotFilter(stock, filter) {
+    if (filter === 'up') return stock.chgPct > 0;
+    if (filter === 'down') return stock.chgPct < 0;
+    if (filter === 'buy') return stock.buyPct >= 65;
+    if (filter === 'sell') return stock.sellPct >= 65;
+    if (filter === 'priceUpVolumeUp') return priceVolumeSignal(stock) === 'priceUpVolumeUp';
+    if (filter === 'priceDownVolumeDown') return priceVolumeSignal(stock) === 'priceDownVolumeDown';
+    if (filter === 'priceDownVolumeUp') return priceVolumeSignal(stock) === 'priceDownVolumeUp';
+    if (filter === 'priceUpVolumeDown') return priceVolumeSignal(stock) === 'priceUpVolumeDown';
+    return true;
+  }
+
+  function priceVolumeSignal(stock) {
+    const chgPct = Number(stock?.chgPct || 0);
+    const volRatio = Number(stock?.volRatio || 0);
+    if (!Number.isFinite(chgPct) || !Number.isFinite(volRatio)) return '';
+    if (chgPct === 0 || volRatio <= 0) return '';
+    const volumeExpanded = volRatio >= 100;
+    if (chgPct > 0 && volumeExpanded) return 'priceUpVolumeUp';
+    if (chgPct < 0 && !volumeExpanded) return 'priceDownVolumeDown';
+    if (chgPct < 0 && volumeExpanded) return 'priceDownVolumeUp';
+    if (chgPct > 0 && !volumeExpanded) return 'priceUpVolumeDown';
+    return '';
   }
 
   async function refreshStocksByCodes(codes) {

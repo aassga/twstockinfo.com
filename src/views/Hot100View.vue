@@ -15,7 +15,11 @@ const filters = [
   { key: 'buy', label: '🔴 強力買入' },
   { key: 'sell', label: '🟢 強力賣出' },
   { key: 'up', label: '▲ 上漲' },
-  { key: 'down', label: '▼ 下跌' }
+  { key: 'down', label: '▼ 下跌' },
+  { key: 'priceUpVolumeUp', label: '價漲量增' },
+  { key: 'priceDownVolumeDown', label: '價跌量縮' },
+  { key: 'priceDownVolumeUp', label: '價跌量增' },
+  { key: 'priceUpVolumeDown', label: '價漲量縮' }
 ];
 const columns = [
   { key: 'price', label: '股價' },
