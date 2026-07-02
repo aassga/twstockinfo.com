@@ -23,7 +23,13 @@ export default defineConfig(({ command }) => ({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/app.svg'],
+      includeAssets: [
+        'icons/app.svg',
+        'icons/app.png',
+        'icons/icon-180.png',
+        'icons/icon-192.png',
+        'icons/icon-512.png'
+      ],
       manifest: {
         name: '台股資訊儀表板',
         short_name: '台股資訊',
@@ -38,6 +44,18 @@ export default defineConfig(({ command }) => ({
         start_url: '/twstockinfo.com/',
         scope: '/twstockinfo.com/',
         icons: [
+          {
+            src: 'icons/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable'
+          },
+          {
+            src: 'icons/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable'
+          },
           {
             src: 'icons/app.svg',
             sizes: 'any',
