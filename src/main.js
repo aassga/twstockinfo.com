@@ -10,6 +10,16 @@ import 'element-plus/dist/index.css';
 import '../legacy/css/style.css';
 import './styles/app.scss';
 
+const standaloneQuery = window.matchMedia?.('(display-mode: standalone)');
+
+function applyDisplayModeClasses() {
+  const isStandalone = Boolean(standaloneQuery?.matches || window.navigator.standalone);
+  document.documentElement.classList.toggle('is-standalone', isStandalone);
+}
+
+applyDisplayModeClasses();
+standaloneQuery?.addEventListener?.('change', applyDisplayModeClasses);
+
 const app = createApp(App);
 
 app.use(createPinia());

@@ -1,7 +1,41 @@
 /* Vue compatibility layer for the legacy visual system. */
 
+:root {
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --mobile-bottom-nav-base-height: 146px;
+  --mobile-bottom-nav-height: calc(var(--mobile-bottom-nav-base-height) + var(--app-safe-bottom));
+  --mobile-bottom-nav-space: var(--mobile-bottom-nav-height);
+}
+
+html,
+body {
+  min-height: 100%;
+  overscroll-behavior: none;
+}
+
 #app {
-  height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
+}
+
+.app,
+.main,
+.sidebar {
+  height: 100dvh;
+}
+
+.app {
+  background: var(--bg);
+}
+
+@supports not (height: 100dvh) {
+  #app,
+  .app,
+  .main,
+  .sidebar {
+    height: 100vh;
+  }
 }
 
 button {
@@ -458,21 +492,45 @@ button {
 
 @media (max-width: 640px) {
   :root {
-    --mobile-bottom-nav-space: 188px;
+    --mobile-bottom-nav-base-height: 146px;
   }
 
   html,
   body {
-    overflow: auto;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .app {
+    height: 100dvh;
+    min-height: 100dvh;
+    padding-top: var(--app-safe-top);
+  }
+
+  .main {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .topbar {
+    min-height: 56px;
+  }
+
+  :root.is-standalone .topbar {
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
   }
 
   .content {
-    padding-bottom: calc(var(--mobile-bottom-nav-space) + env(safe-area-inset-bottom));
-    scroll-padding-bottom: calc(var(--mobile-bottom-nav-space) + env(safe-area-inset-bottom));
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: calc(var(--mobile-bottom-nav-space) + 16px);
+    scroll-padding-bottom: var(--mobile-bottom-nav-space);
+    -webkit-overflow-scrolling: touch;
   }
 
   .mobile-content {
-    padding-bottom: calc(var(--mobile-bottom-nav-space) + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--mobile-bottom-nav-space) + 16px);
   }
 
   .page-title-row {
@@ -581,9 +639,9 @@ button {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
-    min-height: 146px;
+    min-height: var(--mobile-bottom-nav-height);
     box-sizing: border-box;
-    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    padding: 10px 10px calc(10px + var(--app-safe-bottom));
     background: rgba(22, 27, 39, 0.98);
     border-top: 1px solid var(--border);
     box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.28);
