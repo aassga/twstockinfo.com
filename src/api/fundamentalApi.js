@@ -78,7 +78,7 @@ export async function fetchFundamentalSnapshot(stock) {
   const cashFlow = summarizeCashFlow(cashFlowRows);
   const directorSummary = summarizeDirectors(directorRows.filter(row => codeOf(row) === code));
   const mergedCompany = mergeCompany(normalized, company, revenue, eps);
-  const calculated = calculateMetrics({ valuation, revenue, eps, income, balance, dividend, directorSummary, cashFlow });
+  const calculated = calculateMetrics({ stock: mergedCompany, valuation, revenue, eps, income, balance, dividend, directorSummary, cashFlow });
   const metrics = buildMetricRows(calculated);
   const score = calculateScore(calculated);
 
@@ -319,7 +319,7 @@ function averageRate(buy, sell) {
   return buyValue || sellValue || 0;
 }
 
-function calculateMetrics({ valuation, revenue, eps, income, balance, dividend, directorSummary, cashFlow }) {
+function calculateMetrics({ stock, valuation, revenue, eps, income, balance, dividend, directorSummary, cashFlow }) {
   const operatingRevenue = parseNumber(read(income, ['營業收入'])) || parseNumber(read(eps, ['營業收入']));
   const grossProfit = parseNumber(read(income, ['營業毛利（毛損）淨額', '營業毛利（毛損）']));
   const operatingIncome = parseNumber(read(income, ['營業利益（損失)'])) || parseNumber(read(income, ['營業利益（損失）'])) || parseNumber(read(eps, ['營業利益']));
@@ -329,9 +329,14 @@ function calculateMetrics({ valuation, revenue, eps, income, balance, dividend, 
   const totalEquity = parseNumber(read(balance, ['歸屬於母公司業主之權益合計', '權益總額', '權益總計']));
   const epsValue = parseNumber(read(eps, ['基本每股盈餘(元)'])) || parseNumber(read(income, ['基本每股盈餘（元）']));
   const cashDividend = parseNumber(read(dividend, ['股東配發-盈餘分配之現金股利(元/股)']));
+  const officialPe = parseNumber(read(valuation, ['PEratio', 'PriceEarningRatio']));
+  const estimatedPe = !officialPe && epsValue > 0 && Number(stock?.price || 0) > 0
+    ? Number((Number(stock.price) / epsValue).toFixed(2))
+    : 0;
 
   return {
-    pe: parseNumber(read(valuation, ['PEratio', 'PriceEarningRatio'])),
+    pe: officialPe || estimatedPe,
+    peSource: officialPe ? 'official' : estimatedPe ? 'estimated' : '',
     pb: parseNumber(read(valuation, ['PBratio', 'PriceBookRatio'])),
     dividendYield: parseNumber(read(valuation, ['DividendYield', 'YieldRatio'])),
     eps: epsValue,
@@ -374,7 +379,7 @@ function buildHighlights(stock, metrics) {
     {
       label: '本益比',
       value: formatPlain(metrics.pe, 2),
-      detail: metrics.dataDates.valuation ? `估值日期 ${metrics.dataDates.valuation}` : 'TWSE OpenAPI'
+      detail: peDetail(metrics)
     },
     {
       label: '殖利率',
@@ -392,6 +397,12 @@ function buildHighlights(stock, metrics) {
       detail: metrics.dataDates.revenue || '上市公司月營收'
     }
   ];
+}
+
+function peDetail(metrics) {
+  if (metrics.peSource === 'estimated') return '官方未提供，以股價/EPS估算';
+  if (metrics.dataDates.valuation) return `估值日期 ${metrics.dataDates.valuation}`;
+  return 'TWSE OpenAPI';
 }
 
 function buildMetricRows(metrics) {
