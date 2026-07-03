@@ -764,6 +764,7 @@ function parseHistockRankRow(html) {
   return {
     code,
     name,
+    exchange: OTC_CODE_SET.has(code.toUpperCase()) ? 'otc' : 'tse',
     price,
     prev,
     change,
@@ -835,7 +836,7 @@ async function enrichWithVolumeRatioCached(quote) {
 }
 
 async function enrichQuoteWithVolumeRatio(quote) {
-  const market = String(quote.exchange || '').toLowerCase() === 'otc' ? 'TWO' : 'TW';
+  const market = getYahooMarket(quote.code, quote.exchange);
   const avgVolume = await fetchAverageDailyVolume(quote.code, market, quote.date);
   if (avgVolume <= 0) return quote;
   return {
@@ -876,8 +877,9 @@ async function fetchYahooChart(code, interval, exchange = '') {
 }
 
 function getYahooMarket(code, exchange = '') {
-  if (String(exchange || '').toLowerCase() === 'otc') return 'TWO';
-  if (String(exchange || '').toLowerCase() === 'tse') return 'TW';
+  const normalizedExchange = String(exchange || '').toLowerCase();
+  if (['otc', 'tpex', 'two'].includes(normalizedExchange)) return 'TWO';
+  if (['tse', 'twse', 'tw'].includes(normalizedExchange)) return 'TW';
   return OTC_CODE_SET.has(String(code || '').trim().toUpperCase()) ? 'TWO' : 'TW';
 }
 

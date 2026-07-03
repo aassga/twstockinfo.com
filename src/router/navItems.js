@@ -5,6 +5,7 @@ import {
   IconBriefcase,
   IconBuildingBank,
   IconFlame,
+  IconReportAnalytics,
   IconSearch,
   IconSettings,
   IconStar,
@@ -20,6 +21,7 @@ export const navItems = [
   { path: '/chart', label: '走勢圖', icon: IconAdjustmentsHorizontal },
   { path: '/alerts', label: '買賣提醒', icon: IconBell },
   { path: '/institutional', label: '三大法人', icon: IconBuildingBank },
+  { path: '/fundamental', label: '基本面分析', icon: IconReportAnalytics },
   { path: '/ai', label: 'AI 分析', icon: IconBrain },
   { path: '/settings', label: '設定', icon: IconSettings, hidden: true }
 ];

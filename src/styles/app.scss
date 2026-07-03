@@ -47,6 +47,43 @@ button {
   text-decoration: none;
 }
 
+.quick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 18px;
+}
+
+.quick-btn,
+.quick-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.quick-btn:hover,
+.quick-btn:focus-visible,
+.quick-chip:hover,
+.quick-chip:focus-visible {
+  border-color: var(--blue);
+  background: var(--blue-bg);
+  color: var(--blue);
+  outline: none;
+}
+
 .nav-icon,
 .title-icon,
 .btn-icon,
@@ -468,6 +505,343 @@ button {
   margin-top: 16px;
 }
 
+.fundamental-view {
+  max-width: 1440px;
+}
+
+.fundamental-search {
+  margin-bottom: 12px;
+}
+
+.fundamental-candidates {
+  margin-bottom: 16px;
+}
+
+.fundamental-empty {
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fundamental-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.7fr) minmax(240px, 0.9fr);
+  gap: 0;
+  margin: 18px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-2);
+  overflow: hidden;
+}
+
+.fundamental-company,
+.fundamental-price,
+.fundamental-score {
+  min-width: 0;
+  min-height: 134px;
+  padding: 22px 24px;
+  border-right: 1px solid var(--border);
+}
+
+.fundamental-score {
+  border-right: 0;
+}
+
+.fundamental-code {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.fundamental-name {
+  margin-top: 8px;
+  color: var(--text-2);
+  font-size: 15px;
+}
+
+.sector-pill,
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 24px;
+  margin-top: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.fundamental-price {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.fundamental-price span {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.score-value {
+  color: var(--text-1);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.score-label {
+  margin-top: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.score-meter {
+  height: 7px;
+  margin-top: 16px;
+  border-radius: 999px;
+  background: var(--bg-4);
+  overflow: hidden;
+}
+
+.score-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+}
+
+.fundamental-score > span {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.fundamental-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.fundamental-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fundamental-tab.active,
+.fundamental-tab:hover {
+  border-color: var(--blue);
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+
+.fundamental-panel {
+  margin-top: 14px;
+}
+
+.fundamental-verdict {
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-2);
+  color: var(--text-1);
+  line-height: 1.7;
+}
+
+.fundamental-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.fundamental-card-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fundamental-card,
+.fundamental-metric,
+.statement-card,
+.qualitative-item {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-2);
+}
+
+.fundamental-card {
+  min-height: 112px;
+  padding: 16px 18px;
+}
+
+.fundamental-card-label,
+.metric-meaning,
+.metric-rule,
+.fundamental-card-detail,
+.statement-row small,
+.qualitative-item p {
+  color: var(--text-3);
+}
+
+.fundamental-card-value {
+  margin-top: 10px;
+  color: var(--text-1);
+  font-size: 22px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fundamental-card-detail {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.fundamental-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fundamental-metric {
+  padding: 15px 16px;
+}
+
+.metric-head,
+.qualitative-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.metric-head .status-pill,
+.qualitative-title .status-pill {
+  margin-top: 0;
+}
+
+.status-pill.pending {
+  color: #ffc457;
+  background: rgba(255, 196, 87, 0.12);
+}
+
+.status-pill.good {
+  color: var(--dn);
+  background: rgba(38, 208, 124, 0.14);
+}
+
+.status-pill.watch,
+.status-pill.neutral {
+  color: var(--blue);
+  background: var(--blue-bg);
+}
+
+.status-pill.risk {
+  color: var(--up);
+  background: rgba(242, 92, 92, 0.14);
+}
+
+.metric-value {
+  margin-top: 14px;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.metric-meaning,
+.metric-rule {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.statement-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.statement-card {
+  overflow: hidden;
+}
+
+.statement-title {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-1);
+  font-weight: 800;
+}
+
+.statement-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.statement-row:last-child {
+  border-bottom: 0;
+}
+
+.statement-row div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statement-row span:first-child {
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.statement-value {
+  color: var(--text-2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.qualitative-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.qualitative-item {
+  padding: 16px 18px;
+}
+
+.qualitative-item p {
+  margin-top: 12px;
+  line-height: 1.75;
+}
+
 .mobile-bottom-nav {
   display: none;
 }
@@ -479,6 +853,30 @@ button {
 
   .volume-overview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fundamental-hero,
+  .fundamental-card-grid,
+  .fundamental-metric-grid,
+  .statement-grid,
+  .qualitative-list {
+    grid-template-columns: 1fr;
+  }
+
+  .fundamental-card-grid.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .fundamental-company,
+  .fundamental-price,
+  .fundamental-score {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .fundamental-score {
+    border-bottom: 0;
   }
 
   .quote-metric-cell:nth-child(4n) {

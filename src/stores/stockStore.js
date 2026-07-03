@@ -5,6 +5,8 @@ import { getSector } from '../utils/stockMeta';
 
 export const useStockStore = defineStore('stocks', () => {
   const defaultHotSort = { key: 'volume', direction: 'desc' };
+  const volumeRatioRefreshMs = 30 * 60 * 1000;
+  const volumeRatioLimit = 100;
   const stockCodePattern = /\d{4,6}[a-z]?/i;
   const allStocks = ref([]);
   const currentStock = ref(null);
@@ -22,7 +24,9 @@ export const useStockStore = defineStore('stocks', () => {
   let hotFlashTimer = null;
   let allStocksRequest = null;
   let stockListRequest = null;
+  let volumeRatioRequest = null;
   let volumeRatioRequestId = 0;
+  let volumeRatioUpdatedAt = 0;
 
   const marketStats = computed(() => {
     const rows = allStocks.value;
@@ -61,10 +65,10 @@ export const useStockStore = defineStore('stocks', () => {
 
     allStocksRequest = stockApi.allStocks()
       .then(rows => {
-        const nextRows = rows.map(stock => enrichStock({
+        const nextRows = preserveVolumeRatios(rows.map(stock => enrichStock({
           ...stock,
           isRealtime: String(stock.source || '').startsWith('twse-mis')
-        }));
+        })));
         hotRealtimeCount.value = nextRows.filter(stock => stock.isRealtime).length;
         hotUpdatedAt.value = new Date().toISOString();
         markHotCellFlashes(allStocks.value, nextRows);
@@ -220,9 +224,27 @@ export const useStockStore = defineStore('stocks', () => {
     return '';
   }
 
-  async function refreshVolumeRatios(rows) {
+  async function refreshVolumeRatios(rows, { force = false } = {}) {
+    if (volumeRatioRequest) return volumeRatioRequest;
+
+    const targets = rows
+      .filter(stock => Number(stock.volume || 0) > 0)
+      .sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0))
+      .slice(0, volumeRatioLimit);
+
+    const now = Date.now();
+    const hasMissingRatio = targets.some(stock => !Number(stock.volRatio || 0));
+    if (!force && volumeRatioUpdatedAt && now - volumeRatioUpdatedAt < volumeRatioRefreshMs && !hasMissingRatio) return;
+    if (!targets.length) return;
+
     const requestId = ++volumeRatioRequestId;
-    const enrichedRows = await stockApi.volumeRatios(rows).catch(() => []);
+    volumeRatioRequest = stockApi.volumeRatios(targets)
+      .catch(() => [])
+      .finally(() => {
+        volumeRatioRequest = null;
+      });
+    const enrichedRows = await volumeRatioRequest;
+
     if (requestId !== volumeRatioRequestId || !enrichedRows.length) return;
 
     const enrichedByCode = new Map(enrichedRows.map(stock => [stock.code, stock]));
@@ -231,8 +253,22 @@ export const useStockStore = defineStore('stocks', () => {
       return enriched ? enrichStock({ ...stock, ...enriched }) : stock;
     });
 
+    volumeRatioUpdatedAt = Date.now();
     markHotCellFlashes(allStocks.value, nextRows);
     allStocks.value = nextRows;
+  }
+
+  function preserveVolumeRatios(nextRows) {
+    const previousByCode = new Map(allStocks.value.map(stock => [stock.code, stock]));
+    return nextRows.map(stock => {
+      const previous = previousByCode.get(stock.code);
+      if (!previous?.volRatio) return stock;
+      return {
+        ...stock,
+        volRatio: previous.volRatio,
+        avgVolume20: previous.avgVolume20
+      };
+    });
   }
 
   async function refreshStocksByCodes(codes) {

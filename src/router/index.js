@@ -3,6 +3,7 @@ import AiView from '../views/AiView.vue';
 import AlertsView from '../views/AlertsView.vue';
 import ChartView from '../views/ChartView.vue';
 import FavoritesView from '../views/FavoritesView.vue';
+import FundamentalView from '../views/FundamentalView.vue';
 import Hot100View from '../views/Hot100View.vue';
 import InstitutionalView from '../views/InstitutionalView.vue';
 import PortfolioView from '../views/PortfolioView.vue';
@@ -23,6 +24,7 @@ const routes = [
   { path: '/chart', component: ChartView, meta: { title: titleOf('/chart') } },
   { path: '/alerts', component: AlertsView, meta: { title: titleOf('/alerts') } },
   { path: '/institutional', component: InstitutionalView, meta: { title: titleOf('/institutional') } },
+  { path: '/fundamental', component: FundamentalView, meta: { title: titleOf('/fundamental') } },
   { path: '/ai', component: AiView, meta: { title: titleOf('/ai') } },
   { path: '/settings', component: SettingsView, meta: { title: titleOf('/settings') } }
 ];

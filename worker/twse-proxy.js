@@ -46,12 +46,27 @@ const YAHOO_HEADERS = {
   'Accept':     'application/json, text/plain, */*',
 };
 
+const FINMIND_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+  'Accept':     'application/json, text/plain, */*',
+};
+
 const TPEX_HEADERS = {
-  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-  'Referer':         'https://www.tpex.org.tw/',
+  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Referer':         'https://www.tpex.org.tw/openapi/',
   'Accept':          'application/json, text/plain, */*',
   'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Cache-Control':   'no-cache',
+  'Pragma':          'no-cache',
 };
+
+const TPEX_RETRY_HEADERS = {
+  'User-Agent':      'curl/8.0',
+  'Accept':          'application/json',
+  'Accept-Language': 'zh-TW,zh;q=0.9',
+};
+
+const TPEX_READER_CACHE_SECONDS = 10 * 60;
 
 const HISTOCK_HEADERS = {
   'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
@@ -75,6 +90,7 @@ const ALLOWED_UPSTREAM = [
   'www.tpex.org.tw',
   'www.sinotrade.com.tw',
   'query1.finance.yahoo.com',
+  'api.finmindtrade.com',
   'histock.tw',
 ];
 
@@ -108,12 +124,47 @@ export default {
           twseRwd: true,
           twseMis: true,
           tpex: true,
+          tpexReaderFallback: true,
+          finmind: true,
           histock: true,
           sinotrade: true,
           yahooChart: true,
           claude: true,
         },
       });
+    }
+
+    // ── Route: /tpex-test → diagnostics for Cloudflare Worker to TPEX fetch ──
+    if (route === '/tpex-test') {
+      const upstream = 'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_peratio_analysis';
+      const startedAt = Date.now();
+      try {
+        const resp = await fetch(upstream, {
+          headers: TPEX_HEADERS,
+          redirect: 'manual',
+          cf: { cacheTtl: 0, cacheEverything: false },
+        });
+        const body = await resp.text();
+        return jsonResp({
+          ok: resp.ok,
+          upstream,
+          status: resp.status,
+          statusText: resp.statusText,
+          location: resp.headers.get('Location'),
+          contentType: resp.headers.get('Content-Type'),
+          contentLength: body.length,
+          sample: body.slice(0, 160),
+          elapsedMs: Date.now() - startedAt,
+        }, resp.ok ? 200 : 502);
+      } catch (e) {
+        return jsonResp({
+          ok: false,
+          upstream,
+          errorName: e?.name || '',
+          errorMessage: e?.message || String(e),
+          elapsedMs: Date.now() - startedAt,
+        }, 502);
+      }
     }
 
     // ── Route: /twse/*  → openapi.twse.com.tw ──
@@ -143,11 +194,52 @@ export default {
       return proxyFetch(upstream, YAHOO_HEADERS);
     }
 
+    // ── Route: /finmind/*  → api.finmindtrade.com/* ──
+    if (route.startsWith('/finmind/')) {
+      const path = route.replace('/finmind', '');
+      const upstream = `https://api.finmindtrade.com${path}${params}`;
+      return proxyFetch(upstream, FINMIND_HEADERS);
+    }
+
     // ── Route: /tpex/*  → www.tpex.org.tw/* ──
+    if (route.startsWith('/tpex/openapi/v1/')) {
+      const upstream = `https://www.tpex.org.tw${route.replace('/tpex', '')}`;
+      try {
+        const resp = await fetch(upstream, {
+          headers: TPEX_HEADERS,
+          redirect: 'manual',
+          cf: { cacheTtl: 0, cacheEverything: false },
+        });
+        const body = await resp.text();
+
+        if (resp.ok) {
+          return new Response(body, {
+            status: resp.status,
+            headers: {
+              'Content-Type': resp.headers.get('Content-Type') || 'application/json; charset=utf-8',
+              ...CORS_HEADERS,
+            },
+          });
+        }
+
+        return proxyTpexReaderFetch(upstream, {
+          status: resp.status,
+          statusText: resp.statusText,
+          location: resp.headers.get('Location') || '',
+          body: body.slice(0, 300),
+        });
+      } catch (e) {
+        return proxyTpexReaderFetch(upstream, {
+          error: e?.message || String(e),
+          errorName: e?.name || '',
+        });
+      }
+    }
+
     if (route.startsWith('/tpex/')) {
       const path = route.replace('/tpex', '');
       const upstream = `https://www.tpex.org.tw${path}${params}`;
-      return proxyFetch(upstream, TPEX_HEADERS);
+      return proxyTpexFetch(upstream);
     }
 
     // ── Route: /histock/*  → histock.tw/* ──
@@ -197,14 +289,24 @@ export default {
   }
 };
 
-async function proxyFetch(upstream, headers = TWSE_HEADERS, fallbackContentType = 'application/json; charset=utf-8', retryHeaders = []) {
+async function proxyFetch(
+  upstream,
+  headers = TWSE_HEADERS,
+  fallbackContentType = 'application/json; charset=utf-8',
+  retryHeaders = [],
+  redirect = 'manual'
+) {
   try {
     const attempts = [headers, ...retryHeaders];
     let lastResp = null;
     let lastBody = '';
 
     for (const attemptHeaders of attempts) {
-      const resp = await fetch(upstream, { headers: attemptHeaders });
+      const resp = await fetch(upstream, {
+        headers: attemptHeaders,
+        redirect,
+        cf: { cacheTtl: 0, cacheEverything: false },
+      });
       const body = await resp.text();
       lastResp = resp;
       lastBody = body;
@@ -219,7 +321,144 @@ async function proxyFetch(upstream, headers = TWSE_HEADERS, fallbackContentType 
       },
     });
   } catch (e) {
-    return jsonResp({ error: e.message }, 502);
+    return jsonResp({
+      error: e?.message || String(e),
+      errorName: e?.name || '',
+      upstream,
+    }, 502);
+  }
+}
+
+async function proxyTpexFetch(upstream) {
+  const attempts = [TPEX_HEADERS, TPEX_RETRY_HEADERS];
+  let lastStatus = 502;
+  let lastStatusText = '';
+  let lastLocation = '';
+  let lastBody = '';
+  let lastContentType = 'application/json; charset=utf-8';
+
+  for (const headers of attempts) {
+    try {
+      const resp = await fetch(upstream, {
+        headers,
+        redirect: 'manual',
+        cf: { cacheTtl: 0, cacheEverything: false },
+      });
+      const body = await resp.text();
+      lastStatus = resp.status;
+      lastStatusText = resp.statusText;
+      lastLocation = resp.headers.get('Location') || '';
+      lastBody = body;
+      lastContentType = resp.headers.get('Content-Type') || lastContentType;
+
+      if (resp.ok) {
+        return new Response(body, {
+          status: resp.status,
+          headers: { 'Content-Type': lastContentType, ...CORS_HEADERS },
+        });
+      }
+    } catch (e) {
+      lastBody = JSON.stringify({
+        error: e?.message || String(e),
+        errorName: e?.name || '',
+        upstream,
+      });
+      lastStatusText = e?.name || '';
+    }
+  }
+
+  return jsonResp({
+    error: 'TPEX upstream request failed',
+    upstream,
+    status: lastStatus,
+    statusText: lastStatusText,
+    location: lastLocation,
+    body: lastBody.slice(0, 300),
+  }, 502);
+}
+
+async function proxyTpexReaderFetch(upstream, directFailure = {}) {
+  const cache = caches.default;
+  const cacheKey = new Request(`https://worker-cache.local/tpex-reader/${encodeURIComponent(upstream)}`);
+  const cached = await cache.match(cacheKey);
+
+  if (cached) return cached;
+
+  const readerUrls = [
+    `https://r.jina.ai/http://r.jina.ai/http://${upstream}`,
+    `https://r.jina.ai/http://${upstream}`,
+  ];
+  let lastReaderFailure = null;
+
+  for (const readerUrl of readerUrls) {
+    try {
+    const resp = await fetch(readerUrl, {
+      headers: {
+        'User-Agent': TPEX_HEADERS['User-Agent'],
+        'Accept': 'text/plain, */*',
+      },
+      cf: { cacheTtl: 600, cacheEverything: true },
+    });
+    const text = await resp.text();
+    const jsonText = extractReaderJson(text);
+
+    if (resp.ok && jsonText) {
+      const response = new Response(jsonText, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': `public, max-age=${TPEX_READER_CACHE_SECONDS}`,
+          'X-TPEX-Source': 'jina-reader-fallback',
+          ...CORS_HEADERS,
+        },
+      });
+      await cache.put(cacheKey, response.clone());
+      return response;
+    }
+
+      lastReaderFailure = {
+      readerStatus: resp.status,
+      readerStatusText: resp.statusText,
+      readerSample: text.slice(0, 300),
+      readerUrl,
+      };
+    } catch (e) {
+      lastReaderFailure = {
+        error: e?.message || String(e),
+        errorName: e?.name || '',
+        readerUrl,
+      };
+    }
+  }
+
+  return jsonResp({
+    error: 'TPEX reader fallback failed',
+    upstream,
+    directFailure,
+    readerFailure: lastReaderFailure,
+  }, 502);
+}
+
+function extractReaderJson(text) {
+  const source = String(text || '');
+  const marker = 'Markdown Content:';
+  const markerIndex = source.indexOf(marker);
+  const content = markerIndex >= 0 ? source.slice(markerIndex + marker.length) : source;
+  const arrayIndex = content.indexOf('[');
+  const objectIndex = content.indexOf('{');
+  const candidates = [arrayIndex, objectIndex].filter(index => index >= 0);
+
+  if (!candidates.length) return '';
+
+  const start = Math.min(...candidates);
+  let json = content.slice(start).trim();
+  json = json.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+
+  try {
+    JSON.parse(json);
+    return json;
+  } catch (_e) {
+    return '';
   }
 }
 
