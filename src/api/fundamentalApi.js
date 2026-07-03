@@ -67,35 +67,109 @@ export async function fetchFundamentalSnapshot(stock) {
     fetchCashFlowRows(code),
     fetchMacroSnapshot()
   ]);
-  const valuation = findByCode(valuationRows, code, ['Code']);
-  const revenue = findByCode(revenueRows, code);
-  const eps = findByCode(epsRows, code);
-  const company = findByCode(companyRows, code);
-  const dividend = findByCode(dividendRows, code);
-  const chairman = findByCode(chairmanRows, code);
-  const income = findByCode(incomeRows, code);
-  const balance = findByCode(balanceRows, code);
-  const cashFlow = summarizeCashFlow(cashFlowRows);
-  const directorSummary = summarizeDirectors(directorRows.filter(row => codeOf(row) === code));
+
+  return composeFundamentalSnapshot(normalized, {
+    valuationRows,
+    revenueRows,
+    epsRows,
+    companyRows,
+    dividendRows,
+    chairmanRows,
+    directorRows,
+    incomeRows,
+    balanceRows,
+    cashFlowRows,
+    macro,
+    stage: 'complete'
+  });
+}
+
+export async function fetchFundamentalSnapshotPhased(stock, onUpdate = () => {}) {
+  const normalized = normalizeStock(stock);
+  const endpoints = fundamentalEndpointsFor(normalized);
+  const rows = {};
+
+  onUpdate(composeFundamentalSnapshot(normalized, {
+    ...rows,
+    stage: 'quote'
+  }));
+
+  const [valuationRows, revenueRows, epsRows, companyRows] = await Promise.all([
+    fetchManyRows(endpoints.valuation),
+    fetchManyRows(endpoints.revenue),
+    fetchManyRows(endpoints.eps),
+    fetchManyRows(endpoints.company)
+  ]);
+  Object.assign(rows, { valuationRows, revenueRows, epsRows, companyRows });
+  onUpdate(composeFundamentalSnapshot(normalized, {
+    ...rows,
+    stage: 'overview'
+  }));
+
+  const code = normalized.code;
+  const [incomeRows, balanceRows, cashFlowRows] = await Promise.all([
+    fetchFirstRowsContainingCode(endpoints.income, code),
+    fetchFirstRowsContainingCode(endpoints.balance, code),
+    fetchCashFlowRows(code)
+  ]);
+  Object.assign(rows, { incomeRows, balanceRows, cashFlowRows });
+  onUpdate(composeFundamentalSnapshot(normalized, {
+    ...rows,
+    stage: 'statements'
+  }));
+
+  const [dividendRows, chairmanRows, directorRows, macro] = await Promise.all([
+    fetchManyRows(endpoints.dividend),
+    fetchManyRows(endpoints.chairman),
+    fetchManyRows(endpoints.director),
+    fetchMacroSnapshot()
+  ]);
+  Object.assign(rows, { dividendRows, chairmanRows, directorRows, macro });
+
+  const finalSnapshot = composeFundamentalSnapshot(normalized, {
+    ...rows,
+    stage: 'complete'
+  });
+  onUpdate(finalSnapshot);
+  return finalSnapshot;
+}
+
+function composeFundamentalSnapshot(normalized, rows = {}) {
+  const code = normalized.code;
+  const valuation = findByCode(rows.valuationRows || [], code, ['Code']);
+  const revenue = findByCode(rows.revenueRows || [], code);
+  const eps = findByCode(rows.epsRows || [], code);
+  const company = findByCode(rows.companyRows || [], code);
+  const dividend = findByCode(rows.dividendRows || [], code);
+  const chairman = findByCode(rows.chairmanRows || [], code);
+  const income = findByCode(rows.incomeRows || [], code);
+  const balance = findByCode(rows.balanceRows || [], code);
+  const cashFlow = summarizeCashFlow(rows.cashFlowRows || []);
+  const directorSummary = summarizeDirectors((rows.directorRows || []).filter(row => codeOf(row) === code));
   const mergedCompany = mergeCompany(normalized, company, revenue, eps);
   const calculated = calculateMetrics({ stock: mergedCompany, valuation, revenue, eps, income, balance, dividend, directorSummary, cashFlow });
   const metrics = buildMetricRows(calculated);
   const score = calculateScore(calculated);
+  const stage = rows.stage || 'complete';
 
   return {
     updatedAt: new Date().toISOString(),
+    loadingStage: stage,
+    isPartial: stage !== 'complete',
     company: mergedCompany,
     period: buildPeriod(income, balance, revenue, cashFlow),
     source: 'TWSE/TPEX OpenAPI + FinMind',
     score,
-    scoreLabel: scoreLabel(score),
-    dataCompleteness: dataCompleteness({ valuation, revenue, eps, company, dividend, chairman, directorSummary, income, balance, cashFlow, macro }),
-    verdict: buildVerdict(mergedCompany, calculated, score),
+    scoreLabel: stage === 'quote' ? '載入中' : scoreLabel(score),
+    dataCompleteness: dataCompleteness({ valuation, revenue, eps, company, dividend, chairman, directorSummary, income, balance, cashFlow, macro: rows.macro }),
+    verdict: stage === 'quote'
+      ? `${mergedCompany.code} ${mergedCompany.name || ''} 即時報價已載入，正在取得估值、營收與財報資料。`
+      : buildVerdict(mergedCompany, calculated, score),
     highlights: buildHighlights(mergedCompany, calculated),
     metrics,
     statements: buildStatementSections({ income, balance, cashFlow, calculated }),
-    qualitative: buildQualitativeRows(mergedCompany, { chairman, directorSummary, revenue, dividend, macro }),
-    aiConclusion: buildAiConclusion(mergedCompany, calculated, score, macro)
+    qualitative: buildQualitativeRows(mergedCompany, { chairman, directorSummary, revenue, dividend, macro: rows.macro }),
+    aiConclusion: buildAiConclusion(mergedCompany, calculated, score, rows.macro)
   };
 }
 

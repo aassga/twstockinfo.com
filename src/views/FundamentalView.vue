@@ -10,7 +10,7 @@ import {
   IconShieldCheck,
   IconTable
 } from '@tabler/icons-vue';
-import { fetchFundamentalSnapshot } from '../api/fundamentalApi';
+import { fetchFundamentalSnapshotPhased } from '../api/fundamentalApi';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
 import { quickStocks } from '../utils/stockMeta';
@@ -26,6 +26,7 @@ const showCandidates = ref(false);
 const candidateLimit = 20;
 const stockCodePattern = /^\d{4,6}[a-z]?$/i;
 let candidateTimer = null;
+let searchRunId = 0;
 
 const tabs = [
   { key: 'overview', label: '總覽', icon: IconReportAnalytics },
@@ -37,6 +38,14 @@ const tabs = [
 
 const company = computed(() => snapshot.value?.company || null);
 const changeClass = computed(() => moveClass(company.value?.chgPct).replace('is-', ''));
+const loadingStageText = computed(() => {
+  if (!loading.value || !snapshot.value?.isPartial) return '';
+  const stage = snapshot.value.loadingStage;
+  if (stage === 'quote') return '即時報價已載入，正在取得估值與營收資料...';
+  if (stage === 'overview') return '估值與營收已載入，正在取得三大財報與現金流...';
+  if (stage === 'statements') return '三大財報已載入，正在補齊治理、股利與總體資料...';
+  return '資料載入中...';
+});
 
 watch(query, value => {
   clearTimeout(candidateTimer);
@@ -75,19 +84,26 @@ async function submit(value = query.value) {
 }
 
 async function runSearch(code) {
+  const runId = ++searchRunId;
   loading.value = true;
   error.value = '';
   showCandidates.value = false;
 
   try {
     const stock = await stockStore.searchStock(code);
+    if (runId !== searchRunId) return;
     query.value = stock.code;
-    snapshot.value = await fetchFundamentalSnapshot(stock);
     activeTab.value = 'overview';
+    snapshot.value = null;
+    await fetchFundamentalSnapshotPhased(stock, nextSnapshot => {
+      if (runId !== searchRunId) return;
+      snapshot.value = nextSnapshot;
+    });
   } catch (err) {
+    if (runId !== searchRunId) return;
     error.value = err?.message || '基本面資料讀取失敗';
   } finally {
-    loading.value = false;
+    if (runId === searchRunId) loading.value = false;
   }
 }
 
@@ -196,6 +212,11 @@ function statusText(status) {
       <div class="table-hint">
         <IconInfoCircle class="inline-icon" :stroke-width="2" />
         基本面頁面偏長期投資判斷；即時價量訊號仍建議回到股票搜尋或前100熱門觀察。
+      </div>
+
+      <div v-if="loadingStageText" class="table-hint fundamental-loading-hint">
+        <IconInfoCircle class="inline-icon" :stroke-width="2" />
+        {{ loadingStageText }}
       </div>
 
       <div class="fundamental-tabs">

@@ -634,6 +634,12 @@ button {
   scrollbar-width: thin;
 }
 
+.fundamental-loading-hint {
+  border-color: rgba(73, 159, 255, 0.35);
+  background: rgba(73, 159, 255, 0.08);
+  color: var(--blue);
+}
+
 .fundamental-tab {
   display: inline-flex;
   align-items: center;
