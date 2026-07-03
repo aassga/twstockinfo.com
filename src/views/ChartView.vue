@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { showToast } from 'vant';
 import { IconChartCandle, IconSearch } from '@tabler/icons-vue';
 import StockChart from '../components/StockChart.vue';
@@ -14,6 +14,9 @@ const intervals = [
   { label: '4時', value: '240' },
   { label: '1日', value: 'D' }
 ];
+const currentIntervalLabel = computed(() =>
+  intervals.find(item => item.value === chartStore.interval)?.label || chartStore.interval
+);
 
 watch(() => chartStore.stock, stock => {
   if (stock?.code) query.value = stock.code;
@@ -41,7 +44,7 @@ async function search() {
             <span>{{ chartStore.stock ? `${chartStore.stock.code} ${chartStore.stock.name}` : '股票走勢圖' }}</span>
           </div>
           <div class="chart-subtitle">
-            {{ chartStore.stock ? `目前週期：${chartStore.interval}` : '請從股票列表選擇一檔股票' }}
+            {{ chartStore.stock ? `目前週期：${currentIntervalLabel}` : '請從股票列表選擇一檔股票' }}
           </div>
         </div>
         <div class="chart-controls">

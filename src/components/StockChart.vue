@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { formatChartTime, formatNumber } from '../utils/formatters';
 
 const props = defineProps({
@@ -21,6 +21,8 @@ const props = defineProps({
   }
 });
 
+const canvasEl = ref(null);
+const selectedIndex = ref(-1);
 let canvas;
 let resizeObserver;
 const hover = {
@@ -29,8 +31,14 @@ const hover = {
   y: 0
 };
 
+const selectedCandle = computed(() => {
+  if (!props.candles.length) return null;
+  const index = selectedIndex.value >= 0 ? selectedIndex.value : props.candles.length - 1;
+  return props.candles[Math.min(Math.max(index, 0), props.candles.length - 1)];
+});
+
 onMounted(() => {
-  canvas = document.querySelector('[data-stock-chart]');
+  canvas = canvasEl.value;
   resizeObserver = new ResizeObserver(draw);
   resizeObserver.observe(canvas.parentElement);
   draw();
@@ -42,7 +50,22 @@ onBeforeUnmount(() => {
 
 watch(() => [props.candles, props.interval, props.loading, props.error], () => nextTick(draw), { deep: true });
 
+function handlePointerDown(event) {
+  event.preventDefault();
+  canvas?.setPointerCapture?.(event.pointerId);
+  updateHover(event);
+}
+
 function handlePointerMove(event) {
+  if (event.pointerType !== 'mouse' || event.buttons) event.preventDefault();
+  updateHover(event);
+}
+
+function handlePointerUp(event) {
+  canvas?.releasePointerCapture?.(event.pointerId);
+}
+
+function updateHover(event) {
   if (!canvas) return;
   const rect = canvas.getBoundingClientRect();
   hover.active = true;
@@ -51,7 +74,8 @@ function handlePointerMove(event) {
   draw();
 }
 
-function handlePointerLeave() {
+function handlePointerLeave(event) {
+  if (event.pointerType !== 'mouse') return;
   hover.active = false;
   draw();
 }
@@ -100,6 +124,8 @@ function draw() {
   const yVolume = value => volumeTop + layout.volumeHeight - (value / volumeMax) * layout.volumeHeight;
 
   drawGrid(ctx, layout, width, height, min, max, volumeTop);
+  const activeIndex = hover.active ? nearestCandleIndex(layout, step) : -1;
+  selectedIndex.value = activeIndex;
 
   props.candles.forEach((row, index) => {
     const x = layout.left + index * step + step / 2;
@@ -194,10 +220,7 @@ function drawHover(ctx, layout, width, height, min, max, step, volumeTop) {
   const x = Math.min(Math.max(hover.x, plotLeft), plotRight);
   const y = Math.min(Math.max(hover.y, priceTop), priceBottom);
   const price = max - ((y - layout.top) / layout.priceHeight) * (max - min);
-  const nearestIndex = Math.min(
-    props.candles.length - 1,
-    Math.max(0, Math.round((x - layout.left - step / 2) / step))
-  );
+  const nearestIndex = nearestCandleIndex(layout, step);
   const row = props.candles[nearestIndex];
   const candleX = layout.left + nearestIndex * step + step / 2;
 
@@ -235,7 +258,7 @@ function drawHover(ctx, layout, width, height, min, max, step, volumeTop) {
   ctx.font = '12px system-ui, sans-serif';
   const infoWidth = Math.min(ctx.measureText(info).width + 18, plotRight - layout.left);
   const infoX = Math.min(Math.max(candleX - infoWidth / 2, layout.left), plotRight - infoWidth);
-  const infoY = height - layout.bottom - 30;
+  const infoY = layout.top + 8;
   roundRect(ctx, infoX, infoY, infoWidth, 24, 6);
   ctx.fillStyle = 'rgba(21, 26, 37, 0.92)';
   ctx.fill();
@@ -268,15 +291,70 @@ function drawMessage(ctx, width, height, message) {
   ctx.fillText(message, width / 2, height / 2);
   ctx.textAlign = 'left';
 }
+
+function nearestCandleIndex(layout, step) {
+  return Math.min(
+    props.candles.length - 1,
+    Math.max(0, Math.round((hover.x - layout.left - step / 2) / step))
+  );
+}
+
+function formatChartVolume(value) {
+  const number = Number(value || 0);
+  if (number >= 100000000) return `${formatNumber(number / 100000000, 2)}億`;
+  if (number >= 10000) return `${formatNumber(number / 10000, 1)}萬`;
+  return formatNumber(number);
+}
+
+function formatReadoutTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '--';
+  const options = props.interval === 'D'
+    ? { year: 'numeric', month: '2-digit', day: '2-digit' }
+    : { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+  return date.toLocaleString('zh-TW', options);
+}
 </script>
 
 <template>
   <div class="stock-chart-frame">
-    <canvas
-      data-stock-chart
-      aria-label="股票走勢圖"
-      @pointermove="handlePointerMove"
-      @pointerleave="handlePointerLeave"
-    ></canvas>
+    <div v-if="selectedCandle" class="mobile-chart-readout">
+      <div>
+        <span class="readout-label">時間</span>
+        <strong>{{ formatReadoutTime(selectedCandle.time) }}</strong>
+      </div>
+      <div>
+        <span class="readout-label">開</span>
+        <strong>{{ formatNumber(selectedCandle.open, 2) }}</strong>
+      </div>
+      <div>
+        <span class="readout-label">高</span>
+        <strong>{{ formatNumber(selectedCandle.high, 2) }}</strong>
+      </div>
+      <div>
+        <span class="readout-label">低</span>
+        <strong>{{ formatNumber(selectedCandle.low, 2) }}</strong>
+      </div>
+      <div>
+        <span class="readout-label">收</span>
+        <strong>{{ formatNumber(selectedCandle.close, 2) }}</strong>
+      </div>
+      <div>
+        <span class="readout-label">量</span>
+        <strong>{{ formatChartVolume(selectedCandle.volume) }}</strong>
+      </div>
+    </div>
+    <div class="stock-chart-canvas">
+      <canvas
+        ref="canvasEl"
+        data-stock-chart
+        aria-label="股票走勢圖"
+        @pointerdown="handlePointerDown"
+        @pointermove="handlePointerMove"
+        @pointerup="handlePointerUp"
+        @pointercancel="handlePointerUp"
+        @pointerleave="handlePointerLeave"
+      ></canvas>
+    </div>
   </div>
 </template>
