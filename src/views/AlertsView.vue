@@ -55,6 +55,7 @@ async function openChart(stock) {
             <div>
               <div class="alert-stock-name">{{ stock.code }} {{ stock.name }}</div>
               <div class="alert-detail">{{ stock.sector }} · {{ formatPct(stock.chgPct) }}</div>
+              <div class="alert-detail">{{ stock.forceSourceLabel || 'TWSE MIS 五檔委買/委賣量' }}</div>
             </div>
             <div class="alert-right">
               <div class="alert-pct buy">{{ Math.round(stock.buyPct) }}%</div>
@@ -77,6 +78,7 @@ async function openChart(stock) {
             <div>
               <div class="alert-stock-name">{{ stock.code }} {{ stock.name }}</div>
               <div class="alert-detail">{{ stock.sector }} · {{ formatPct(stock.chgPct) }}</div>
+              <div class="alert-detail">{{ stock.forceSourceLabel || 'TWSE MIS 五檔委買/委賣量' }}</div>
             </div>
             <div class="alert-right">
               <div class="alert-pct sell">{{ Math.round(stock.sellPct) }}%</div>
@@ -90,7 +92,7 @@ async function openChart(stock) {
 
     <div class="table-hint">
       <IconInfoCircle class="inline-icon" :stroke-width="2" />
-      點擊股票名稱可以看走勢圖
+      買賣提醒僅採用 TWSE MIS 五檔委買/委賣量計算；HiStock/Yahoo 推估資料不列入提醒。
     </div>
 
     <div class="table-footer" style="margin-top:1.5rem">

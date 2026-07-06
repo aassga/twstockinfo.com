@@ -103,6 +103,20 @@ button {
   color: var(--blue);
 }
 
+.page-title {
+  min-height: 32px;
+  line-height: 2;
+}
+
+.page-title-row {
+  min-height: 32px;
+  margin-bottom: 20px;
+}
+
+.page-title-row .page-title {
+  margin-bottom: 0;
+}
+
 .table-hint .inline-icon,
 .ai-box-header .inline-icon {
   color: var(--blue);

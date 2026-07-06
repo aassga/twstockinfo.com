@@ -331,6 +331,9 @@ async function fetchYahooFallbackQuoteBySymbol(code, market) {
     amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
     buyPct: chgPct >= 0 ? 60 : 40,
     sellPct: chgPct >= 0 ? 40 : 60,
+    forceSource: 'yahoo-inferred',
+    forceSourceLabel: 'Yahoo 價格推估',
+    forceReliable: false,
     volRatio: null,
     source: 'yahoo-fallback'
   };
@@ -465,6 +468,9 @@ function parseMisQuoteItem(item) {
     amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
     buyPct,
     sellPct: 100 - buyPct,
+    forceSource: 'twse-mis-book',
+    forceSourceLabel: 'TWSE MIS 五檔委買/委賣量',
+    forceReliable: bidTotal + askTotal > 0,
     volRatio: null,
     time: item.t || item.ot || '',
     date: item.d || '',
@@ -776,6 +782,9 @@ function parseHistockRankRow(html) {
     amountHundredMillion: parseNumber(cells[12]),
     buyPct: chgPct > 0 ? Math.min(80, 50 + Math.abs(chgPct) * 3) : Math.max(20, 50 - Math.abs(chgPct) * 3),
     sellPct: chgPct > 0 ? Math.max(20, 50 - Math.abs(chgPct) * 3) : Math.min(80, 50 + Math.abs(chgPct) * 3),
+    forceSource: 'histock-inferred',
+    forceSourceLabel: 'HiStock 漲跌推估',
+    forceReliable: false,
     volRatio: null,
     source: 'histock-rank'
   };

@@ -1,21 +1,30 @@
+const BUY_SIGNAL_THRESHOLD = 70;
+const SELL_SIGNAL_THRESHOLD = 65;
+
 export function getBuySignals(stocks = []) {
   return stocks
-    .filter(stock => stock.chgPct > 1.2 && stock.buyPct >= 58)
+    .filter(stock => isReliableForce(stock) && stock.buyPct >= BUY_SIGNAL_THRESHOLD)
+    .sort((a, b) => Number(b.buyPct || 0) - Number(a.buyPct || 0))
     .slice(0, 12)
     .map(stock => ({
       ...stock,
-      reason: `漲幅 ${stock.chgPct.toFixed(2)}%，買盤 ${Math.round(stock.buyPct)}%`
+      reason: `買入佔比 ${Math.round(stock.buyPct)}%，來源：${stock.forceSourceLabel || 'TWSE MIS'}`
     }));
 }
 
 export function getSellSignals(stocks = []) {
   return stocks
-    .filter(stock => stock.chgPct < -1.2 || stock.sellPct >= 62)
+    .filter(stock => isReliableForce(stock) && stock.sellPct >= SELL_SIGNAL_THRESHOLD)
+    .sort((a, b) => Number(b.sellPct || 0) - Number(a.sellPct || 0))
     .slice(0, 12)
     .map(stock => ({
       ...stock,
-      reason: `跌幅 ${stock.chgPct.toFixed(2)}%，賣盤 ${Math.round(stock.sellPct)}%`
+      reason: `賣出佔比 ${Math.round(stock.sellPct)}%，來源：${stock.forceSourceLabel || 'TWSE MIS'}`
     }));
+}
+
+function isReliableForce(stock) {
+  return stock?.forceReliable === true && String(stock?.forceSource || '') === 'twse-mis-book';
 }
 
 export function buildMarketAnalysis({ market, marketStats, hotStocks, portfolioSummary, institutionalTotal }) {

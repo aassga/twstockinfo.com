@@ -363,6 +363,9 @@ export const useStockStore = defineStore('stocks', () => {
       sector: stock.sector || getSector(stock.code),
       buyPct,
       sellPct,
+      forceSource: stock.forceSource || '',
+      forceSourceLabel: stock.forceSourceLabel || '',
+      forceReliable: stock.forceReliable === true,
       volRatio: normalizeOptionalNumber(stock.volRatio)
     };
   }
