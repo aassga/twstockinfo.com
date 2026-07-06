@@ -38,12 +38,17 @@ export const usePortfolioStore = defineStore('portfolio', () => {
 
   function saveHolding(payload) {
     const now = new Date().toISOString();
-    const id = payload.id || createId();
+    const code = normalizeCode(payload.code);
+    const duplicateIndex = !payload.id
+      ? holdings.value.findIndex(holding => holding.code === code)
+      : -1;
+    const duplicate = duplicateIndex >= 0 ? holdings.value[duplicateIndex] : null;
+    const id = payload.id || duplicate?.id || createId();
     const previous = holdings.value.find(holding => holding.id === id);
     const holding = {
       ...previous,
       id,
-      code: String(payload.code || '').trim().padStart(4, '0'),
+      code,
       name: String(payload.name || '').trim(),
       buyPrice: Number(payload.buyPrice || 0),
       shares: Number(payload.shares || 0),
@@ -55,6 +60,28 @@ export const usePortfolioStore = defineStore('portfolio', () => {
 
     if (!holding.code || !holding.name || holding.buyPrice <= 0 || holding.shares <= 0) {
       throw new Error('持股資料不完整');
+    }
+
+    if (duplicate) {
+      const existingShares = Number(duplicate.shares || 0);
+      const addedShares = Number(holding.shares || 0);
+      const totalShares = existingShares + addedShares;
+      const totalCost = (Number(duplicate.buyPrice || 0) * existingShares) + (Number(holding.buyPrice || 0) * addedShares);
+      const mergedHolding = {
+        ...duplicate,
+        name: holding.name || duplicate.name,
+        buyPrice: Number((totalCost / totalShares).toFixed(2)),
+        shares: totalShares,
+        buyDate: holding.buyDate || duplicate.buyDate,
+        currentPrice: Number(duplicate.currentPrice || holding.currentPrice || 0),
+        updatedAt: duplicate.updatedAt || holding.updatedAt,
+        createdAt: duplicate.createdAt || holding.createdAt
+      };
+
+      holdings.value[duplicateIndex] = mergedHolding;
+      persist();
+      draft.value = null;
+      return mergedHolding;
     }
 
     const index = holdings.value.findIndex(item => item.id === id);

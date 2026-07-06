@@ -499,7 +499,8 @@ async function lookupHoldingNameByCode() {
 async function saveHolding(event) {
   event.preventDefault();
 
-  const id = document.getElementById('holdingId').value || createHoldingId();
+  const formId = document.getElementById('holdingId').value;
+  const id = formId || createHoldingId();
   const holding = {
     id,
     code: document.getElementById('holdingCode').value.trim(),
@@ -518,15 +519,23 @@ async function saveHolding(event) {
     return;
   }
 
-  const existingIndex = portfolioHoldings.findIndex(item => item.id === id);
+  const normalizedCode = holding.code.padStart(4, '0');
+  const duplicateIndex = !formId
+    ? portfolioHoldings.findIndex(item => item.code === normalizedCode)
+    : -1;
+  const existingIndex = formId
+    ? portfolioHoldings.findIndex(item => item.id === id)
+    : duplicateIndex;
   const previous = existingIndex >= 0 ? portfolioHoldings[existingIndex] : {};
-  const next = {
-    ...previous,
-    ...holding,
-    code: holding.code.padStart(4, '0'),
-    updatedAt: previous.updatedAt || '',
-    currentPrice: Number(previous.currentPrice || 0),
-  };
+  const next = duplicateIndex >= 0
+    ? mergeHoldingPurchase(previous, holding, normalizedCode)
+    : {
+        ...previous,
+        ...holding,
+        code: normalizedCode,
+        updatedAt: previous.updatedAt || '',
+        currentPrice: Number(previous.currentPrice || 0),
+      };
 
   if (existingIndex >= 0) {
     portfolioHoldings[existingIndex] = next;
@@ -538,6 +547,25 @@ async function saveHolding(event) {
   resetHoldingForm();
   renderPortfolio();
   await refreshHoldingQuote(next.id);
+}
+
+function mergeHoldingPurchase(previous, holding, normalizedCode) {
+  const existingShares = Number(previous.shares || 0);
+  const addedShares = Number(holding.shares || 0);
+  const totalShares = existingShares + addedShares;
+  const totalCost = (Number(previous.buyPrice || 0) * existingShares) + (Number(holding.buyPrice || 0) * addedShares);
+
+  return {
+    ...previous,
+    id: previous.id,
+    code: normalizedCode,
+    name: holding.name || previous.name,
+    buyPrice: Number((totalCost / totalShares).toFixed(2)),
+    shares: totalShares,
+    buyDate: holding.buyDate || previous.buyDate,
+    updatedAt: previous.updatedAt || '',
+    currentPrice: Number(previous.currentPrice || 0),
+  };
 }
 
 function editHolding(id) {
