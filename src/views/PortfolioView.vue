@@ -125,7 +125,7 @@ async function refresh() {
   if (isRefreshingQuotes.value) return;
   isRefreshingQuotes.value = true;
   try {
-    await portfolioStore.refreshQuotes();
+    await portfolioStore.refreshQuotes({ force: true });
   } finally {
     isRefreshingQuotes.value = false;
   }

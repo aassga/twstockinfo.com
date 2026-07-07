@@ -857,6 +857,14 @@ button {
   display: none;
 }
 
+.chart-mobile-tape {
+  display: none;
+}
+
+.complete-mobile-tape {
+  display: none;
+}
+
 .technical-summary {
   margin-top: 14px;
   margin-bottom: 14px;
@@ -1113,14 +1121,16 @@ button {
   background: var(--dn);
 }
 
-.load-status-grid {
+.load-status-grid,
+.data-status-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 14px 0;
 }
 
-.load-status-card {
+.load-status-card,
+.data-status-card {
   display: flex;
   min-width: 0;
   gap: 10px;
@@ -1130,37 +1140,47 @@ button {
   background: var(--bg-2);
 }
 
-.load-status-card .inline-icon {
+.load-status-card .inline-icon,
+.data-status-card .inline-icon {
   flex: 0 0 auto;
   color: var(--text-3);
 }
 
-.load-status-card.loading .inline-icon {
+.load-status-card.loading .inline-icon,
+.data-status-card.loading .inline-icon {
   color: var(--blue);
 }
 
-.load-status-card.done .inline-icon {
+.load-status-card.done .inline-icon,
+.data-status-card.done .inline-icon {
   color: var(--dn);
 }
 
-.load-status-card.error .inline-icon {
+.load-status-card.error .inline-icon,
+.data-status-card.error .inline-icon {
   color: var(--up);
 }
 
 .load-status-card strong,
 .load-status-card span,
-.load-status-card em {
+.load-status-card em,
+.data-status-card strong,
+.data-status-card span,
+.data-status-card em {
   display: block;
   min-width: 0;
 }
 
-.load-status-card strong {
+.load-status-card strong,
+.data-status-card strong {
   color: var(--text-1);
   font-size: 13px;
 }
 
 .load-status-card span,
-.load-status-card em {
+.load-status-card em,
+.data-status-card span,
+.data-status-card em {
   color: var(--text-3);
   font-size: 11px;
   line-height: 1.45;
@@ -2103,6 +2123,9 @@ button {
   }
 
   .quote-tape {
+    position: sticky;
+    top: 0;
+    z-index: 12;
     align-items: flex-start;
     flex-direction: column;
     gap: 14px;
@@ -2303,6 +2326,83 @@ button {
     min-height: calc(100dvh - var(--mobile-bottom-nav-space) - 96px);
   }
 
+  .chart-mobile-tape,
+  .complete-mobile-tape {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 12px 0;
+    padding: 13px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: rgba(22, 27, 39, 0.98);
+    box-shadow: inset 4px 0 0 var(--border-strong), 0 8px 24px rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(12px);
+  }
+
+  .chart-mobile-tape.up,
+  .complete-mobile-tape.up {
+    box-shadow: inset 4px 0 0 var(--up), 0 8px 24px rgba(0, 0, 0, 0.22);
+  }
+
+  .chart-mobile-tape.down,
+  .complete-mobile-tape.down {
+    box-shadow: inset 4px 0 0 var(--dn), 0 8px 24px rgba(0, 0, 0, 0.22);
+  }
+
+  .chart-mobile-tape div,
+  .complete-mobile-tape div {
+    min-width: 0;
+  }
+
+  .chart-mobile-tape div:last-child,
+  .complete-mobile-tape div:last-child {
+    text-align: right;
+  }
+
+  .chart-mobile-tape strong,
+  .chart-mobile-tape span,
+  .complete-mobile-tape strong,
+  .complete-mobile-tape span {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chart-mobile-tape strong,
+  .complete-mobile-tape strong {
+    color: var(--text-1);
+    font-size: 18px;
+    font-weight: 900;
+  }
+
+  .chart-mobile-tape span,
+  .complete-mobile-tape span {
+    margin-top: 4px;
+    color: var(--text-3);
+    font-size: 12px;
+  }
+
+  .chart-mobile-tape.up div:last-child strong,
+  .chart-mobile-tape.up div:last-child span,
+  .complete-mobile-tape.up div:last-child strong,
+  .complete-mobile-tape.up div:last-child span {
+    color: var(--up);
+  }
+
+  .chart-mobile-tape.down div:last-child strong,
+  .chart-mobile-tape.down div:last-child span,
+  .complete-mobile-tape.down div:last-child strong,
+  .complete-mobile-tape.down div:last-child span {
+    color: var(--dn);
+  }
+
   .chart-controls {
     display: grid;
     gap: 10px;
@@ -2448,7 +2548,8 @@ button {
     margin-top: 14px;
   }
 
-  .load-status-grid {
+  .load-status-grid,
+  .data-status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

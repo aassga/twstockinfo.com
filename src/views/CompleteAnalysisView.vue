@@ -4,15 +4,13 @@ import {
   IconAlertTriangle,
   IconBrain,
   IconChartCandle,
-  IconCircleCheck,
-  IconClock,
-  IconInfoCircle,
   IconLayoutDashboard,
   IconReportAnalytics,
   IconSearch,
   IconShieldCheck
 } from '@tabler/icons-vue';
 import { fetchFundamentalSnapshotPhased } from '../api/fundamentalApi';
+import DataStatusGrid from '../components/DataStatusGrid.vue';
 import StockChart from '../components/StockChart.vue';
 import TechnicalSummary from '../components/TechnicalSummary.vue';
 import { useChartStore } from '../stores/chartStore';
@@ -25,7 +23,7 @@ const stockStore = useStockStore();
 const chartStore = useChartStore();
 const institutionalStore = useInstitutionalStore();
 
-const query = ref(stockStore.currentStock?.code || chartStore.stock?.code || '');
+const query = ref(stockStore.currentStock?.code || chartStore.stock?.code || stockStore.activeCode || '');
 const error = ref('');
 const snapshot = ref(null);
 const peerSnapshots = ref([]);
@@ -120,7 +118,7 @@ watch(query, value => {
 });
 
 onMounted(() => {
-  const initialCode = stock.value?.code || chartStore.stock?.code || query.value;
+  const initialCode = stock.value?.code || chartStore.stock?.code || stockStore.activeCode || query.value;
   if (initialCode) runSearch(String(initialCode).trim().toUpperCase());
 });
 
@@ -203,7 +201,7 @@ async function loadPeerFundamentals(current, runId) {
   const peers = stockStore.allStocks
     .filter(row => row.code !== current.code && row.sector === current.sector && Number(row.price || 0) > 0)
     .sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0))
-    .slice(0, 3);
+    .slice(0, 6);
   if (!peers.length) return;
 
   peerLoading.value = true;
@@ -306,13 +304,6 @@ function statusText(status) {
   return status || '待查';
 }
 
-function stepIcon(status) {
-  if (status === 'done') return IconCircleCheck;
-  if (status === 'loading') return IconClock;
-  if (status === 'error') return IconAlertTriangle;
-  return IconInfoCircle;
-}
-
 function summarizeInstitutionalTrend(rows, days) {
   const sample = rows.slice(0, days);
   const sum = sample.reduce((acc, row) => ({
@@ -381,8 +372,14 @@ function buildPeerComparison(current, rows, currentSnapshot, peerSnapshots) {
   const avg = key => peers.reduce((sum, row) => sum + Number(row[key] || 0), 0) / peers.length;
   const currentPe = metricValue(currentSnapshot, '本益比');
   const currentRoe = metricValue(currentSnapshot, '年化 ROE');
+  const currentYield = highlightValue(currentSnapshot, '殖利率');
+  const currentRevenueYoy = highlightValue(currentSnapshot, '月營收 YoY') ?? metricValue(currentSnapshot, '月營收 YoY');
   const peerPeRows = peerSnapshots.map(item => metricValue(item, '本益比')).filter(Number.isFinite);
   const peerRoeRows = peerSnapshots.map(item => metricValue(item, '年化 ROE')).filter(Number.isFinite);
+  const peerYieldRows = peerSnapshots.map(item => highlightValue(item, '殖利率')).filter(Number.isFinite);
+  const peerRevenueRows = peerSnapshots
+    .map(item => highlightValue(item, '月營收 YoY') ?? metricValue(item, '月營收 YoY'))
+    .filter(Number.isFinite);
   return {
     sector: current.sector,
     count: peers.length,
@@ -394,15 +391,29 @@ function buildPeerComparison(current, rows, currentSnapshot, peerSnapshots) {
     stockBuyPct: Number(current.buyPct || 0),
     currentPe,
     currentRoe,
+    currentYield,
+    currentRevenueYoy,
     avgPeerPe: average(peerPeRows),
     avgPeerRoe: average(peerRoeRows),
-    peerFundamentalCount: Math.max(peerPeRows.length, peerRoeRows.length)
+    avgPeerYield: average(peerYieldRows),
+    avgPeerRevenueYoy: average(peerRevenueRows),
+    peerFundamentalCount: Math.max(peerPeRows.length, peerRoeRows.length, peerYieldRows.length, peerRevenueRows.length)
   };
 }
 
 function metricValue(target, label) {
   const item = target?.metrics?.find(metric => String(metric.label || '').includes(label));
-  const number = Number(String(item?.value || '').replace(/[,%]/g, ''));
+  return numericDisplayValue(item?.value);
+}
+
+function highlightValue(target, label) {
+  const item = target?.highlights?.find(metric => String(metric.label || '').includes(label));
+  return numericDisplayValue(item?.value);
+}
+
+function numericDisplayValue(value) {
+  if (value === undefined || value === null || value === '' || value === '--') return null;
+  const number = Number(String(value).replace(/[,%]/g, ''));
   return Number.isFinite(number) ? number : null;
 }
 
@@ -470,16 +481,18 @@ function average(rows) {
     </div>
 
     <template v-if="stock">
-      <div class="load-status-grid">
-        <div v-for="step in loadingSteps" :key="step.key" class="load-status-card" :class="step.status">
-          <component :is="stepIcon(step.status)" class="inline-icon" :stroke-width="2" />
-          <div>
-            <strong>{{ step.label }}</strong>
-            <span>{{ step.message }}</span>
-            <em>{{ step.source }}</em>
-          </div>
+      <div class="complete-mobile-tape" :class="priceTone">
+        <div>
+          <strong>{{ stock.code }} {{ stock.name || '' }}</strong>
+          <span>{{ stock.sector || '未分類' }}</span>
+        </div>
+        <div>
+          <strong>{{ formatMoney(stock.price, 2) }}</strong>
+          <span>{{ formatPct(stock.chgPct) }}</span>
         </div>
       </div>
+
+      <DataStatusGrid :items="loadingSteps" />
 
       <div class="complete-hero">
         <div class="complete-company">
@@ -646,6 +659,16 @@ function average(rows) {
               <span>年化 ROE</span>
               <strong>{{ peerComparison.currentRoe ? pct(peerComparison.currentRoe, 2) : '--' }}</strong>
               <em>同業平均 {{ peerComparison.avgPeerRoe ? pct(peerComparison.avgPeerRoe, 2) : peerLoading ? '載入中' : '--' }}</em>
+            </div>
+            <div>
+              <span>殖利率</span>
+              <strong>{{ Number.isFinite(peerComparison.currentYield) ? pct(peerComparison.currentYield, 2) : '--' }}</strong>
+              <em>同業平均 {{ Number.isFinite(peerComparison.avgPeerYield) ? pct(peerComparison.avgPeerYield, 2) : peerLoading ? '載入中' : '--' }}</em>
+            </div>
+            <div>
+              <span>月營收 YoY</span>
+              <strong :class="moveClass(peerComparison.currentRevenueYoy).replace('is-', '')">{{ Number.isFinite(peerComparison.currentRevenueYoy) ? pct(peerComparison.currentRevenueYoy, 2) : '--' }}</strong>
+              <em>同業平均 {{ Number.isFinite(peerComparison.avgPeerRevenueYoy) ? pct(peerComparison.avgPeerRevenueYoy, 2) : peerLoading ? '載入中' : '--' }}</em>
             </div>
             <div>
               <span>本股漲跌</span>

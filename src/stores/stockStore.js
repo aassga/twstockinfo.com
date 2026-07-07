@@ -3,6 +3,8 @@ import { computed, ref } from 'vue';
 import { stockApi } from '../api/stockApi';
 import { getSector } from '../utils/stockMeta';
 
+const ACTIVE_STOCK_STORAGE_KEY = 'twstock.activeCode';
+
 export const useStockStore = defineStore('stocks', () => {
   const defaultHotSort = { key: 'volume', direction: 'desc' };
   const volumeRatioRefreshMs = 30 * 60 * 1000;
@@ -10,6 +12,7 @@ export const useStockStore = defineStore('stocks', () => {
   const stockCodePattern = /\d{4,6}[a-z]?/i;
   const allStocks = ref([]);
   const currentStock = ref(null);
+  const activeCode = ref(readActiveCode());
   const searchQuery = ref('');
   const hotSearch = ref('');
   const hotFilter = ref('all');
@@ -111,7 +114,7 @@ export const useStockStore = defineStore('stocks', () => {
         name: quote.name || found?.name || '',
         amountHundredMillion: found?.amountHundredMillion || quote.amountHundredMillion
       });
-      if (requestId === searchRequestId) currentStock.value = nextStock;
+      if (requestId === searchRequestId) setCurrentStock(nextStock);
       return nextStock;
     } catch (err) {
       error.value = err?.message || '股票查詢失敗';
@@ -301,6 +304,13 @@ export const useStockStore = defineStore('stocks', () => {
       allStocks.value = [...nextByCode.values()]
         .sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
 
+      if (currentStock.value?.code && nextByCode.has(currentStock.value.code)) {
+        currentStock.value = enrichStock({
+          ...currentStock.value,
+          ...nextByCode.get(currentStock.value.code)
+        });
+      }
+
       return requestedRows;
     } catch (err) {
       error.value = err?.message || '股票報價更新失敗';
@@ -375,6 +385,13 @@ export const useStockStore = defineStore('stocks', () => {
     };
   }
 
+  function setCurrentStock(stock) {
+    const nextStock = enrichStock(stock);
+    currentStock.value = nextStock;
+    activeCode.value = nextStock.code;
+    writeActiveCode(nextStock.code);
+  }
+
   function normalizeOptionalNumber(value) {
     const number = Number(value);
     return Number.isFinite(number) && number > 0 ? number : null;
@@ -408,9 +425,21 @@ export const useStockStore = defineStore('stocks', () => {
     return 99;
   }
 
+  function readActiveCode() {
+    if (typeof localStorage === 'undefined') return '';
+    return String(localStorage.getItem(ACTIVE_STOCK_STORAGE_KEY) || '').trim().toUpperCase();
+  }
+
+  function writeActiveCode(code) {
+    if (typeof localStorage === 'undefined') return;
+    const value = String(code || '').trim().toUpperCase();
+    if (value) localStorage.setItem(ACTIVE_STOCK_STORAGE_KEY, value);
+  }
+
   return {
     allStocks,
     currentStock,
+    activeCode,
     searchQuery,
     hotSearch,
     hotFilter,
@@ -429,6 +458,7 @@ export const useStockStore = defineStore('stocks', () => {
     refreshCurrentStock,
     refreshStocksByCodes,
     findStock,
+    setCurrentStock,
     setHotFilter,
     setHotSort,
     hotCellFlashClass,

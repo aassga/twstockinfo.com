@@ -6,10 +6,11 @@ import StockChart from '../components/StockChart.vue';
 import TechnicalSummary from '../components/TechnicalSummary.vue';
 import { useChartStore } from '../stores/chartStore';
 import { useStockStore } from '../stores/stockStore';
+import { formatMoney, formatPct, moveClass } from '../utils/formatters';
 
 const stockStore = useStockStore();
 const chartStore = useChartStore();
-const query = ref(chartStore.stock?.code || stockStore.currentStock?.code || '');
+const query = ref(chartStore.stock?.code || stockStore.currentStock?.code || stockStore.activeCode || '');
 const defaultInterval = 'D';
 const intervals = [
   { label: '1時', value: '60' },
@@ -19,14 +20,23 @@ const intervals = [
 const currentIntervalLabel = computed(() =>
   intervals.find(item => item.value === chartStore.interval)?.label || chartStore.interval
 );
+const chartStock = computed(() => chartStore.stock || stockStore.currentStock);
+const priceTone = computed(() => moveClass(chartStock.value?.chgPct).replace('is-', ''));
 
 watch(() => chartStore.stock, stock => {
   if (stock?.code) query.value = stock.code;
 });
 
 onMounted(async () => {
-  if (chartStore.stock?.code && chartStore.interval !== defaultInterval) {
-    await chartStore.setInterval(defaultInterval);
+  if (chartStore.stock?.code) {
+    if (chartStore.interval !== defaultInterval) await chartStore.setInterval(defaultInterval);
+    return;
+  }
+
+  const initialCode = stockStore.currentStock?.code || stockStore.activeCode;
+  if (initialCode) {
+    query.value = initialCode;
+    await search();
   }
 });
 
@@ -79,6 +89,17 @@ async function search() {
               {{ item.label }}
             </button>
           </div>
+        </div>
+      </div>
+
+      <div v-if="chartStock" class="chart-mobile-tape" :class="priceTone">
+        <div>
+          <strong>{{ chartStock.code }} {{ chartStock.name || '' }}</strong>
+          <span>{{ currentIntervalLabel }}走勢</span>
+        </div>
+        <div>
+          <strong>{{ formatMoney(chartStock.price, 2) }}</strong>
+          <span>{{ formatPct(chartStock.chgPct || 0) }}</span>
         </div>
       </div>
 

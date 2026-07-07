@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { useChartStore } from '../stores/chartStore';
 import { useMarketStore } from '../stores/marketStore';
@@ -15,16 +15,23 @@ const portfolioStore = usePortfolioStore();
 const chartStore = useChartStore();
 const topVolumeStore = useTopVolumeStore();
 const title = computed(() => route.meta.title || '台股資訊');
+const isRefreshing = ref(false);
 
 async function refresh() {
-  await Promise.allSettled([
-    marketStore.loadMarket(),
-    stockStore.loadAllStocks({ silent: true, force: true }),
-    stockStore.currentStock ? stockStore.refreshCurrentStock({ silent: true, force: true }) : Promise.resolve(),
-    portfolioStore.refreshQuotes(),
-    topVolumeStore.loadTopVolume({ silent: true }),
-    chartStore.stock ? chartStore.loadChart() : Promise.resolve()
-  ]);
+  if (isRefreshing.value) return;
+  isRefreshing.value = true;
+  try {
+    await Promise.allSettled([
+      marketStore.loadMarket(),
+      stockStore.loadAllStocks({ silent: true, force: true }),
+      stockStore.currentStock ? stockStore.refreshCurrentStock({ silent: true, force: true }) : Promise.resolve(),
+      portfolioStore.refreshQuotes({ force: true }),
+      topVolumeStore.loadTopVolume({ silent: true }),
+      chartStore.stock ? chartStore.loadChart() : Promise.resolve()
+    ]);
+  } finally {
+    isRefreshing.value = false;
+  }
 }
 </script>
 
@@ -32,7 +39,7 @@ async function refresh() {
   <div class="mobile-shell">
     <van-nav-bar fixed placeholder safe-area-inset-top :title="title">
       <template #right>
-        <button class="plain-icon-button" type="button" aria-label="更新" @click="refresh">
+        <button class="plain-icon-button" type="button" aria-label="更新" :disabled="isRefreshing" @click="refresh">
           ↻
         </button>
       </template>

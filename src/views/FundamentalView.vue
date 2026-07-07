@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import {
   IconBrain,
   IconChartBar,
@@ -16,7 +16,7 @@ import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from 
 import { quickStocks } from '../utils/stockMeta';
 
 const stockStore = useStockStore();
-const query = ref(stockStore.currentStock?.code || '');
+const query = ref(stockStore.currentStock?.code || stockStore.activeCode || '');
 const snapshot = ref(null);
 const loading = ref(false);
 const error = ref('');
@@ -61,6 +61,11 @@ watch(query, value => {
     candidates.value = rows;
     showCandidates.value = rows.length > 0;
   }, 180);
+});
+
+onMounted(() => {
+  const initialCode = stockStore.currentStock?.code || stockStore.activeCode || query.value;
+  if (initialCode) runSearch(String(initialCode).trim().toUpperCase());
 });
 
 async function submit(value = query.value) {

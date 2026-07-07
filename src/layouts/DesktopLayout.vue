@@ -45,7 +45,7 @@ async function refreshAll() {
       marketStore.loadMarket(),
       stockStore.loadAllStocks({ silent: true, force: true }),
       stockStore.currentStock ? stockStore.refreshCurrentStock({ silent: true, force: true }) : Promise.resolve(),
-      portfolioStore.refreshQuotes(),
+      portfolioStore.refreshQuotes({ force: true }),
       institutionalStore.loadInstitutional({ silent: true }),
       topVolumeStore.loadTopVolume({ silent: true }),
       chartStore.stock ? chartStore.loadChart() : Promise.resolve()

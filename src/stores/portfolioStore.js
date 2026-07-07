@@ -136,13 +136,13 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     draft.value = null;
   }
 
-  async function refreshQuotes() {
+  async function refreshQuotes({ force = false } = {}) {
     if (loading.value || !holdings.value.length) return;
     loading.value = true;
     error.value = '';
     try {
       const codes = [...new Set(holdings.value.map(holding => holding.code).filter(Boolean))];
-      const quotes = await stockApi.priceRows(codes, { force: true });
+      const quotes = await stockApi.priceRows(codes, { force });
       const quoteByCode = new Map(quotes.map(quote => [quote.code, quote]));
       const now = new Date().toISOString();
       const updated = holdings.value.map(holding => {

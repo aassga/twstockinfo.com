@@ -20,15 +20,20 @@ onMounted(() => {
   marketStore.loadMarket();
   stockStore.loadAllStocks();
   institutionalStore.loadInstitutional({ silent: true });
-  timers.push(setInterval(() => marketStore.loadMarket(), 30000));
-  timers.push(setInterval(() => stockStore.loadAllStocks({ silent: true }), 60000));
-  timers.push(setInterval(() => institutionalStore.loadInstitutional({ silent: true }), 180000));
-  timers.push(setInterval(() => portfolioStore.refreshQuotes(), 30000));
+  timers.push(setInterval(() => runWhenVisible(() => marketStore.loadMarket()), 30000));
+  timers.push(setInterval(() => runWhenVisible(() => stockStore.loadAllStocks({ silent: true })), 60000));
+  timers.push(setInterval(() => runWhenVisible(() => institutionalStore.loadInstitutional({ silent: true })), 180000));
+  timers.push(setInterval(() => runWhenVisible(() => portfolioStore.refreshQuotes()), 30000));
 });
 
 onBeforeUnmount(() => {
   timers.forEach(timer => clearInterval(timer));
 });
+
+function runWhenVisible(task) {
+  if (typeof document !== 'undefined' && document.hidden) return;
+  task();
+}
 </script>
 
 <template>

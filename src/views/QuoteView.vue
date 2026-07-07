@@ -10,6 +10,7 @@ import {
   IconSearch,
 } from "@tabler/icons-vue";
 import { fetchFundamentalSnapshotPhased } from "../api/fundamentalApi";
+import DataStatusGrid from "../components/DataStatusGrid.vue";
 import StockChart from "../components/StockChart.vue";
 import { useChartStore } from "../stores/chartStore";
 import { useInstitutionalStore } from "../stores/institutionalStore";
@@ -29,7 +30,7 @@ const chartStore = useChartStore();
 const institutionalStore = useInstitutionalStore();
 const route = useRoute();
 
-const query = ref(stockStore.currentStock?.code || "");
+const query = ref(stockStore.currentStock?.code || stockStore.activeCode || "");
 const loading = ref(false);
 const isManualRefreshing = ref(false);
 const error = ref("");
@@ -309,11 +310,18 @@ onMounted(() => {
   if (routeCode) {
     query.value = routeCode;
     runSearch(routeCode);
-  } else if (stock.value?.code) {
-    query.value = stock.value.code;
-    openChart(stock.value);
-    loadStockCenterData(stock.value, searchRunId);
-    refreshLiveQuote();
+  } else {
+    const initialCode = stock.value?.code || stockStore.activeCode;
+    if (initialCode) {
+      query.value = initialCode;
+      if (stock.value?.code === initialCode) {
+        openChart(stock.value);
+        loadStockCenterData(stock.value, searchRunId);
+        refreshLiveQuote();
+      } else {
+        runSearch(initialCode);
+      }
+    }
   }
   startLiveQuoteRefresh();
 });
@@ -458,7 +466,7 @@ async function refreshLiveQuote() {
 
   liveQuoteRefreshing = true;
   try {
-    await stockStore.refreshCurrentStock({ force: true, silent: true });
+    await stockStore.refreshCurrentStock({ silent: true });
   } catch (_error) {
     // Keep the last quote visible if the realtime endpoint briefly fails.
   } finally {
@@ -664,18 +672,7 @@ function roundPrice(value) {
         </div>
       </section>
 
-      <div class="quote-status-grid">
-        <div
-          v-for="item in statusCards"
-          :key="item.label"
-          class="quote-status-card"
-          :class="item.status"
-        >
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-          <em>{{ item.source }}</em>
-        </div>
-      </div>
+      <DataStatusGrid :items="statusCards" />
 
       <section
         class="quote-workspace"
