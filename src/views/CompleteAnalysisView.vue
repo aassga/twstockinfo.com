@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import {
   IconAlertTriangle,
   IconBrain,
@@ -50,12 +50,46 @@ const instTrend = computed(() => {
   if (!code) return [];
   return institutionalStore.trendByCode[code] || [];
 });
-const loadingSteps = computed(() => [
-  { key: 'quote', label: '報價', ...loadStatus.value.quote, source: sourceText(stock.value?.source || 'TWSE MIS') },
-  { key: 'chart', label: '走勢', ...loadStatus.value.chart, source: 'Yahoo Chart' },
-  { key: 'institutional', label: '法人', ...loadStatus.value.institutional, source: inst.value?.source === 'histock' ? 'HiStock / TWSE' : 'TWSE OpenAPI' },
-  { key: 'fundamental', label: '基本面', ...loadStatus.value.fundamental, source: snapshot.value?.source || 'TWSE OpenAPI / FinMind' }
-]);
+const loadingSteps = computed(() => {
+  const code = stock.value?.code;
+  const chartReady = code && chartStore.stock?.code === code && chartStore.candles.length > 0;
+  const chartLoading = code && chartStore.stock?.code === code && chartStore.loading;
+  const institutionalLoading = code && (
+    institutionalStore.codeLoading[code] ||
+    institutionalStore.trendLoading[code]
+  );
+
+  return [
+    normalizeStep('quote', {
+      key: 'quote',
+      label: '報價',
+      status: stock.value?.price ? 'done' : 'idle',
+      message: stock.value?.price ? '報價完成' : '待查詢',
+      source: sourceText(stock.value?.source || 'TWSE MIS')
+    }),
+    normalizeStep('chart', {
+      key: 'chart',
+      label: '走勢',
+      status: chartLoading ? 'loading' : chartStore.error ? 'error' : chartReady ? 'done' : 'idle',
+      message: chartLoading ? '走勢載入中' : chartStore.error || (chartReady ? '走勢完成' : '待查詢'),
+      source: 'Yahoo Chart'
+    }),
+    normalizeStep('institutional', {
+      key: 'institutional',
+      label: '法人',
+      status: institutionalLoading ? 'loading' : inst.value || instTrend.value.length ? 'done' : 'idle',
+      message: institutionalLoading ? '法人載入中' : inst.value || instTrend.value.length ? '法人完成' : '待查詢',
+      source: inst.value?.source === 'histock' ? 'HiStock / TWSE' : 'TWSE OpenAPI'
+    }),
+    normalizeStep('fundamental', {
+      key: 'fundamental',
+      label: '基本面',
+      status: snapshot.value?.isPartial ? 'loading' : snapshot.value ? 'done' : 'idle',
+      message: snapshot.value?.isPartial ? stageText(snapshot.value.loadingStage) : snapshot.value ? '基本面完成' : '待查詢',
+      source: snapshot.value?.source || 'TWSE OpenAPI / FinMind'
+    })
+  ];
+});
 const priceTone = computed(() => moveClass(stock.value?.chgPct).replace('is-', ''));
 const dominantForce = computed(() => {
   const buy = Number(stock.value?.buyPct || 0);
@@ -83,6 +117,11 @@ watch(query, value => {
     candidates.value = rows;
     showCandidates.value = rows.length > 0;
   }, 180);
+});
+
+onMounted(() => {
+  const initialCode = stock.value?.code || chartStore.stock?.code || query.value;
+  if (initialCode) runSearch(String(initialCode).trim().toUpperCase());
 });
 
 async function submit(value = query.value) {
@@ -146,6 +185,7 @@ async function runSearch(code) {
       .catch(err => setLoadStatus('fundamental', 'error', err?.message || '基本面取得失敗'));
 
     await Promise.allSettled([chartTask, institutionalTask, fundamentalTask]);
+    if (runId === searchRunId) syncLoadStatusFromData();
   } catch (err) {
     if (runId === searchRunId) {
       error.value = err?.message || '分析資料取得失敗';
@@ -201,6 +241,40 @@ function setLoadStatus(key, status, message) {
     ...loadStatus.value,
     [key]: { status, message }
   };
+}
+
+function normalizeStep(key, actual) {
+  const flow = loadStatus.value[key] || {};
+  if (flow.status === 'loading' || flow.status === 'error') {
+    return {
+      ...actual,
+      ...flow,
+      source: actual.source
+    };
+  }
+  if (flow.status === 'done' && actual.status === 'idle') {
+    return {
+      ...actual,
+      ...flow,
+      source: actual.source
+    };
+  }
+  return actual;
+}
+
+function syncLoadStatusFromData() {
+  if (stock.value?.price && loadStatus.value.quote.status !== 'error') {
+    setLoadStatus('quote', 'done', '報價完成');
+  }
+  if (chartStore.stock?.code === stock.value?.code && chartStore.candles.length && loadStatus.value.chart.status !== 'error') {
+    setLoadStatus('chart', 'done', '走勢完成');
+  }
+  if ((inst.value || instTrend.value.length) && loadStatus.value.institutional.status !== 'error') {
+    setLoadStatus('institutional', 'done', '法人完成');
+  }
+  if (snapshot.value && !snapshot.value.isPartial && loadStatus.value.fundamental.status !== 'error') {
+    setLoadStatus('fundamental', 'done', '基本面完成');
+  }
 }
 
 function stageText(stage) {

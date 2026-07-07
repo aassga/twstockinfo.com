@@ -11,14 +11,12 @@ import {
   IconSelector
 } from '@tabler/icons-vue';
 import { stockApi } from '../api/stockApi';
-import { useChartStore } from '../stores/chartStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, moveClass } from '../utils/formatters';
 
 const router = useRouter();
 const portfolioStore = usePortfolioStore();
-const chartStore = useChartStore();
 const stockStore = useStockStore();
 const form = reactive(createEmptyForm());
 const importInput = ref(null);
@@ -133,13 +131,8 @@ async function refresh() {
   }
 }
 
-async function openChart(holding) {
-  await chartStore.openStock({
-    code: holding.code,
-    name: holding.name,
-    price: holding.currentPrice || holding.buyPrice
-  });
-  router.push('/chart');
+function openQuote(holding) {
+  router.push({ path: '/quote', query: { code: holding.code } });
 }
 
 function exportJson() {
@@ -319,7 +312,7 @@ function portfolioSortValue(holding, key) {
 
     <div class="table-hint">
       <IconInfoCircle class="inline-icon" :stroke-width="2" />
-      點擊股票名稱可以看走勢圖
+      點擊股票名稱可以看即時報價與走勢圖
     </div>
     <div class="table-wrapper portfolio-table-wrap">
       <table class="stock-table">
@@ -351,7 +344,7 @@ function portfolioSortValue(holding, key) {
           <tr v-for="holding in sortedHoldings" :key="holding.id">
             <td>{{ holding.code }}</td>
             <td>
-              <button class="stock-link" type="button" @click="openChart(holding)">{{ holding.name }}</button>
+              <button class="stock-link" type="button" @click="openQuote(holding)">{{ holding.name }}</button>
             </td>
             <td>{{ formatMoney(holding.buyPrice, 2) }}</td>
             <td>{{ Number(holding.shares).toLocaleString() }}</td>

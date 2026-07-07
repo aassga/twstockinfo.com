@@ -8,6 +8,7 @@ import FundamentalView from '../views/FundamentalView.vue';
 import Hot100View from '../views/Hot100View.vue';
 import InstitutionalView from '../views/InstitutionalView.vue';
 import PortfolioView from '../views/PortfolioView.vue';
+import QuoteView from '../views/QuoteView.vue';
 import SearchView from '../views/SearchView.vue';
 import SettingsView from '../views/SettingsView.vue';
 import TopVolumeView from '../views/TopVolumeView.vue';
@@ -18,6 +19,7 @@ const titleOf = path => navItems.find(item => item.path === path)?.label || '台
 const routes = [
   { path: '/', redirect: '/search' },
   { path: '/search', component: SearchView, meta: { title: titleOf('/search') } },
+  { path: '/quote', component: QuoteView, meta: { title: titleOf('/quote') } },
   { path: '/complete-analysis', component: CompleteAnalysisView, meta: { title: titleOf('/complete-analysis') } },
   { path: '/portfolio', component: PortfolioView, meta: { title: titleOf('/portfolio') } },
   { path: '/favorites', component: FavoritesView, meta: { title: titleOf('/favorites') } },

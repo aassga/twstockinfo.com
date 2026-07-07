@@ -2,27 +2,18 @@
 import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconInfoCircle, IconRefresh, IconTable } from '@tabler/icons-vue';
-import { useChartStore } from '../stores/chartStore';
 import { useTopVolumeStore } from '../stores/topVolumeStore';
 import { formatDateTime, formatMoney, formatNumber, formatSigned, formatVolume, moveClass } from '../utils/formatters';
 
 const router = useRouter();
-const chartStore = useChartStore();
 const topVolumeStore = useTopVolumeStore();
 
 onMounted(() => {
   if (!topVolumeStore.rows.length) topVolumeStore.loadTopVolume();
 });
 
-async function openChart(stock) {
-  await chartStore.openStock({
-    code: stock.code,
-    name: stock.name,
-    exchange: 'tse',
-    price: stock.close,
-    change: stock.change
-  });
-  router.push('/chart');
+function openQuote(stock) {
+  router.push({ path: '/quote', query: { code: stock.code } });
 }
 
 function formatTradeDate(value) {
@@ -89,7 +80,7 @@ function changeMark(value) {
 
     <div class="table-hint">
       <IconInfoCircle class="inline-icon" :stroke-width="2" />
-      點擊股票名稱可以看走勢圖
+      點擊股票名稱可以看即時報價與走勢圖
     </div>
 
     <div class="hot-data-meta">
@@ -128,12 +119,12 @@ function changeMark(value) {
             v-for="stock in topVolumeStore.rows"
             :key="stock.code"
             class="clickable-row"
-            @click="openChart(stock)"
+            @click="openQuote(stock)"
           >
             <td class="rank-cell">{{ stock.rank }}</td>
             <td>{{ stock.code }}</td>
             <td>
-              <button class="stock-link" type="button" @click.stop="openChart(stock)">
+              <button class="stock-link" type="button" @click.stop="openQuote(stock)">
                 {{ stock.name }}
               </button>
             </td>
@@ -154,7 +145,7 @@ function changeMark(value) {
             <td>{{ formatMoney(stock.bid, 2) }}</td>
             <td>{{ formatMoney(stock.ask, 2) }}</td>
             <td>
-              <button class="btn xs" type="button" @click.stop="openChart(stock)">分析</button>
+              <button class="btn xs" type="button" @click.stop="openQuote(stock)">報價</button>
             </td>
           </tr>
           <tr v-if="!topVolumeStore.loading && !topVolumeStore.rows.length">

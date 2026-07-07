@@ -59,12 +59,12 @@ export const useStockStore = defineStore('stocks', () => {
       });
   });
 
-  async function loadAllStocks({ silent = false } = {}) {
+  async function loadAllStocks({ silent = false, force = false } = {}) {
     if (allStocksRequest) return allStocksRequest;
     loadingAll.value = true;
     if (!silent) error.value = '';
 
-    allStocksRequest = stockApi.allStocks()
+    allStocksRequest = stockApi.allStocks({ force })
       .then(rows => {
         const nextRows = preserveVolumeRatios(rows.map(stock => enrichStock({
           ...stock,
@@ -87,13 +87,15 @@ export const useStockStore = defineStore('stocks', () => {
     return allStocksRequest;
   }
 
-  async function searchStock(query = searchQuery.value) {
+  async function searchStock(query = searchQuery.value, options = {}) {
     const input = String(query || '').trim();
     if (!input) return null;
+    const silent = options.silent === true;
+    const force = options.force === true;
 
     const requestId = ++searchRequestId;
-    loadingQuote.value = true;
-    error.value = '';
+    if (!silent) loadingQuote.value = true;
+    if (!silent) error.value = '';
     searchQuery.value = input;
 
     try {
@@ -102,7 +104,7 @@ export const useStockStore = defineStore('stocks', () => {
       }
       const found = findStock(input);
       const code = found?.code || input.match(stockCodePattern)?.[0]?.toUpperCase() || input.toUpperCase();
-      const quote = await stockApi.quoteAuto(code, { withVolumeRatio: true });
+      const quote = await stockApi.quoteAuto(code, { withVolumeRatio: true, force });
       const nextStock = enrichStock({
         ...found,
         ...quote,
@@ -119,9 +121,9 @@ export const useStockStore = defineStore('stocks', () => {
     }
   }
 
-  async function refreshCurrentStock() {
+  async function refreshCurrentStock(options = {}) {
     if (!currentStock.value) return null;
-    return searchStock(currentStock.value.code);
+    return searchStock(currentStock.value.code, options);
   }
 
   async function findStockCandidates(query, limit = 8) {
@@ -274,7 +276,7 @@ export const useStockStore = defineStore('stocks', () => {
     });
   }
 
-  async function refreshStocksByCodes(codes) {
+  async function refreshStocksByCodes(codes, { force = false } = {}) {
     const requestedCodes = new Set(
       codes
         .map(code => String(code || '').trim())
@@ -285,7 +287,7 @@ export const useStockStore = defineStore('stocks', () => {
     loadingAll.value = true;
     error.value = '';
     try {
-      const requestedRows = (await stockApi.priceRows([...requestedCodes])).map(enrichStock);
+      const requestedRows = (await stockApi.priceRows([...requestedCodes], { force })).map(enrichStock);
       const nextByCode = new Map(allStocks.value.map(stock => [stock.code, stock]));
 
       requestedRows.forEach(stock => {

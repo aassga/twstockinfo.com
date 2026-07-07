@@ -43,7 +43,8 @@ async function refreshAll() {
   try {
     await Promise.allSettled([
       marketStore.loadMarket(),
-      stockStore.loadAllStocks({ silent: true }),
+      stockStore.loadAllStocks({ silent: true, force: true }),
+      stockStore.currentStock ? stockStore.refreshCurrentStock({ silent: true, force: true }) : Promise.resolve(),
       portfolioStore.refreshQuotes(),
       institutionalStore.loadInstitutional({ silent: true }),
       topVolumeStore.loadTopVolume({ silent: true }),

@@ -19,7 +19,8 @@ const title = computed(() => route.meta.title || '台股資訊');
 async function refresh() {
   await Promise.allSettled([
     marketStore.loadMarket(),
-    stockStore.loadAllStocks({ silent: true }),
+    stockStore.loadAllStocks({ silent: true, force: true }),
+    stockStore.currentStock ? stockStore.refreshCurrentStock({ silent: true, force: true }) : Promise.resolve(),
     portfolioStore.refreshQuotes(),
     topVolumeStore.loadTopVolume({ silent: true }),
     chartStore.stock ? chartStore.loadChart() : Promise.resolve()

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { showToast } from 'vant';
 import { IconChartCandle, IconSearch } from '@tabler/icons-vue';
 import StockChart from '../components/StockChart.vue';
@@ -10,6 +10,7 @@ import { useStockStore } from '../stores/stockStore';
 const stockStore = useStockStore();
 const chartStore = useChartStore();
 const query = ref(chartStore.stock?.code || stockStore.currentStock?.code || '');
+const defaultInterval = 'D';
 const intervals = [
   { label: '1時', value: '60' },
   { label: '4時', value: '240' },
@@ -23,12 +24,18 @@ watch(() => chartStore.stock, stock => {
   if (stock?.code) query.value = stock.code;
 });
 
+onMounted(async () => {
+  if (chartStore.stock?.code && chartStore.interval !== defaultInterval) {
+    await chartStore.setInterval(defaultInterval);
+  }
+});
+
 async function search() {
   if (!query.value) return;
   try {
     let stock = stockStore.findStock(query.value);
     if (!stock) stock = await stockStore.searchStock(query.value);
-    await chartStore.openStock(stock);
+    await chartStore.openStock(stock, defaultInterval);
   } catch (error) {
     showToast(error?.message || '走勢圖取得失敗');
   }

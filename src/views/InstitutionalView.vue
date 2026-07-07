@@ -2,13 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconBuildingBank, IconInfoCircle, IconSparkles } from '@tabler/icons-vue';
-import { useChartStore } from '../stores/chartStore';
 import { useInstitutionalStore } from '../stores/institutionalStore';
 import { formatSigned, moveClass } from '../utils/formatters';
 
 const router = useRouter();
 const institutionalStore = useInstitutionalStore();
-const chartStore = useChartStore();
 const showAi = ref(false);
 const pageSize = 20;
 const currentPage = ref(1);
@@ -38,9 +36,8 @@ watch(totalPages, pages => {
   if (currentPage.value > pages) currentPage.value = pages;
 });
 
-async function openChart(row) {
-  await chartStore.openStock(row);
-  router.push('/chart');
+function openQuote(row) {
+  router.push({ path: '/quote', query: { code: row.code } });
 }
 
 function percent(value, positive = true) {
@@ -125,7 +122,7 @@ function setPage(page) {
     <div class="section-title" style="margin-top:1.5rem">法人重點布局個股</div>
     <div class="table-hint">
       <IconInfoCircle class="inline-icon" :stroke-width="2" />
-      點擊股票名稱可以看走勢圖
+      點擊股票名稱可以看即時報價與走勢圖
     </div>
 
     <div class="table-wrapper">
@@ -146,7 +143,7 @@ function setPage(page) {
           <tr v-for="row in pagedRows" :key="row.code">
             <td>{{ row.code }}</td>
             <td>
-              <button class="stock-link" type="button" @click="openChart(row)">{{ row.name }}</button>
+              <button class="stock-link" type="button" @click="openQuote(row)">{{ row.name }}</button>
             </td>
             <td :class="moveClass(row.foreign).replace('is-', '')">{{ formatSigned(row.foreign, 0, '張') }}</td>
             <td :class="moveClass(row.trust).replace('is-', '')">{{ formatSigned(row.trust, 0, '張') }}</td>

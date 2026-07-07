@@ -2,13 +2,11 @@
 import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconRefresh, IconStarFilled, IconTrash } from '@tabler/icons-vue';
-import { useChartStore } from '../stores/chartStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
 
 const router = useRouter();
-const chartStore = useChartStore();
 const favoriteStore = useFavoriteStore();
 const stockStore = useStockStore();
 const favoriteRows = computed(() => favoriteStore.favorites.map(stock => {
@@ -20,13 +18,12 @@ onMounted(() => {
   refreshFavorites();
 });
 
-async function openChart(stock) {
-  await chartStore.openStock(stock);
-  router.push('/chart');
+function openQuote(stock) {
+  router.push({ path: '/quote', query: { code: stock.code } });
 }
 
 async function refreshFavorites() {
-  const rows = await stockStore.refreshStocksByCodes(favoriteStore.favorites.map(stock => stock.code));
+  const rows = await stockStore.refreshStocksByCodes(favoriteStore.favorites.map(stock => stock.code), { force: true });
   const latestByCode = new Map(rows.map(stock => [stock.code, stock]));
 
   favoriteStore.favorites.forEach(stock => {
@@ -101,7 +98,7 @@ function formatVolRatio(stock) {
             <td>{{ index + 1 }}</td>
             <td>{{ stock.code }}</td>
             <td>
-              <button class="stock-link" type="button" @click="openChart(stock)">
+              <button class="stock-link" type="button" @click="openQuote(stock)">
                 {{ stock.name || stock.code }}
               </button>
               <span v-if="stock.sector" class="table-subtext">{{ stock.sector }}</span>
@@ -122,7 +119,7 @@ function formatVolRatio(stock) {
             <td>{{ formatDateTime(stock.savedAt) }}</td>
             <td>
               <div class="table-actions">
-                <button class="btn xs" type="button" @click="openChart(stock)">分析</button>
+                <button class="btn xs" type="button" @click="openQuote(stock)">報價</button>
                 <button class="btn xs icon-only danger" type="button" title="移除我的最愛" @click="favoriteStore.removeFavorite(stock.code)">
                   <IconTrash class="btn-icon" :stroke-width="2" />
                 </button>

@@ -3,9 +3,9 @@ import otcStockNames from '../data/otcStockNames.json';
 
 export const stockApi = {
   market: () => fetchMarketRealtime().catch(() => apiFetch('/twse/exchangeReport/MI_INDEX').then(parseMarket)),
-  allStocks: () => fetchPriceRows(),
+  allStocks: (options = {}) => fetchPriceRows([], options),
   stockList: () => fetchStockListRows(),
-  priceRows: codes => fetchPriceRows(codes),
+  priceRows: (codes, options = {}) => fetchPriceRows(codes, options),
   volumeRatios: rows => enrichRowsWithVolumeRatio(rows),
   topVolume: () => apiFetch('/rwd/zh/afterTrading/MI_INDEX20?response=json').then(parseTopVolume),
   histockRank: codes => fetchHistockRank(codes),
@@ -69,20 +69,21 @@ let proxyStatusCache = {
   features: null
 };
 
-async function fetchPriceRows(codes = []) {
+async function fetchPriceRows(codes = [], options = {}) {
   const wantedCodes = normalizeCodeSet(codes);
   const now = Date.now();
+  const force = options.force === true;
 
   if (!wantedCodes.size) {
-    if (allPriceRowsCache.promise && now - allPriceRowsCache.at < PRICE_ROWS_CACHE_MS) {
+    if (!force && allPriceRowsCache.promise && now - allPriceRowsCache.at < PRICE_ROWS_CACHE_MS) {
       return allPriceRowsCache.promise;
     }
-    if (allPriceRowsCache.rows.length && now - allPriceRowsCache.at < PRICE_ROWS_CACHE_MS) {
+    if (!force && allPriceRowsCache.rows.length && now - allPriceRowsCache.at < PRICE_ROWS_CACHE_MS) {
       return allPriceRowsCache.rows;
     }
 
     allPriceRowsCache.at = now;
-    allPriceRowsCache.promise = fetchFreshPriceRows([])
+    allPriceRowsCache.promise = fetchFreshPriceRows([], options)
       .then(rows => {
         allPriceRowsCache.rows = rows;
         return rows;
@@ -94,16 +95,16 @@ async function fetchPriceRows(codes = []) {
     return allPriceRowsCache.promise;
   }
 
-  return fetchFreshPriceRows([...wantedCodes]);
+  return fetchFreshPriceRows([...wantedCodes], options);
 }
 
-async function fetchFreshPriceRows(codes = []) {
+async function fetchFreshPriceRows(codes = [], options = {}) {
   const wantedCodes = normalizeCodeSet(codes);
   const rankRows = await fetchHistockRank().catch(() => []);
   const targetCodes = wantedCodes.size
     ? [...wantedCodes]
     : (rankRows.length ? rankRows.slice(0, MIS_HOT_PRICE_LIMIT).map(row => row.code) : FALLBACK_HOT_CODES);
-  const quoteRows = await fetchMisQuotes(targetCodes).catch(() => []);
+  const quoteRows = await fetchMisQuotes(targetCodes, options).catch(() => []);
   const fallbackRows = await fetchFallbackStockRows(targetCodes, quoteRows).catch(() => []);
   const mergedQuoteRows = mergeFallbackRows(quoteRows, fallbackRows);
 
@@ -178,16 +179,17 @@ async function proxySupports(feature) {
   return features[feature] === true;
 }
 
-async function quoteAuto(code, { withVolumeRatio = false } = {}) {
+async function quoteAuto(code, { withVolumeRatio = false, force = false } = {}) {
   const normalizedCode = String(code || '').trim().toUpperCase();
-  const quote = (await fetchPriceRows([normalizedCode]))[0];
+  const quote = (await fetchPriceRows([normalizedCode], { force }))[0];
   if (!quote) throw new Error(`無法從 TWSE MIS 即時報價取得：${normalizedCode}`);
   return withVolumeRatio ? enrichWithVolumeRatio(quote) : quote;
 }
 
-async function fetchMisQuotes(codes = []) {
+async function fetchMisQuotes(codes = [], options = {}) {
   const uniqueCodes = [...normalizeCodeSet(codes)].filter(code => STOCK_CODE_PATTERN.test(code));
   if (!uniqueCodes.length) return [];
+  const force = options.force === true;
 
   const now = Date.now();
   const cachedRows = [];
@@ -195,7 +197,7 @@ async function fetchMisQuotes(codes = []) {
 
   uniqueCodes.forEach(code => {
     const cached = misQuoteCache.get(code);
-    if (cached?.row && now - cached.at < MIS_QUOTE_CACHE_MS) {
+    if (!force && cached?.row && now - cached.at < MIS_QUOTE_CACHE_MS) {
       cachedRows.push(cached.row);
     } else {
       missingCodes.push(code);
@@ -209,7 +211,7 @@ async function fetchMisQuotes(codes = []) {
   const chunks = chunkArray(missingCodes, MIS_BATCH_CODE_LIMIT);
   const responses = [];
   for (const chunk of chunks) {
-    const response = await fetchMisQuoteChunkSafely(chunk);
+    const response = await fetchMisQuoteChunkSafely(chunk, options);
     if (response) responses.push(response);
     if (isMisInOutage()) break;
     await sleep(120);
@@ -231,11 +233,11 @@ async function fetchMisQuotes(codes = []) {
   return [...rowsByCode.values()];
 }
 
-async function fetchMisQuoteChunkSafely(codes) {
+async function fetchMisQuoteChunkSafely(codes, options = {}) {
   if (!codes.length) return null;
 
   try {
-    return await fetchMisQuoteChunk(codes);
+    return await fetchMisQuoteChunk(codes, options);
   } catch (error) {
     if (isUpstreamServerError(error)) {
       markMisOutage();
@@ -245,11 +247,13 @@ async function fetchMisQuoteChunkSafely(codes) {
   }
 }
 
-function fetchMisQuoteChunk(codes) {
+function fetchMisQuoteChunk(codes, options = {}) {
   const exCh = codes
     .map(code => `${getMisExchangePrefix(code)}_${code}.tw`)
     .join('|');
-  return apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`);
+  return apiFetch(`/mis/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`, {
+    ttlMs: options.force === true ? 0 : undefined
+  });
 }
 
 function getMisExchangePrefix(code) {
@@ -448,6 +452,8 @@ function parseMisQuoteItem(item) {
   const chgPct = prev ? Number(((change / prev) * 100).toFixed(2)) : 0;
   const bidVol = String(item.g || '').split('_').filter(Boolean).map(Number);
   const askVol = String(item.f || '').split('_').filter(Boolean).map(Number);
+  const bidLevels = parseBookLevels(item.b, item.g);
+  const askLevels = parseBookLevels(item.a, item.f);
   const bidTotal = bidVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
   const askTotal = askVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
   const buyPct = bidTotal + askTotal > 0 ? Math.round((bidTotal / (bidTotal + askTotal)) * 100) : 50;
@@ -468,6 +474,8 @@ function parseMisQuoteItem(item) {
     transaction: parseNumber(item.ps || item.s),
     bid: parseFirstBookPrice(item.b),
     ask: parseFirstBookPrice(item.a),
+    bidLevels,
+    askLevels,
     amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
     buyPct,
     sellPct: 100 - buyPct,
@@ -523,6 +531,18 @@ function resolveMisPrice(item, fallback = 0) {
 
 function parseFirstBookPrice(value) {
   return parseNumber(String(value || '').split('_').find(Boolean), 0);
+}
+
+function parseBookLevels(priceText, volumeText) {
+  const prices = String(priceText || '').split('_').filter(Boolean);
+  const volumes = String(volumeText || '').split('_').filter(Boolean);
+  return prices
+    .map((price, index) => ({
+      price: parseNumber(price),
+      volume: parseNumber(volumes[index])
+    }))
+    .filter(row => row.price > 0 && row.volume > 0)
+    .slice(0, 5);
 }
 
 function firstMeaningful(value) {
@@ -954,6 +974,12 @@ async function fetchYahooChartBySymbol(symbol, interval) {
 }
 
 function getYahooChartParams(interval) {
+  if (interval === '1D') return { range: '1d', interval: '1m' };
+  if (interval === '5D') return { range: '5d', interval: '5m' };
+  if (interval === '1M') return { range: '1mo', interval: '1d' };
+  if (interval === '3M') return { range: '3mo', interval: '1d' };
+  if (interval === '6M') return { range: '6mo', interval: '1d' };
+  if (interval === '1Y') return { range: '1y', interval: '1d' };
   if (interval === '60') return { range: '1mo', interval: '60m' };
   if (interval === '240') return { range: '3mo', interval: '60m' };
   return { range: '1y', interval: '1d' };

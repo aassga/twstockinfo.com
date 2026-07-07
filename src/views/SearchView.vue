@@ -14,7 +14,6 @@ import {
   IconTrendingUp,
   IconWorld
 } from '@tabler/icons-vue';
-import { useChartStore } from '../stores/chartStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useInstitutionalStore } from '../stores/institutionalStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
@@ -25,7 +24,6 @@ import { quickStocks } from '../utils/stockMeta';
 const router = useRouter();
 const stockStore = useStockStore();
 const portfolioStore = usePortfolioStore();
-const chartStore = useChartStore();
 const favoriteStore = useFavoriteStore();
 const institutionalStore = useInstitutionalStore();
 const query = ref(stockStore.searchQuery || '');
@@ -188,10 +186,9 @@ function toggleFavorite() {
   favoriteStore.toggleFavorite(stock.value);
 }
 
-async function openChart() {
+function openQuote() {
   if (!stock.value) return;
-  await chartStore.openStock(stock.value);
-  router.push('/chart');
+  router.push({ path: '/quote', query: { code: stock.value.code } });
 }
 
 function analyze(type) {
@@ -315,9 +312,9 @@ function analyze(type) {
             <IconStar v-else class="btn-icon" :stroke-width="2" />
             {{ favoriteStore.isFavorite(stock.code) ? '已加入我的最愛' : '加入我的最愛' }}
           </button>
-          <button class="btn" type="button" @click="openChart">
+          <button class="btn" type="button" @click="openQuote">
             <IconChartCandle class="btn-icon" :stroke-width="2" />
-            走勢圖
+            即時報價
           </button>
         </div>
       </div>

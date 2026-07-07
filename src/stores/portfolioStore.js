@@ -142,7 +142,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     error.value = '';
     try {
       const codes = [...new Set(holdings.value.map(holding => holding.code).filter(Boolean))];
-      const quotes = await stockApi.priceRows(codes);
+      const quotes = await stockApi.priceRows(codes, { force: true });
       const quoteByCode = new Map(quotes.map(quote => [quote.code, quote]));
       const now = new Date().toISOString();
       const updated = holdings.value.map(holding => {

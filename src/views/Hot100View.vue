@@ -1,14 +1,12 @@
 <script setup>
 import { useRouter } from 'vue-router';
 import { IconFlame, IconInfoCircle, IconRefresh, IconSelector, IconSparkles, IconStar, IconStarFilled } from '@tabler/icons-vue';
-import { useChartStore } from '../stores/chartStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
 
 const router = useRouter();
 const stockStore = useStockStore();
-const chartStore = useChartStore();
 const favoriteStore = useFavoriteStore();
 const filters = [
   { key: 'all', label: '全部' },
@@ -31,9 +29,8 @@ const columns = [
   { key: 'volRatio', label: '量比%' }
 ];
 
-async function openChart(stock) {
-  await chartStore.openStock(stock);
-  router.push('/chart');
+function openQuote(stock) {
+  router.push({ path: '/quote', query: { code: stock.code } });
 }
 
 function direction(stock) {
@@ -69,7 +66,7 @@ function formatVolRatio(stock) {
           :class="{ 'is-refreshing': stockStore.loadingAll }"
           type="button"
           :disabled="stockStore.loadingAll"
-          @click="stockStore.loadAllStocks()"
+          @click="stockStore.loadAllStocks({ force: true })"
         >
           <IconRefresh class="btn-icon" :stroke-width="2" />
           重新整理
@@ -92,7 +89,7 @@ function formatVolRatio(stock) {
 
     <div class="table-hint">
       <IconInfoCircle class="inline-icon" :stroke-width="2" />
-      點擊股票名稱可以看走勢圖，按星星加入我的最愛
+      點擊股票名稱可以看即時報價與走勢圖，按星星加入我的最愛
     </div>
 
     <div class="hot-data-meta">
@@ -122,7 +119,7 @@ function formatVolRatio(stock) {
             <td>{{ index + 1 }}</td>
             <td>{{ stock.code }}</td>
             <td>
-              <button class="stock-link" type="button" @click="openChart(stock)">
+              <button class="stock-link" type="button" @click="openQuote(stock)">
                 {{ stock.name }}
               </button>
               <span style="color:var(--text-3);font-size:11px;margin-left:4px">{{ stock.sector }}</span>
@@ -164,7 +161,7 @@ function formatVolRatio(stock) {
                   <IconStarFilled v-if="favoriteStore.isFavorite(stock.code)" class="btn-icon" :stroke-width="2" />
                   <IconStar v-else class="btn-icon" :stroke-width="2" />
                 </button>
-                <button class="btn xs" type="button" @click="openChart(stock)">分析</button>
+                <button class="btn xs" type="button" @click="openQuote(stock)">報價</button>
               </div>
             </td>
           </tr>

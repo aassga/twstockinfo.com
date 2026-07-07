@@ -2,22 +2,19 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconBell, IconInfoCircle, IconRefresh, IconSparkles, IconTrendingDown, IconTrendingUp } from '@tabler/icons-vue';
-import { useChartStore } from '../stores/chartStore';
 import { useStockStore } from '../stores/stockStore';
 import { getBuySignals, getSellSignals } from '../utils/analysis';
 import { formatPct } from '../utils/formatters';
 
 const router = useRouter();
 const stockStore = useStockStore();
-const chartStore = useChartStore();
 const showAi = ref(false);
 
 const buySignals = computed(() => getBuySignals(stockStore.hotStocks).slice(0, 8));
 const sellSignals = computed(() => getSellSignals(stockStore.hotStocks).slice(0, 8));
 
-async function openChart(stock) {
-  await chartStore.openStock(stock);
-  router.push('/chart');
+function openQuote(stock) {
+  router.push({ path: '/quote', query: { code: stock.code } });
 }
 </script>
 
@@ -34,7 +31,7 @@ async function openChart(stock) {
           :class="{ 'is-refreshing': stockStore.loadingAll }"
           type="button"
           :disabled="stockStore.loadingAll"
-          @click="stockStore.loadAllStocks()"
+          @click="stockStore.loadAllStocks({ force: true })"
         >
           <IconRefresh class="btn-icon" :stroke-width="2" />
           重新整理
@@ -50,7 +47,7 @@ async function openChart(stock) {
           <span class="alert-badge buy">強力買入 ≥70%</span>
         </div>
         <div class="alert-list">
-          <div v-for="stock in buySignals" :key="`buy-${stock.code}`" class="alert-item" @click="openChart(stock)">
+          <div v-for="stock in buySignals" :key="`buy-${stock.code}`" class="alert-item" @click="openQuote(stock)">
             <div class="alert-icon buy"><IconTrendingUp class="inline-icon" :stroke-width="2" /></div>
             <div>
               <div class="alert-stock-name">{{ stock.code }} {{ stock.name }}</div>
@@ -73,7 +70,7 @@ async function openChart(stock) {
           <span class="alert-badge sell">強力賣出 ≥65%</span>
         </div>
         <div class="alert-list">
-          <div v-for="stock in sellSignals" :key="`sell-${stock.code}`" class="alert-item" @click="openChart(stock)">
+          <div v-for="stock in sellSignals" :key="`sell-${stock.code}`" class="alert-item" @click="openQuote(stock)">
             <div class="alert-icon sell"><IconTrendingDown class="inline-icon" :stroke-width="2" /></div>
             <div>
               <div class="alert-stock-name">{{ stock.code }} {{ stock.name }}</div>
@@ -106,7 +103,7 @@ async function openChart(stock) {
           AI 訊號解讀
         </div>
         <div class="ai-content">
-          高買入訊號代表短線動能偏強；高賣出訊號代表籌碼偏保守。請搭配走勢圖確認是否帶量突破或跌破支撐。
+          高買入訊號代表短線動能偏強；高賣出訊號代表籌碼偏保守。請搭配即時報價與走勢圖確認是否帶量突破或跌破支撐。
         </div>
       </div>
     </div>
