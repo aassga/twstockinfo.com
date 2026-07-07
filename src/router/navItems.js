@@ -5,6 +5,7 @@ import {
   IconBriefcase,
   IconBuildingBank,
   IconFlame,
+  IconLayoutDashboard,
   IconReportAnalytics,
   IconSearch,
   IconSettings,
@@ -14,6 +15,7 @@ import {
 
 export const navItems = [
   { path: '/search', label: '股票搜尋', icon: IconSearch },
+  { path: '/complete-analysis', label: '完整分析', icon: IconLayoutDashboard },
   { path: '/portfolio', label: '我的持股', icon: IconBriefcase },
   { path: '/favorites', label: '我的最愛', icon: IconStar },
   { path: '/hot100', label: '前100熱門', icon: IconFlame },

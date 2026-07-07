@@ -144,7 +144,7 @@ async function runSearch(value) {
   if (!institutionalStore.loaded) {
     await institutionalStore.loadInstitutional({ silent: true });
   }
-  await institutionalStore.loadInstitutionalByCode(result.code, { force: true });
+  await institutionalStore.loadInstitutionalByCode(result.code);
 }
 
 function selectCandidate(stock) {

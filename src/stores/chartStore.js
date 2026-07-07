@@ -8,6 +8,7 @@ export const useChartStore = defineStore('chart', () => {
   const candles = ref([]);
   const loading = ref(false);
   const error = ref('');
+  let chartRequestId = 0;
 
   async function openStock(nextStock, nextInterval = interval.value) {
     if (!nextStock?.code) return;
@@ -23,16 +24,22 @@ export const useChartStore = defineStore('chart', () => {
 
   async function loadChart() {
     if (!stock.value?.code) return;
+    const requestId = ++chartRequestId;
+    const requestStock = stock.value;
+    const requestInterval = interval.value;
+
     loading.value = true;
     error.value = '';
     try {
-      const result = await stockApi.chart(stock.value.code, interval.value, stock.value.exchange);
+      const result = await stockApi.chart(requestStock.code, requestInterval, requestStock.exchange);
+      if (requestId !== chartRequestId) return;
       candles.value = result.candles;
     } catch (err) {
+      if (requestId !== chartRequestId) return;
       candles.value = [];
-      error.value = err?.message || '走勢圖讀取失敗';
+      error.value = err?.message || '走勢圖取得失敗';
     } finally {
-      loading.value = false;
+      if (requestId === chartRequestId) loading.value = false;
     }
   }
 

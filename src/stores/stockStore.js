@@ -27,6 +27,7 @@ export const useStockStore = defineStore('stocks', () => {
   let volumeRatioRequest = null;
   let volumeRatioRequestId = 0;
   let volumeRatioUpdatedAt = 0;
+  let searchRequestId = 0;
 
   const marketStats = computed(() => {
     const rows = allStocks.value;
@@ -90,6 +91,7 @@ export const useStockStore = defineStore('stocks', () => {
     const input = String(query || '').trim();
     if (!input) return null;
 
+    const requestId = ++searchRequestId;
     loadingQuote.value = true;
     error.value = '';
     searchQuery.value = input;
@@ -101,18 +103,19 @@ export const useStockStore = defineStore('stocks', () => {
       const found = findStock(input);
       const code = found?.code || input.match(stockCodePattern)?.[0]?.toUpperCase() || input.toUpperCase();
       const quote = await stockApi.quoteAuto(code, { withVolumeRatio: true });
-      currentStock.value = enrichStock({
+      const nextStock = enrichStock({
         ...found,
         ...quote,
         name: quote.name || found?.name || '',
         amountHundredMillion: found?.amountHundredMillion || quote.amountHundredMillion
       });
-      return currentStock.value;
+      if (requestId === searchRequestId) currentStock.value = nextStock;
+      return nextStock;
     } catch (err) {
       error.value = err?.message || '股票查詢失敗';
       throw err;
     } finally {
-      loadingQuote.value = false;
+      if (requestId === searchRequestId) loadingQuote.value = false;
     }
   }
 

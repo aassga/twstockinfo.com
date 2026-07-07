@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { showToast } from 'vant';
 import { IconChartCandle, IconSearch } from '@tabler/icons-vue';
 import StockChart from '../components/StockChart.vue';
+import TechnicalSummary from '../components/TechnicalSummary.vue';
 import { useChartStore } from '../stores/chartStore';
 import { useStockStore } from '../stores/stockStore';
 
@@ -29,7 +30,7 @@ async function search() {
     if (!stock) stock = await stockStore.searchStock(query.value);
     await chartStore.openStock(stock);
   } catch (error) {
-    showToast(error?.message || '走勢圖讀取失敗');
+    showToast(error?.message || '走勢圖取得失敗');
   }
 }
 </script>
@@ -41,7 +42,7 @@ async function search() {
         <div>
           <div class="page-title chart-title">
             <IconChartCandle class="title-icon" :stroke-width="2" />
-            <span>{{ chartStore.stock ? `${chartStore.stock.code} ${chartStore.stock.name}` : '股票走勢圖' }}</span>
+            <span>{{ chartStore.stock ? `${chartStore.stock.code} ${chartStore.stock.name || ''}` : '股票走勢圖' }}</span>
           </div>
           <div class="chart-subtitle">
             {{ chartStore.stock ? `目前週期：${currentIntervalLabel}` : '請從股票列表選擇一檔股票' }}
@@ -52,7 +53,7 @@ async function search() {
             <input
               v-model="query"
               class="chart-search-input"
-              placeholder="搜尋代號或名稱"
+              placeholder="輸入股票代號或名稱"
               @keydown.enter="search"
             />
             <button class="icon-btn chart-search-btn" type="button" title="搜尋走勢圖" @click="search">
@@ -74,14 +75,20 @@ async function search() {
         </div>
       </div>
 
+      <TechnicalSummary
+        :candles="chartStore.candles"
+        :interval="chartStore.interval"
+        :loading="chartStore.loading"
+      />
+
       <div class="chart-frame">
         <div v-if="!chartStore.stock && !chartStore.loading" class="chart-empty">
           <IconChartCandle class="title-icon" :size="42" :stroke-width="1.8" />
-          <span>選擇股票後顯示走勢圖</span>
+          <span>請搜尋股票或從列表開啟走勢圖</span>
         </div>
         <div v-else-if="chartStore.loading" class="chart-loading">
           <div class="spinner"></div>
-          <span>載入走勢圖...</span>
+          <span>走勢圖載入中...</span>
         </div>
         <div v-else-if="chartStore.error" class="chart-error">
           {{ chartStore.error }}

@@ -2,6 +2,7 @@ import { apiFetch } from './http';
 import { stockApi } from './stockApi';
 
 const CACHE_MS = 10 * 60 * 1000;
+const SNAPSHOT_CACHE_MS = 5 * 60 * 1000;
 const CASHFLOW_SOURCE_NOTE = '資料來源：FinMind TaiwanStockCashFlowsStatement';
 const MACRO_SOURCE_NOTE = '資料來源：FinMind TaiwanExchangeRate + TWSE 即時市場資料';
 const INCOME_ENDPOINTS = [
@@ -38,9 +39,30 @@ const TPEX_BALANCE_ENDPOINTS = [
 ];
 
 const cache = new Map();
+const snapshotCache = new Map();
+const snapshotRequests = new Map();
 
 export async function fetchFundamentalSnapshot(stock) {
   const normalized = normalizeStock(stock);
+  const snapshotKey = fundamentalSnapshotKey(normalized);
+  const cached = getCachedSnapshot(snapshotKey);
+  if (cached) return cached;
+  if (snapshotRequests.has(snapshotKey)) return snapshotRequests.get(snapshotKey);
+
+  const promise = fetchFundamentalSnapshotFresh(normalized)
+    .then(snapshot => {
+      setCachedSnapshot(snapshotKey, snapshot);
+      return snapshot;
+    })
+    .finally(() => {
+      snapshotRequests.delete(snapshotKey);
+    });
+
+  snapshotRequests.set(snapshotKey, promise);
+  return promise;
+}
+
+async function fetchFundamentalSnapshotFresh(normalized) {
   const endpoints = fundamentalEndpointsFor(normalized);
   const [
     valuationRows,
@@ -86,6 +108,32 @@ export async function fetchFundamentalSnapshot(stock) {
 
 export async function fetchFundamentalSnapshotPhased(stock, onUpdate = () => {}) {
   const normalized = normalizeStock(stock);
+  const snapshotKey = fundamentalSnapshotKey(normalized);
+  const cached = getCachedSnapshot(snapshotKey);
+  if (cached) {
+    onUpdate(cached);
+    return cached;
+  }
+  if (snapshotRequests.has(snapshotKey)) {
+    const snapshot = await snapshotRequests.get(snapshotKey);
+    onUpdate(snapshot);
+    return snapshot;
+  }
+
+  const promise = fetchFundamentalSnapshotPhasedFresh(normalized, onUpdate)
+    .then(snapshot => {
+      setCachedSnapshot(snapshotKey, snapshot);
+      return snapshot;
+    })
+    .finally(() => {
+      snapshotRequests.delete(snapshotKey);
+    });
+
+  snapshotRequests.set(snapshotKey, promise);
+  return promise;
+}
+
+async function fetchFundamentalSnapshotPhasedFresh(normalized, onUpdate = () => {}) {
   const endpoints = fundamentalEndpointsFor(normalized);
   const rows = {};
 
@@ -132,6 +180,20 @@ export async function fetchFundamentalSnapshotPhased(stock, onUpdate = () => {})
   });
   onUpdate(finalSnapshot);
   return finalSnapshot;
+}
+
+function fundamentalSnapshotKey(stock) {
+  return `${String(stock.code || '').trim().toUpperCase()}:${String(stock.exchange || stock.market || '').toLowerCase()}`;
+}
+
+function getCachedSnapshot(key) {
+  const cached = snapshotCache.get(key);
+  if (cached?.snapshot && Date.now() - cached.at < SNAPSHOT_CACHE_MS) return cached.snapshot;
+  return null;
+}
+
+function setCachedSnapshot(key, snapshot) {
+  snapshotCache.set(key, { at: Date.now(), snapshot });
 }
 
 function composeFundamentalSnapshot(normalized, rows = {}) {

@@ -12,8 +12,9 @@ export const stockApi = {
   quoteAuto,
   institutional: () => fetchLatestTwseRwd('/rwd/zh/fund/T86', '&selectType=ALLBUT0999').then(parseInstitutional),
   institutionalByCode: code => fetchInstitutionalByCode(code),
+  institutionalTrend: code => fetchInstitutionalTrendByCode(code),
   instSummary: () => fetchLatestTwseRwd('/rwd/zh/fund/BFI82U').then(parseInstitutionalSummary),
-  chart: (code, interval = 'D', exchange = '') => fetchYahooChart(code, interval, exchange)
+  chart: (code, interval = 'D', exchange = '') => fetchYahooChartCached(code, interval, exchange)
 };
 
 const PRICE_ROWS_CACHE_MS = 15000;
@@ -25,6 +26,7 @@ const MIS_BATCH_CODE_LIMIT = 15;
 const MIS_HOT_PRICE_LIMIT = 100;
 const VOLUME_RATIO_CACHE_MS = 30 * 60 * 1000;
 const VOLUME_RATIO_CONCURRENCY = 3;
+const YAHOO_CHART_CACHE_MS = 15000;
 const STOCK_CODE_PATTERN = /^\d{4,6}[A-Z]?$/;
 const OTC_CODE_SET = new Set(
   otcStockNames
@@ -59,6 +61,7 @@ let otcDailyCloseCache = {
 };
 const misQuoteCache = new Map();
 const volumeRatioCache = new Map();
+const yahooChartCache = new Map();
 let misOutageUntil = readMisOutageUntil();
 let proxyStatusCache = {
   at: 0,
@@ -885,6 +888,33 @@ async function fetchYahooChart(code, interval, exchange = '') {
   }
 }
 
+async function fetchYahooChartCached(code, interval, exchange = '') {
+  const normalizedCode = String(code || '').trim().toUpperCase();
+  const normalizedInterval = String(interval || 'D');
+  const normalizedExchange = String(exchange || '');
+  const key = `${normalizedCode}:${normalizedInterval}:${normalizedExchange}`;
+  const now = Date.now();
+  const cached = yahooChartCache.get(key);
+
+  if (cached?.result && now - cached.at < YAHOO_CHART_CACHE_MS) return cached.result;
+  if (cached?.promise && now - cached.at < YAHOO_CHART_CACHE_MS) return cached.promise;
+
+  const promise = fetchYahooChart(normalizedCode, normalizedInterval, normalizedExchange)
+    .then(result => {
+      yahooChartCache.set(key, { at: Date.now(), result });
+      return result;
+    })
+    .finally(() => {
+      const latest = yahooChartCache.get(key);
+      if (latest?.promise === promise) {
+        yahooChartCache.set(key, { at: Date.now(), result: latest.result });
+      }
+    });
+
+  yahooChartCache.set(key, { at: now, promise });
+  return promise;
+}
+
 function getYahooMarket(code, exchange = '') {
   const normalizedExchange = String(exchange || '').toLowerCase();
   if (['otc', 'tpex', 'two'].includes(normalizedExchange)) return 'TWO';
@@ -902,19 +932,16 @@ async function fetchYahooChartBySymbol(symbol, interval) {
   }
 
   const quote = result.indicators?.quote?.[0] || {};
-  const rows = (result.timestamp || []).map((timestamp, index) => ({
-    time: Number(timestamp) * 1000,
-    open: Number(quote.open?.[index]),
-    high: Number(quote.high?.[index]),
-    low: Number(quote.low?.[index]),
-    close: Number(quote.close?.[index]),
-    volume: Number(quote.volume?.[index] || 0)
-  })).filter(row =>
-    Number.isFinite(row.open) &&
-    Number.isFinite(row.high) &&
-    Number.isFinite(row.low) &&
-    Number.isFinite(row.close)
-  );
+  const rows = (result.timestamp || [])
+    .map((timestamp, index) => normalizeCandle({
+      time: Number(timestamp) * 1000,
+      open: Number(quote.open?.[index]),
+      high: Number(quote.high?.[index]),
+      low: Number(quote.low?.[index]),
+      close: Number(quote.close?.[index]),
+      volume: Number(quote.volume?.[index] || 0)
+    }))
+    .filter(Boolean);
 
   const candles = interval === '240' ? aggregateCandles(rows, 4) : rows;
   if (!candles.length) throw new Error('無走勢圖資料');
@@ -947,6 +974,42 @@ function aggregateCandles(rows, size) {
     });
   }
   return result;
+}
+
+function normalizeCandle(row) {
+  const open = Number(row.open);
+  const close = Number(row.close);
+  const rawHigh = Number(row.high);
+  const rawLow = Number(row.low);
+  const values = [open, close, rawHigh, rawLow];
+
+  if (!values.every(value => Number.isFinite(value)) || open <= 0 || close <= 0) return null;
+
+  const bodyHigh = Math.max(open, close);
+  const bodyLow = Math.min(open, close);
+  const high = Number.isFinite(rawHigh) && rawHigh >= bodyHigh ? rawHigh : bodyHigh;
+  const low = Number.isFinite(rawLow) && rawLow > 0 && rawLow <= bodyLow ? rawLow : bodyLow;
+  const previousClose = Number(row.previousClose || 0);
+  const reference = previousClose > 0 ? previousClose : close;
+  const maxAllowedRange = reference * 0.35;
+
+  if (reference > 0 && bodyLow - low > maxAllowedRange) {
+    return {
+      ...row,
+      open,
+      high,
+      low: bodyLow,
+      close
+    };
+  }
+
+  return {
+    ...row,
+    open,
+    high,
+    low,
+    close
+  };
 }
 
 function parseInstitutional(data) {
@@ -1003,6 +1066,45 @@ function parseInstitutionalTrendHtml(html, code) {
     unit: '張',
     source: 'histock'
   };
+}
+
+async function fetchInstitutionalTrendByCode(code) {
+  const normalizedCode = String(code || '').trim().toUpperCase();
+  if (!STOCK_CODE_PATTERN.test(normalizedCode)) throw new Error('股票代號格式不正確');
+
+  const html = await apiTextFetch(`/histock/stock/chips.aspx?no=${encodeURIComponent(normalizedCode)}&_=${Date.now()}`);
+  return parseInstitutionalTrendRowsHtml(html, normalizedCode);
+}
+
+function parseInstitutionalTrendRowsHtml(html, code) {
+  const text = String(html || '');
+  const matches = [...text.matchAll(/<tr[^>]*>\s*<td[^>]*>\s*(20\d{2}\/\d{2}\/\d{2})\s*<\/td>([\s\S]*?)<\/tr>/gi)];
+  const rows = matches.map(rowMatch => {
+    const cells = [...rowMatch[2].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)]
+      .map(match => stripHtml(match[1]))
+      .map(value => parseNumber(value));
+
+    if (cells.length < 5) return null;
+
+    const [foreign, trust, dealerSelf, dealerHedge, reportedTotal] = cells;
+    const dealer = dealerSelf + dealerHedge;
+    const total = Number.isFinite(reportedTotal) ? reportedTotal : foreign + trust + dealer;
+
+    return {
+      code,
+      name: '',
+      date: rowMatch[1],
+      foreign,
+      trust,
+      dealer,
+      total,
+      unit: '張',
+      source: 'histock'
+    };
+  }).filter(Boolean);
+
+  if (!rows.length) throw new Error('無法取得法人趨勢資料');
+  return rows.slice(0, 40);
 }
 
 function parseInstitutionalSummary(data) {

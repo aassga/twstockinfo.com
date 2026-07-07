@@ -31,10 +31,13 @@ const hover = {
   y: 0
 };
 
+const drawableCandles = computed(() => props.candles.map(normalizeDrawableCandle).filter(Boolean));
+
 const selectedCandle = computed(() => {
-  if (!props.candles.length) return null;
-  const index = selectedIndex.value >= 0 ? selectedIndex.value : props.candles.length - 1;
-  return props.candles[Math.min(Math.max(index, 0), props.candles.length - 1)];
+  const candles = drawableCandles.value;
+  if (!candles.length) return null;
+  const index = selectedIndex.value >= 0 ? selectedIndex.value : candles.length - 1;
+  return candles[Math.min(Math.max(index, 0), candles.length - 1)];
 });
 
 onMounted(() => {
@@ -83,13 +86,14 @@ function handlePointerLeave(event) {
 function draw() {
   if (!canvas) return;
   const frame = canvas.parentElement;
-  const width = frame.clientWidth || 320;
-  const height = frame.clientHeight || 360;
+  const rect = frame.getBoundingClientRect();
+  const width = Math.max(1, Math.round(rect.width || frame.clientWidth || 320));
+  const height = Math.max(1, Math.round(rect.height || frame.clientHeight || 360));
   const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.floor(width * dpr);
-  canvas.height = Math.floor(height * dpr);
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
+  const nextWidth = Math.floor(width * dpr);
+  const nextHeight = Math.floor(height * dpr);
+  if (canvas.width !== nextWidth) canvas.width = nextWidth;
+  if (canvas.height !== nextHeight) canvas.height = nextHeight;
 
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -98,7 +102,8 @@ function draw() {
 
   if (props.loading) return drawMessage(ctx, width, height, '載入中');
   if (props.error) return drawMessage(ctx, width, height, props.error);
-  if (!props.candles.length) return drawMessage(ctx, width, height, '尚未選擇股票');
+  const candles = drawableCandles.value;
+  if (!candles.length) return drawMessage(ctx, width, height, '尚未選擇股票');
 
   const layout = {
     left: 12,
@@ -111,23 +116,23 @@ function draw() {
   layout.priceHeight = height - layout.top - layout.bottom - layout.volumeHeight - layout.gap;
   layout.plotWidth = width - layout.left - layout.right;
 
-  const priceMin = Math.min(...props.candles.map(row => row.low));
-  const priceMax = Math.max(...props.candles.map(row => row.high));
+  const priceMin = Math.min(...candles.map(row => row.low));
+  const priceMax = Math.max(...candles.map(row => row.high));
   const pad = Math.max((priceMax - priceMin) * 0.08, priceMax * 0.01);
   const min = priceMin - pad;
   const max = priceMax + pad;
-  const volumeMax = Math.max(...props.candles.map(row => row.volume || 0), 1);
-  const step = layout.plotWidth / Math.max(props.candles.length, 1);
+  const volumeMax = Math.max(...candles.map(row => row.volume || 0), 1);
+  const step = layout.plotWidth / Math.max(candles.length, 1);
   const candleWidth = Math.max(2, Math.min(9, step * 0.58));
   const volumeTop = layout.top + layout.priceHeight + layout.gap;
   const yPrice = value => layout.top + ((max - value) / (max - min || 1)) * layout.priceHeight;
   const yVolume = value => volumeTop + layout.volumeHeight - (value / volumeMax) * layout.volumeHeight;
 
   drawGrid(ctx, layout, width, height, min, max, volumeTop);
-  const activeIndex = hover.active ? nearestCandleIndex(layout, step) : -1;
+  const activeIndex = hover.active ? nearestCandleIndex(layout, step, candles.length) : -1;
   selectedIndex.value = activeIndex;
 
-  props.candles.forEach((row, index) => {
+  candles.forEach((row, index) => {
     const x = layout.left + index * step + step / 2;
     const up = row.close >= row.open;
     const color = up ? '#d64a42' : '#16885d';
@@ -146,8 +151,8 @@ function draw() {
     ctx.globalAlpha = 1;
   });
 
-  drawAxes(ctx, layout, width, height, min, max);
-  drawHover(ctx, layout, width, height, min, max, step, volumeTop);
+  drawAxes(ctx, layout, width, height, min, max, candles);
+  drawHover(ctx, layout, width, height, min, max, step, volumeTop, candles);
 }
 
 function drawBackground(ctx, width, height) {
@@ -177,9 +182,9 @@ function drawGrid(ctx, layout, width, height, min, max, volumeTop) {
   ctx.stroke();
 }
 
-function drawAxes(ctx, layout, width, height, min, max) {
-  const first = props.candles[0];
-  const last = props.candles[props.candles.length - 1];
+function drawAxes(ctx, layout, width, height, min, max, candles) {
+  const first = candles[0];
+  const last = candles[candles.length - 1];
   const latest = last.close;
   const latestY = layout.top + ((max - latest) / (max - min || 1)) * layout.priceHeight;
 
@@ -199,8 +204,8 @@ function drawAxes(ctx, layout, width, height, min, max) {
   ctx.textAlign = 'left';
 }
 
-function drawHover(ctx, layout, width, height, min, max, step, volumeTop) {
-  if (!hover.active || !props.candles.length) return;
+function drawHover(ctx, layout, width, height, min, max, step, volumeTop, candles) {
+  if (!hover.active || !candles.length) return;
 
   const plotLeft = layout.left;
   const plotRight = width - layout.right;
@@ -220,8 +225,8 @@ function drawHover(ctx, layout, width, height, min, max, step, volumeTop) {
   const x = Math.min(Math.max(hover.x, plotLeft), plotRight);
   const y = Math.min(Math.max(hover.y, priceTop), priceBottom);
   const price = max - ((y - layout.top) / layout.priceHeight) * (max - min);
-  const nearestIndex = nearestCandleIndex(layout, step);
-  const row = props.candles[nearestIndex];
+  const nearestIndex = nearestCandleIndex(layout, step, candles.length);
+  const row = candles[nearestIndex];
   const candleX = layout.left + nearestIndex * step + step / 2;
 
   ctx.save();
@@ -292,11 +297,35 @@ function drawMessage(ctx, width, height, message) {
   ctx.textAlign = 'left';
 }
 
-function nearestCandleIndex(layout, step) {
+function nearestCandleIndex(layout, step, count = drawableCandles.value.length) {
   return Math.min(
-    props.candles.length - 1,
+    count - 1,
     Math.max(0, Math.round((hover.x - layout.left - step / 2) / step))
   );
+}
+
+function normalizeDrawableCandle(row) {
+  const open = Number(row.open);
+  const close = Number(row.close);
+  const rawHigh = Number(row.high);
+  const rawLow = Number(row.low);
+  if (![open, close, rawHigh, rawLow].every(Number.isFinite) || open <= 0 || close <= 0) return null;
+
+  const bodyHigh = Math.max(open, close);
+  const bodyLow = Math.min(open, close);
+  const high = rawHigh >= bodyHigh ? rawHigh : bodyHigh;
+  let low = rawLow > 0 && rawLow <= bodyLow ? rawLow : bodyLow;
+  const reference = close || bodyLow;
+  if (reference > 0 && bodyLow - low > reference * 0.35) low = bodyLow;
+
+  return {
+    ...row,
+    open,
+    high,
+    low,
+    close,
+    volume: Number(row.volume || 0)
+  };
 }
 
 function formatChartVolume(value) {
