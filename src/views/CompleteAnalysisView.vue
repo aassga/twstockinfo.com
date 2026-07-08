@@ -98,7 +98,6 @@ const dominantForce = computed(() => {
 const executiveSummary = computed(() => buildExecutiveSummary(stock.value, snapshot.value, inst.value, instTrendSummary.value));
 const riskChecks = computed(() => buildRiskChecks(stock.value, snapshot.value, inst.value));
 const instTrendSummary = computed(() => [5, 10, 20].map(days => summarizeInstitutionalTrend(instTrend.value, days)));
-const summaryMetrics = computed(() => snapshot.value?.metrics?.slice(0, 4) || []);
 const summarySignals = computed(() => {
   const revenue = snapshot.value?.revenueTrend;
   const valuation = snapshot.value?.valuationHistory;
@@ -588,20 +587,6 @@ function buildRiskChecks(current, fundamental, institutional) {
             <div>
               <span>結論</span>
               <p>{{ snapshot.verdict }}</p>
-            </div>
-          </div>
-          <div v-if="snapshot" class="complete-fundamental-grid">
-            <div v-for="item in snapshot.highlights" :key="item.label" class="fundamental-card">
-              <div class="fundamental-card-label">{{ item.label }}</div>
-              <div class="fundamental-card-value">{{ item.value }}</div>
-              <div class="fundamental-card-detail">{{ item.detail }}</div>
-            </div>
-          </div>
-          <div v-if="snapshot" class="complete-metric-strip compact">
-            <div v-for="metric in summaryMetrics" :key="metric.label" class="complete-metric" :class="metric.status">
-              <span>{{ metric.label }}</span>
-              <strong>{{ metric.value }}</strong>
-              <em>{{ statusText(metric.status) }}</em>
             </div>
           </div>
           <div v-if="snapshot" class="complete-metric-strip compact">

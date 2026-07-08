@@ -1486,6 +1486,112 @@ button {
   background: rgba(31, 38, 53, 0.72);
 }
 
+.peer-rank-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.peer-loading-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid rgba(59, 130, 246, 0.34);
+  border-radius: var(--radius);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.peer-loading-card strong {
+  color: var(--text-1);
+  font-size: 15px;
+}
+
+.peer-loading-card span {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.peer-rank-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.72);
+}
+
+.peer-rank-card span,
+.peer-rank-card small {
+  display: block;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.peer-rank-card strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-1);
+  font-size: 15px;
+}
+
+.peer-rank-card em {
+  display: block;
+  margin: 8px 0 4px;
+  color: var(--accent);
+  font-size: 22px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.peer-ranking-table {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: rgba(31, 38, 53, 0.42);
+}
+
+.peer-ranking-row {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: center;
+  padding: 11px 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.peer-ranking-row:first-child {
+  border-top: 0;
+}
+
+.peer-ranking-row.head {
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.peer-ranking-row span {
+  min-width: 0;
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.peer-ranking-row strong,
+.peer-ranking-row em {
+  display: block;
+}
+
+.peer-ranking-row em {
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+}
+
 .complete-fundamental-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3272,6 +3378,21 @@ button {
 
   .peer-grid {
     grid-template-columns: 1fr;
+  }
+
+  .peer-rank-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .peer-ranking-row {
+    grid-template-columns: 1.2fr repeat(3, minmax(0, 0.8fr));
+    gap: 6px;
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  .peer-ranking-row.head {
+    font-size: 11px;
   }
 
   .quote-metric-cell {

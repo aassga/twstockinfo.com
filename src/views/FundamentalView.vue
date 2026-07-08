@@ -11,7 +11,7 @@ import {
   IconShieldCheck,
   IconTable
 } from '@tabler/icons-vue';
-import { fetchFundamentalSnapshotPhased } from '../api/fundamentalApi';
+import { fetchFundamentalSnapshotPhased, fetchIndustryPeerStocks } from '../api/fundamentalApi';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
 import { quickStocks } from '../utils/stockMeta';
@@ -25,6 +25,11 @@ const error = ref('');
 const activeTab = ref('overview');
 const candidates = ref([]);
 const showCandidates = ref(false);
+const peerRows = ref([]);
+const peerSnapshots = ref([]);
+const peerLoading = ref(false);
+const peerLoaded = ref(false);
+const peerStage = ref('idle');
 const candidateLimit = 20;
 const stockCodePattern = /^\d{4,6}[a-z]?$/i;
 let candidateTimer = null;
@@ -34,6 +39,8 @@ const tabs = [
   { key: 'overview', label: '總覽', icon: IconReportAnalytics },
   { key: 'metrics', label: '財務指標', icon: IconChartBar },
   { key: 'statements', label: '三大財報', icon: IconTable },
+  { key: 'peers', label: '同業比較', icon: IconChartBar },
+  { key: 'events', label: '事件 / 股利', icon: IconClipboardData },
   { key: 'qualitative', label: '質化分析', icon: IconShieldCheck },
   { key: 'ai', label: 'AI 長期觀點', icon: IconBrain }
 ];
@@ -53,6 +60,17 @@ const dividendMax = computed(() => {
 });
 const eventCalendar = computed(() => snapshot.value?.eventCalendar || []);
 const scoreModel = computed(() => snapshot.value?.scoreModel || null);
+const peerComparison = computed(() => {
+  const result = buildPeerComparison(company.value, peerRows.value, snapshot.value, peerSnapshots.value);
+  return result && (result.count || result.peerFundamentalCount) ? result : null;
+});
+const peerRankingRows = computed(() => buildPeerRankingRows(company.value, peerRows.value, snapshot.value, peerSnapshots.value));
+const peerStatusText = computed(() => {
+  if (peerStage.value === 'industry') return '正在取得官方同業清單...';
+  if (peerStage.value === 'fundamental') return '同業行情已載入，正在補同業基本面...';
+  if (peerStage.value === 'empty') return '同產業樣本不足';
+  return peerLoading.value ? '同業比較載入中...' : '';
+});
 const loadingStageText = computed(() => {
   if (!loading.value || !snapshot.value?.isPartial) return '';
   const stage = snapshot.value.loadingStage;
@@ -92,6 +110,11 @@ watch(
   }
 );
 
+watch(activeTab, tab => {
+  if (tab !== 'peers' || !snapshot.value || peerLoaded.value || peerLoading.value) return;
+  void loadPeerFundamentals(company.value, searchRunId);
+});
+
 async function submit(value = query.value) {
   const input = String(value || '').trim();
   if (!input) return;
@@ -124,10 +147,17 @@ async function runSearch(code) {
     query.value = stock.code;
     activeTab.value = 'overview';
     snapshot.value = null;
-    await fetchFundamentalSnapshotPhased(stock, nextSnapshot => {
+    peerRows.value = [];
+    peerSnapshots.value = [];
+    peerLoading.value = false;
+    peerLoaded.value = false;
+    peerStage.value = 'idle';
+    const finalSnapshot = await fetchFundamentalSnapshotPhased(stock, nextSnapshot => {
       if (runId !== searchRunId) return;
       snapshot.value = nextSnapshot;
     });
+    if (runId !== searchRunId) return;
+    snapshot.value = finalSnapshot;
   } catch (err) {
     if (runId !== searchRunId) return;
     error.value = err?.message || '基本面資料讀取失敗';
@@ -152,6 +182,44 @@ function normalizeRouteCode(value) {
 function quickSearch(code) {
   query.value = code;
   submit(code);
+}
+
+async function loadPeerFundamentals(current, runId) {
+  const sector = current?.sector || current?.industry;
+  peerLoading.value = true;
+  peerStage.value = 'industry';
+  peerLoaded.value = false;
+  const officialPeers = await fetchIndustryPeerStocks(current, stockStore.allStocks, 8).catch(() => []);
+  if (runId !== searchRunId) return;
+  const peers = officialPeers.length
+    ? officialPeers.slice(0, 6)
+    : (stockStore.allStocks || [])
+      .filter(row => row?.code !== current?.code && (row?.sector === sector || row?.industry === sector))
+      .sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0))
+      .slice(0, 6);
+
+  if (!sector || !peers.length) {
+    peerRows.value = [];
+    peerSnapshots.value = [];
+    peerLoaded.value = true;
+    peerStage.value = 'empty';
+    peerLoading.value = false;
+    return;
+  }
+
+  peerRows.value = peers;
+  peerStage.value = 'fundamental';
+  try {
+    const results = await Promise.allSettled(peers.map(peer => fetchFundamentalSnapshotPhased(peer, () => {})));
+    if (runId !== searchRunId) return;
+    peerSnapshots.value = results
+      .filter(result => result.status === 'fulfilled' && result.value)
+      .map(result => result.value);
+    peerLoaded.value = true;
+    peerStage.value = 'done';
+  } finally {
+    if (runId === searchRunId) peerLoading.value = false;
+  }
 }
 
 function statusText(status) {
@@ -223,6 +291,161 @@ function dividendBarWidth(row) {
 
 function eventStatusText(status) {
   return status === 'upcoming' ? '即將' : '最近';
+}
+
+function buildPeerComparison(current, allStocks, currentSnapshot, snapshots) {
+  if (!current) return null;
+  const sector = current.sector || current.industry || '同產業';
+  const stockRows = (allStocks || [])
+    .filter(row => row?.code !== current.code)
+    .slice(0, 50);
+  const snapshotRows = (snapshots || []).map(item => item.company).filter(Boolean);
+  const marketRows = stockRows.length ? stockRows : snapshotRows;
+  const fundamentalRows = snapshots || [];
+
+  return {
+    sector,
+    count: marketRows.length,
+    peerFundamentalCount: fundamentalRows.length,
+    stockChangePct: Number(current.chgPct),
+    avgChangePct: average(marketRows.map(row => Number(row.chgPct))),
+    stockVolRatio: Number(current.volRatio),
+    avgVolRatio: average(marketRows.map(row => Number(row.volRatio))),
+    stockBuyPct: Number(current.buyPct),
+    avgBuyPct: average(marketRows.map(row => Number(row.buyPct))),
+    currentPe: highlightValue(currentSnapshot, '本益比'),
+    avgPeerPe: average(fundamentalRows.map(item => highlightValue(item, '本益比'))),
+    currentRoe: metricValue(currentSnapshot, '年化 ROE'),
+    avgPeerRoe: average(fundamentalRows.map(item => metricValue(item, '年化 ROE'))),
+    currentYield: highlightValue(currentSnapshot, '殖利率'),
+    avgPeerYield: average(fundamentalRows.map(item => highlightValue(item, '殖利率'))),
+    currentRevenueYoy: metricValue(currentSnapshot, '月營收 YoY'),
+    avgPeerRevenueYoy: average(fundamentalRows.map(item => metricValue(item, '月營收 YoY')))
+  };
+}
+
+function buildPeerRankingRows(current, peers, currentSnapshot, snapshots) {
+  if (!current) return [];
+  if (!(peers || []).length && !(snapshots || []).length) return [];
+  const marketRows = [current, ...(peers || [])];
+  const fundamentalRows = [currentSnapshot, ...(snapshots || [])].filter(Boolean);
+  const currentPe = highlightValue(currentSnapshot, '本益比');
+  const currentYield = highlightValue(currentSnapshot, '殖利率');
+  const currentEps = metricValue(currentSnapshot, 'EPS');
+  const currentRevenueYoy = metricValue(currentSnapshot, '月營收 YoY');
+
+  return [
+    createPeerRankRow({
+      label: '漲跌幅',
+      period: '即時',
+      value: Number(current.chgPct),
+      average: average((peers || []).map(row => Number(row.chgPct))),
+      values: marketRows.map(row => Number(row.chgPct)),
+      format: 'pct',
+      order: 'desc'
+    }),
+    createPeerRankRow({
+      label: '每股盈餘',
+      period: '近一年',
+      value: currentEps,
+      average: average((snapshots || []).map(item => metricValue(item, 'EPS'))),
+      values: fundamentalRows.map(item => metricValue(item, 'EPS')),
+      format: 'number',
+      order: 'desc'
+    }),
+    createPeerRankRow({
+      label: '現金殖利率',
+      period: '近一年',
+      value: currentYield,
+      average: average((snapshots || []).map(item => highlightValue(item, '殖利率'))),
+      values: fundamentalRows.map(item => highlightValue(item, '殖利率')),
+      format: 'pct',
+      order: 'desc'
+    }),
+    createPeerRankRow({
+      label: '本益比',
+      period: '近一年',
+      value: currentPe,
+      average: average((snapshots || []).map(item => highlightValue(item, '本益比'))),
+      values: fundamentalRows.map(item => highlightValue(item, '本益比')),
+      format: 'number',
+      order: 'asc'
+    }),
+    {
+      label: '法人買賣超',
+      period: '近 5 日',
+      value: null,
+      average: null,
+      rank: null,
+      total: 0,
+      format: 'number',
+      note: '待接三大法人同業資料'
+    },
+    createPeerRankRow({
+      label: '營收年增率',
+      period: '最新月',
+      value: currentRevenueYoy,
+      average: average((snapshots || []).map(item => metricValue(item, '月營收 YoY'))),
+      values: fundamentalRows.map(item => metricValue(item, '月營收 YoY')),
+      format: 'pct',
+      order: 'desc'
+    })
+  ];
+}
+
+function createPeerRankRow({ label, period, value, average: avg, values, format, order }) {
+  const rank = rankAmong(value, values, order);
+  return {
+    label,
+    period,
+    value,
+    average: avg,
+    rank: rank.rank,
+    total: rank.total,
+    format,
+    note: rank.rank ? `${order === 'asc' ? '低值優先' : '高值優先'}排序` : '樣本不足'
+  };
+}
+
+function rankAmong(value, values, order = 'desc') {
+  const currentValue = Number(value);
+  const valid = values.map(Number).filter(Number.isFinite);
+  if (!Number.isFinite(currentValue) || !valid.length) return { rank: null, total: valid.length };
+  const sorted = valid.slice().sort((a, b) => order === 'asc' ? a - b : b - a);
+  const rank = sorted.findIndex(item => order === 'asc' ? currentValue <= item : currentValue >= item) + 1;
+  return { rank: rank || null, total: valid.length };
+}
+
+function peerMetricDisplay(row, key = 'value') {
+  const value = Number(row?.[key]);
+  if (!Number.isFinite(value)) return '--';
+  return row.format === 'pct' ? pct(value, 2) : valuationDisplay({ current: value }, 2);
+}
+
+function peerRankLabel(row) {
+  return row?.rank && row?.total ? `${row.rank}/${row.total}` : '--';
+}
+
+function metricValue(target, label) {
+  const item = target?.metrics?.find(metric => metric.label === label);
+  return numericDisplayValue(item?.value);
+}
+
+function highlightValue(target, label) {
+  const item = target?.highlights?.find(metric => metric.label === label);
+  return numericDisplayValue(item?.value);
+}
+
+function numericDisplayValue(value) {
+  if (value === null || value === undefined) return null;
+  const number = Number(String(value).replace(/[^\d.-]/g, ''));
+  return Number.isFinite(number) ? number : null;
+}
+
+function average(values) {
+  const valid = values.map(Number).filter(Number.isFinite);
+  if (!valid.length) return null;
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
 }
 </script>
 
@@ -362,14 +585,18 @@ function eventStatusText(status) {
             <em>{{ item.detail }}</em>
           </div>
         </div>
-        <div v-if="eventCalendar.length" class="event-calendar-list fundamental-event-calendar">
-          <div v-for="item in eventCalendar" :key="`${item.date}-${item.title}`" class="event-calendar-item" :class="item.status">
-            <div>
-              <span>{{ item.date }}</span>
-              <strong>{{ item.title }}</strong>
+      </div>
+
+      <div v-if="activeTab === 'metrics'" class="fundamental-panel">
+        <div class="fundamental-metric-grid">
+          <div v-for="metric in snapshot.metrics" :key="metric.label" class="fundamental-metric">
+            <div class="metric-head">
+              <span>{{ metric.label }}</span>
+              <span class="status-pill" :class="metric.status">{{ statusText(metric.status) }}</span>
             </div>
-            <em>{{ item.detail }}</em>
-            <small>{{ eventStatusText(item.status) }} · {{ item.source }}</small>
+            <div class="metric-value">{{ metric.value }}</div>
+            <div class="metric-meaning">{{ metric.meaning }}</div>
+            <div class="metric-rule">{{ metric.rule }}</div>
           </div>
         </div>
         <div v-if="revenueTrend?.available" class="revenue-trend fundamental-revenue-trend">
@@ -422,6 +649,112 @@ function eventStatusText(status) {
             <small>近一年百分位 {{ Number.isFinite(metric.percentile) ? `${metric.percentile}%` : '--' }}</small>
           </div>
         </div>
+      </div>
+
+      <div v-if="activeTab === 'statements'" class="fundamental-panel">
+        <div class="statement-grid">
+          <div v-for="section in snapshot.statements" :key="section.title" class="statement-card">
+            <div class="statement-title">{{ section.title }}</div>
+            <div v-for="row in section.rows" :key="row.label" class="statement-row">
+              <div>
+                <span>{{ row.label }}</span>
+                <small>{{ row.note }}</small>
+              </div>
+              <span class="statement-value">{{ row.value }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'peers'" class="fundamental-panel">
+        <div class="source-row">
+          <span class="source-badge">產業：{{ peerComparison?.sector || company.sector || '--' }}</span>
+          <span class="source-badge">樣本：{{ peerComparison?.count || 0 }} 檔</span>
+          <span class="source-badge">基本面樣本：{{ peerComparison?.peerFundamentalCount || 0 }} 檔</span>
+          <span v-if="peerLoading || peerStatusText" class="source-badge">{{ peerStatusText }}</span>
+        </div>
+        <div v-if="peerLoading && !peerRows.length" class="peer-loading-card">
+          <strong>正在建立同業比較</strong>
+          <span>{{ peerStatusText }}</span>
+        </div>
+        <div v-if="peerLoading && peerRows.length" class="hint">{{ peerStatusText }}</div>
+        <div v-if="peerRankingRows.length" class="peer-rank-card-grid">
+          <div v-for="row in peerRankingRows" :key="row.label" class="peer-rank-card">
+            <span>{{ row.period }}</span>
+            <strong>{{ row.label }}</strong>
+            <em>{{ peerRankLabel(row) }}</em>
+            <small>{{ row.note }}</small>
+          </div>
+        </div>
+        <div v-if="peerRankingRows.length" class="peer-ranking-table">
+          <div class="peer-ranking-row head">
+            <span>指標</span>
+            <span>本股</span>
+            <span>同業平均</span>
+            <span>排名</span>
+          </div>
+          <div v-for="row in peerRankingRows" :key="`table-${row.label}`" class="peer-ranking-row">
+            <span>
+              <strong>{{ row.label }}</strong>
+              <em>{{ row.period }}</em>
+            </span>
+            <span>{{ peerMetricDisplay(row, 'value') }}</span>
+            <span>{{ peerMetricDisplay(row, 'average') }}</span>
+            <span>{{ peerRankLabel(row) }}</span>
+          </div>
+        </div>
+        <div v-if="peerComparison" class="peer-grid">
+          <div>
+            <span>漲跌幅</span>
+            <strong :class="moveClass(peerComparison.stockChangePct).replace('is-', '')">{{ pct(peerComparison.stockChangePct, 2) }}</strong>
+            <em>同業平均 {{ pct(peerComparison.avgChangePct, 2) }}</em>
+          </div>
+          <div>
+            <span>量比</span>
+            <strong>{{ valuationDisplay({ current: peerComparison.stockVolRatio }, 0) }}%</strong>
+            <em>同業平均 {{ valuationDisplay({ current: peerComparison.avgVolRatio }, 0) }}%</em>
+          </div>
+          <div>
+            <span>買入占比</span>
+            <strong>{{ valuationDisplay({ current: peerComparison.stockBuyPct }, 0) }}%</strong>
+            <em>同業平均 {{ valuationDisplay({ current: peerComparison.avgBuyPct }, 0) }}%</em>
+          </div>
+          <div>
+            <span>本益比</span>
+            <strong>{{ valuationDisplay({ current: peerComparison.currentPe }) }}</strong>
+            <em>同業平均 {{ valuationDisplay({ current: peerComparison.avgPeerPe }) }}</em>
+          </div>
+          <div>
+            <span>ROE</span>
+            <strong>{{ pct(peerComparison.currentRoe, 2) }}</strong>
+            <em>同業平均 {{ pct(peerComparison.avgPeerRoe, 2) }}</em>
+          </div>
+          <div>
+            <span>殖利率</span>
+            <strong>{{ pct(peerComparison.currentYield, 2) }}</strong>
+            <em>同業平均 {{ pct(peerComparison.avgPeerYield, 2) }}</em>
+          </div>
+          <div>
+            <span>月營收 YoY</span>
+            <strong>{{ pct(peerComparison.currentRevenueYoy, 2) }}</strong>
+            <em>同業平均 {{ pct(peerComparison.avgPeerRevenueYoy, 2) }}</em>
+          </div>
+        </div>
+        <div v-else-if="!peerLoading" class="hint">同產業樣本不足，暫時無法建立比較。</div>
+      </div>
+
+      <div v-if="activeTab === 'events'" class="fundamental-panel">
+        <div v-if="eventCalendar.length" class="event-calendar-list fundamental-event-calendar">
+          <div v-for="item in eventCalendar" :key="`${item.date}-${item.title}`" class="event-calendar-item" :class="item.status">
+            <div>
+              <span>{{ item.date }}</span>
+              <strong>{{ item.title }}</strong>
+            </div>
+            <em>{{ item.detail }}</em>
+            <small>{{ eventStatusText(item.status) }} · {{ item.source }}</small>
+          </div>
+        </div>
+        <div v-else class="hint">目前沒有可顯示的近期事件。</div>
         <div v-if="dividendStability?.available" class="dividend-stability fundamental-dividend-stability">
           <div class="dividend-main-card" :class="dividendStability.tone">
             <span>{{ dividendStability.label }}</span>
@@ -438,35 +771,7 @@ function eventStatusText(status) {
             </div>
           </div>
         </div>
-      </div>
-
-      <div v-if="activeTab === 'metrics'" class="fundamental-panel">
-        <div class="fundamental-metric-grid">
-          <div v-for="metric in snapshot.metrics" :key="metric.label" class="fundamental-metric">
-            <div class="metric-head">
-              <span>{{ metric.label }}</span>
-              <span class="status-pill" :class="metric.status">{{ statusText(metric.status) }}</span>
-            </div>
-            <div class="metric-value">{{ metric.value }}</div>
-            <div class="metric-meaning">{{ metric.meaning }}</div>
-            <div class="metric-rule">{{ metric.rule }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="activeTab === 'statements'" class="fundamental-panel">
-        <div class="statement-grid">
-          <div v-for="section in snapshot.statements" :key="section.title" class="statement-card">
-            <div class="statement-title">{{ section.title }}</div>
-            <div v-for="row in section.rows" :key="row.label" class="statement-row">
-              <div>
-                <span>{{ row.label }}</span>
-                <small>{{ row.note }}</small>
-              </div>
-              <span class="statement-value">{{ row.value }}</span>
-            </div>
-          </div>
-        </div>
+        <div v-else class="hint">股利穩定度尚無足夠資料。</div>
       </div>
 
       <div v-if="activeTab === 'qualitative'" class="fundamental-panel">

@@ -143,6 +143,41 @@ export async function fetchFundamentalSnapshotPhased(stock, onUpdate = () => {})
   return promise;
 }
 
+export async function fetchIndustryPeerStocks(stock, allStocks = [], limit = 12) {
+  const normalized = normalizeStock(stock);
+  const twseEndpoints = fundamentalEndpointsFor({ ...normalized, exchange: 'twse' });
+  const tpexEndpoints = fundamentalEndpointsFor({ ...normalized, exchange: 'tpex' });
+  const [revenueRows, epsRows] = await Promise.all([
+    fetchManyRows([...twseEndpoints.revenue, ...tpexEndpoints.revenue]),
+    fetchManyRows([...twseEndpoints.eps, ...tpexEndpoints.eps])
+  ]);
+  const ownIndustryRow = findByCode([...revenueRows, ...epsRows], normalized.code);
+  const sector = normalized.sector || read(ownIndustryRow, ['產業別']) || '';
+  const sectorKey = normalizeIndustryKey(sector);
+  if (!sectorKey) return [];
+
+  const quoteByCode = new Map((allStocks || []).map(row => [String(row.code || '').trim(), row]));
+  const rowsByCode = new Map();
+
+  [...revenueRows, ...epsRows].forEach(row => {
+    const code = codeOf(row);
+    if (!code || code === normalized.code) return;
+    const industry = read(row, ['產業別']);
+    if (normalizeIndustryKey(industry) !== sectorKey) return;
+    const quote = quoteByCode.get(code) || {};
+    rowsByCode.set(code, {
+      ...quote,
+      code,
+      name: quote.name || read(row, ['公司名稱', 'CompanyName']) || code,
+      sector: industry || sector
+    });
+  });
+
+  return [...rowsByCode.values()]
+    .sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0))
+    .slice(0, limit);
+}
+
 async function fetchFundamentalSnapshotPhasedFresh(normalized, onUpdate = () => {}) {
   const endpoints = fundamentalEndpointsFor(normalized);
   const rows = {};
@@ -1403,6 +1438,13 @@ function read(row, keys) {
     if (row[key] !== undefined && row[key] !== null && row[key] !== '') return row[key];
   }
   return '';
+}
+
+function normalizeIndustryKey(value) {
+  return String(value || '')
+    .replace(/\s+/g, '')
+    .replace(/產業|業/g, '')
+    .trim();
 }
 
 function parseNumber(value) {
