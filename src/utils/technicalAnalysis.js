@@ -5,6 +5,9 @@ const RSI_PERIOD = 14;
 const MACD_FAST = 12;
 const MACD_SLOW = 26;
 const MACD_SIGNAL = 9;
+const KD_PERIOD = 9;
+const BOLLINGER_PERIOD = 20;
+const BOLLINGER_MULTIPLIER = 2;
 
 export function buildTechnicalSummary(candles = [], options = {}) {
   const interval = normalizeInterval(options.interval);
@@ -12,6 +15,8 @@ export function buildTechnicalSummary(candles = [], options = {}) {
     .map(row => ({
       ...row,
       close: Number(row.close || 0),
+      high: Number(row.high || row.close || 0),
+      low: Number(row.low || row.close || 0),
       volume: Number(row.volume || 0)
     }))
     .filter(row => row.close > 0);
@@ -29,6 +34,8 @@ export function buildTechnicalSummary(candles = [], options = {}) {
   const volumeRatio = avgVolume20 > 0 ? (latest.volume / avgVolume20) * 100 : null;
   const rsi = calculateRsi(closes, RSI_PERIOD);
   const macd = calculateMacd(closes);
+  const kd = calculateKd(rows, KD_PERIOD);
+  const bollinger = calculateBollinger(closes, BOLLINGER_PERIOD, BOLLINGER_MULTIPLIER);
   const supportResistance = calculateSupportResistance(rows, latest.close);
   const changePct = previous?.close
     ? ((latest.close - previous.close) / previous.close) * 100
@@ -42,13 +49,19 @@ export function buildTechnicalSummary(candles = [], options = {}) {
     ma60,
     rsi,
     macd,
+    kd,
+    bollinger,
     supportResistance,
     volumeRatio,
     avgVolume20,
+    volumeMa5: movingAverage(volumes, MA_SHORT),
+    volumeMa20: movingAverage(volumes, MA_MID),
     interval,
     intervalLabel: intervalLabel(interval),
     trend: classifyTrend(latest.close, ma5, ma20, ma60, interval),
     momentum: classifyMomentum(rsi, macd?.histogram, interval),
+    kdSignal: classifyKd(kd),
+    bollingerSignal: classifyBollinger(latest.close, bollinger),
     volumeSignal: classifyPriceVolume(changePct, volumeRatio),
     priceVolumeNote: priceVolumeNote(changePct, volumeRatio, interval),
     maLabels: maLabels(interval)
@@ -89,6 +102,41 @@ function calculateMacd(values) {
     macd: macdValue,
     signal: signalValue,
     histogram: macdValue - signalValue
+  };
+}
+
+function calculateKd(rows, period) {
+  if (rows.length < period) return null;
+  const sample = rows.slice(-period);
+  const low = Math.min(...sample.map(row => Number(row.low || row.close || 0)).filter(Number.isFinite));
+  const high = Math.max(...sample.map(row => Number(row.high || row.close || 0)).filter(Number.isFinite));
+  const close = Number(sample.at(-1)?.close || 0);
+  if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low || !close) return null;
+  const rsv = ((close - low) / (high - low)) * 100;
+  const previous = rows.length > period ? calculateKd(rows.slice(0, -1), period) : null;
+  const k = previous ? (previous.k * 2 + rsv) / 3 : (50 * 2 + rsv) / 3;
+  const d = previous ? (previous.d * 2 + k) / 3 : (50 * 2 + k) / 3;
+  return {
+    rsv,
+    k,
+    d,
+    j: 3 * k - 2 * d
+  };
+}
+
+function calculateBollinger(values, period, multiplier) {
+  const sample = values
+    .filter(value => Number.isFinite(value) && value > 0)
+    .slice(-period);
+  if (sample.length < period) return null;
+  const middle = sample.reduce((sum, value) => sum + value, 0) / sample.length;
+  const variance = sample.reduce((sum, value) => sum + ((value - middle) ** 2), 0) / sample.length;
+  const deviation = Math.sqrt(variance);
+  return {
+    upper: middle + deviation * multiplier,
+    middle,
+    lower: middle - deviation * multiplier,
+    widthPct: middle ? ((deviation * multiplier * 2) / middle) * 100 : null
   };
 }
 
@@ -183,6 +231,23 @@ function classifyMomentum(rsi, macdHistogram, interval) {
   if (Number.isFinite(macdHistogram) && macdHistogram > 0) return { label: '動能轉強', type: 'up' };
   if (Number.isFinite(macdHistogram) && macdHistogram < 0) return { label: '動能轉弱', type: 'down' };
   return { label: '中性', type: 'neutral' };
+}
+
+function classifyKd(kd) {
+  if (!kd || !Number.isFinite(kd.k) || !Number.isFinite(kd.d)) return { label: '資料不足', type: 'neutral' };
+  if (kd.k >= 80 && kd.d >= 80) return { label: '高檔鈍化', type: 'up' };
+  if (kd.k <= 20 && kd.d <= 20) return { label: '低檔轉折觀察', type: 'down' };
+  if (kd.k > kd.d) return { label: 'K 值站上 D 值', type: 'up' };
+  if (kd.k < kd.d) return { label: 'K 值跌破 D 值', type: 'down' };
+  return { label: 'KD 中性', type: 'neutral' };
+}
+
+function classifyBollinger(price, bollinger) {
+  if (!bollinger || !Number.isFinite(price)) return { label: '資料不足', type: 'neutral' };
+  if (price >= bollinger.upper) return { label: '觸及上軌', type: 'up' };
+  if (price <= bollinger.lower) return { label: '觸及下軌', type: 'down' };
+  if (price >= bollinger.middle) return { label: '中軌之上', type: 'up' };
+  return { label: '中軌之下', type: 'down' };
 }
 
 function classifyPriceVolume(changePct, volumeRatio) {

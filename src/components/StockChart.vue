@@ -118,9 +118,22 @@ function draw() {
 
   const priceMin = Math.min(...candles.map(row => row.low));
   const priceMax = Math.max(...candles.map(row => row.high));
+  const closes = candles.map(row => row.close);
+  const volumes = candles.map(row => row.volume || 0);
+  const ma5 = rollingAverageSeries(closes, 5);
+  const ma20 = rollingAverageSeries(closes, 20);
+  const ma60 = rollingAverageSeries(closes, 60);
+  const bollinger = rollingBollingerSeries(closes, 20, 2);
+  const volumeMa20 = rollingAverageSeries(volumes, 20);
   const pad = Math.max((priceMax - priceMin) * 0.08, priceMax * 0.01);
-  const min = priceMin - pad;
-  const max = priceMax + pad;
+  const indicatorValues = [
+    ...ma5,
+    ...ma20,
+    ...ma60,
+    ...bollinger.flatMap(row => row ? [row.upper, row.lower] : [])
+  ].filter(Number.isFinite);
+  const min = Math.min(priceMin, ...indicatorValues) - pad;
+  const max = Math.max(priceMax, ...indicatorValues) + pad;
   const volumeMax = Math.max(...candles.map(row => row.volume || 0), 1);
   const step = layout.plotWidth / Math.max(candles.length, 1);
   const candleWidth = Math.max(2, Math.min(9, step * 0.58));
@@ -151,6 +164,12 @@ function draw() {
     ctx.globalAlpha = 1;
   });
 
+  drawBollinger(ctx, layout, candles, bollinger, yPrice, step);
+  drawLineSeries(ctx, layout, ma60, yPrice, step, '#64748b', 1);
+  drawLineSeries(ctx, layout, ma20, yPrice, step, '#60a5fa', 1.25);
+  drawLineSeries(ctx, layout, ma5, yPrice, step, '#facc15', 1.35);
+  drawVolumeLine(ctx, layout, volumeMa20, yVolume, step, '#94a3b8');
+  drawIndicatorLegend(ctx, layout);
   drawAxes(ctx, layout, width, height, min, max, candles);
   drawHover(ctx, layout, width, height, min, max, step, volumeTop, candles);
 }
@@ -304,6 +323,95 @@ function nearestCandleIndex(layout, step, count = drawableCandles.value.length) 
   );
 }
 
+function drawLineSeries(ctx, layout, values, yScale, step, color, lineWidth = 1) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  let started = false;
+  values.forEach((value, index) => {
+    if (!Number.isFinite(value)) {
+      started = false;
+      return;
+    }
+    const x = layout.left + index * step + step / 2;
+    const y = yScale(value);
+    if (!started) {
+      ctx.moveTo(x, y);
+      started = true;
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBollinger(ctx, layout, candles, values, yScale, step) {
+  const upper = values.map(row => row?.upper ?? null);
+  const lower = values.map(row => row?.lower ?? null);
+  const middle = values.map(row => row?.middle ?? null);
+
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = '#38bdf8';
+  ctx.beginPath();
+  let started = false;
+  upper.forEach((value, index) => {
+    if (!Number.isFinite(value)) return;
+    const x = layout.left + index * step + step / 2;
+    const y = yScale(value);
+    if (!started) {
+      ctx.moveTo(x, y);
+      started = true;
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  lower.slice().reverse().forEach((value, reverseIndex) => {
+    if (!Number.isFinite(value)) return;
+    const index = candles.length - 1 - reverseIndex;
+    const x = layout.left + index * step + step / 2;
+    const y = yScale(value);
+    ctx.lineTo(x, y);
+  });
+  if (started) ctx.fill();
+  ctx.globalAlpha = 1;
+  drawLineSeries(ctx, layout, upper, yScale, step, '#38bdf8', 0.9);
+  drawLineSeries(ctx, layout, middle, yScale, step, '#818cf8', 0.8);
+  drawLineSeries(ctx, layout, lower, yScale, step, '#38bdf8', 0.9);
+  ctx.restore();
+}
+
+function drawVolumeLine(ctx, layout, values, yScale, step, color) {
+  ctx.save();
+  ctx.globalAlpha = 0.8;
+  drawLineSeries(ctx, layout, values, yScale, step, color, 1);
+  ctx.restore();
+}
+
+function drawIndicatorLegend(ctx, layout) {
+  const items = [
+    ['MA5', '#facc15'],
+    ['MA20', '#60a5fa'],
+    ['MA60', '#64748b'],
+    ['BB', '#38bdf8'],
+    ['Vol20', '#94a3b8']
+  ];
+  ctx.save();
+  ctx.font = '10px system-ui, sans-serif';
+  let x = layout.left;
+  const y = layout.top + 12;
+  items.forEach(([label, color]) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y - 7, 12, 2);
+    ctx.fillStyle = '#aeb8c8';
+    ctx.fillText(label, x + 15, y - 3);
+    x += ctx.measureText(label).width + 34;
+  });
+  ctx.restore();
+}
+
 function normalizeDrawableCandle(row) {
   const open = Number(row.open);
   const close = Number(row.close);
@@ -326,6 +434,31 @@ function normalizeDrawableCandle(row) {
     close,
     volume: Number(row.volume || 0)
   };
+}
+
+function rollingAverageSeries(values, period) {
+  return values.map((_, index) => {
+    if (index + 1 < period) return null;
+    const sample = values.slice(index + 1 - period, index + 1).filter(Number.isFinite);
+    if (sample.length < period) return null;
+    return sample.reduce((sum, value) => sum + value, 0) / period;
+  });
+}
+
+function rollingBollingerSeries(values, period, multiplier) {
+  return values.map((_, index) => {
+    if (index + 1 < period) return null;
+    const sample = values.slice(index + 1 - period, index + 1).filter(Number.isFinite);
+    if (sample.length < period) return null;
+    const middle = sample.reduce((sum, value) => sum + value, 0) / period;
+    const variance = sample.reduce((sum, value) => sum + ((value - middle) ** 2), 0) / period;
+    const deviation = Math.sqrt(variance);
+    return {
+      upper: middle + deviation * multiplier,
+      middle,
+      lower: middle - deviation * multiplier
+    };
+  });
 }
 
 function formatChartVolume(value) {

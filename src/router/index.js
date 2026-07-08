@@ -7,6 +7,7 @@ import FavoritesView from '../views/FavoritesView.vue';
 import FundamentalView from '../views/FundamentalView.vue';
 import Hot100View from '../views/Hot100View.vue';
 import InstitutionalView from '../views/InstitutionalView.vue';
+import MarginView from '../views/MarginView.vue';
 import MoreView from '../views/MoreView.vue';
 import PortfolioView from '../views/PortfolioView.vue';
 import QuoteView from '../views/QuoteView.vue';
@@ -29,6 +30,7 @@ const routes = [
   { path: '/chart', component: ChartView, meta: { title: titleOf('/chart') } },
   { path: '/alerts', component: AlertsView, meta: { title: titleOf('/alerts') } },
   { path: '/institutional', component: InstitutionalView, meta: { title: titleOf('/institutional') } },
+  { path: '/margin', component: MarginView, meta: { title: titleOf('/margin') } },
   { path: '/fundamental', component: FundamentalView, meta: { title: titleOf('/fundamental') } },
   { path: '/ai', component: AiView, meta: { title: titleOf('/ai') } },
   { path: '/more', component: MoreView, meta: { title: titleOf('/more') } },

@@ -11,6 +11,7 @@ import {
   IconReportAnalytics,
   IconSearch,
   IconSettings,
+  IconScale,
   IconStar,
   IconTable
 } from '@tabler/icons-vue';
@@ -23,6 +24,7 @@ export const navItems = [
   { path: '/complete-analysis', label: '完整分析', icon: IconLayoutDashboard },
   { path: '/fundamental', label: '基本面分析', icon: IconReportAnalytics },
   { path: '/institutional', label: '三大法人', icon: IconBuildingBank },
+  { path: '/margin', label: '信用籌碼', icon: IconScale },
   { path: '/chart', label: '走勢圖', icon: IconAdjustmentsHorizontal },
   { path: '/portfolio', label: '我的持股', icon: IconBriefcase },
   { path: '/favorites', label: '我的最愛', icon: IconStar },
@@ -47,6 +49,7 @@ export const moreNavItems = [
   { path: '/top-volume', label: '成交量前20', icon: IconTable, description: '每日成交量前二十名證券' },
   { path: '/chart', label: '走勢圖', icon: IconAdjustmentsHorizontal, description: 'K 線、量價與技術指標' },
   { path: '/institutional', label: '三大法人', icon: IconBuildingBank, description: '法人買賣超與籌碼趨勢' },
+  { path: '/margin', label: '信用籌碼', icon: IconScale, description: '融資融券、借券與券資比' },
   { path: '/fundamental', label: '基本面分析', icon: IconReportAnalytics, description: '財務、估值與同業比較' },
   { path: '/favorites', label: '我的最愛', icon: IconStar, description: '收藏股票快速追蹤' },
   { path: '/alerts', label: '買賣提醒', icon: IconBell, description: '高買入與高賣出訊號' },

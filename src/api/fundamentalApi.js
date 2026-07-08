@@ -915,11 +915,42 @@ function summarizeMarginTrading(marginRows, lendingRows) {
   const lendingVolume = latestLendingRows.reduce((sum, row) => sum + parseNumber(row.volume), 0);
   const lendingFeeAvg = average(latestLendingRows.map(row => parseNumber(row.fee_rate)).filter(value => value > 0));
   const recent5 = margin.slice(-5);
+  const recent10 = margin.slice(-10);
+  const recent20 = margin.slice(-20);
   const margin5Change = recent5.length
     ? parseNumber(recent5.at(-1).MarginPurchaseTodayBalance) - parseNumber(recent5[0].MarginPurchaseYesterdayBalance)
     : 0;
   const short5Change = recent5.length
     ? parseNumber(recent5.at(-1).ShortSaleTodayBalance) - parseNumber(recent5[0].ShortSaleYesterdayBalance)
+    : 0;
+  const margin10Change = recent10.length
+    ? parseNumber(recent10.at(-1).MarginPurchaseTodayBalance) - parseNumber(recent10[0].MarginPurchaseYesterdayBalance)
+    : 0;
+  const short10Change = recent10.length
+    ? parseNumber(recent10.at(-1).ShortSaleTodayBalance) - parseNumber(recent10[0].ShortSaleYesterdayBalance)
+    : 0;
+  const margin20Change = recent20.length
+    ? parseNumber(recent20.at(-1).MarginPurchaseTodayBalance) - parseNumber(recent20[0].MarginPurchaseYesterdayBalance)
+    : 0;
+  const short20Change = recent20.length
+    ? parseNumber(recent20.at(-1).ShortSaleTodayBalance) - parseNumber(recent20[0].ShortSaleYesterdayBalance)
+    : 0;
+  const recentRows = recent20.map(row => ({
+    date: row.date,
+    marginBuy: parseNumber(row.MarginPurchaseBuy),
+    marginSell: parseNumber(row.MarginPurchaseSell),
+    marginCashRepayment: parseNumber(row.MarginPurchaseCashRepayment),
+    marginBalance: parseNumber(row.MarginPurchaseTodayBalance),
+    marginChange: parseNumber(row.MarginPurchaseTodayBalance) - parseNumber(row.MarginPurchaseYesterdayBalance),
+    shortBuy: parseNumber(row.ShortSaleBuy),
+    shortSell: parseNumber(row.ShortSaleSell),
+    shortCashRepayment: parseNumber(row.ShortSaleCashRepayment),
+    shortBalance: parseNumber(row.ShortSaleTodayBalance),
+    shortChange: parseNumber(row.ShortSaleTodayBalance) - parseNumber(row.ShortSaleYesterdayBalance),
+    offset: parseNumber(row.OffsetLoanAndShort)
+  }));
+  const shortMarginRatio = latestMargin?.marginBalance
+    ? Number(((latestMargin.shortBalance / latestMargin.marginBalance) * 100).toFixed(2))
     : 0;
   const tone = margin5Change > 0 && short5Change <= 0 ? 'watch'
     : margin5Change < 0 && short5Change <= 0 ? 'good'
@@ -933,6 +964,12 @@ function summarizeMarginTrading(marginRows, lendingRows) {
     ...latestMargin,
     margin5Change,
     short5Change,
+    margin10Change,
+    short10Change,
+    margin20Change,
+    short20Change,
+    shortMarginRatio,
+    recentRows,
     lendingDate: latestLendingDate,
     lendingVolume,
     lendingFeeAvg,

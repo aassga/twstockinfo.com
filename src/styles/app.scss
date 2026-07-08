@@ -845,6 +845,159 @@ button {
   color: var(--dn);
 }
 
+.institutional-trend-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(15, 19, 28, 0.45);
+}
+
+.institutional-trend-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.institutional-trend-head span,
+.institutional-trend-head em,
+.institutional-streak-grid span {
+  display: block;
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.institutional-trend-head strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-1);
+  font-size: 16px;
+}
+
+.institutional-streak-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.institutional-streak-grid > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(31, 38, 53, 0.68);
+}
+
+.institutional-streak-grid strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-1);
+  font-size: 14px;
+}
+
+.institutional-streak-grid .up strong {
+  color: var(--up);
+}
+
+.institutional-streak-grid .down strong {
+  color: var(--dn);
+}
+
+.institutional-bar-chart {
+  display: grid;
+  grid-template-columns: repeat(20, minmax(26px, 1fr));
+  gap: 5px;
+  min-height: 190px;
+  padding: 12px 8px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(to bottom, transparent 49%, rgba(148, 163, 184, 0.24) 49%, rgba(148, 163, 184, 0.24) 50%, transparent 50%),
+    rgba(31, 38, 53, 0.34);
+  overflow-x: auto;
+}
+
+.institutional-bar-col {
+  display: grid;
+  grid-template-rows: 1fr 1fr auto;
+  gap: 0;
+  min-width: 26px;
+  text-align: center;
+}
+
+.institutional-bar-area {
+  position: relative;
+  min-height: 70px;
+}
+
+.institutional-bar-area i {
+  position: absolute;
+  right: 8px;
+  left: 8px;
+  border-radius: 999px 999px 0 0;
+}
+
+.institutional-bar-area.positive i {
+  bottom: 0;
+  background: var(--up);
+}
+
+.institutional-bar-area.negative i {
+  top: 0;
+  border-radius: 0 0 999px 999px;
+  background: var(--dn);
+}
+
+.institutional-bar-col span {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1;
+  writing-mode: vertical-rl;
+}
+
+.institutional-trend-table {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: rgba(31, 38, 53, 0.36);
+}
+
+.institutional-trend-table-row {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.institutional-trend-table-row:first-child {
+  border-top: 0;
+}
+
+.institutional-trend-table-row.head {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.institutional-trend-table-row .up {
+  color: var(--up);
+}
+
+.institutional-trend-table-row .down {
+  color: var(--dn);
+}
+
 .quote-metrics-panel {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1590,6 +1743,112 @@ button {
   font-size: 11px;
   font-style: normal;
   font-weight: 500;
+}
+
+.margin-view {
+  display: grid;
+  gap: 16px;
+}
+
+.margin-hero,
+.margin-card-grid,
+.margin-window-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.margin-hero {
+  grid-template-columns: 1.3fr 1fr 1fr;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.margin-hero > div {
+  min-width: 0;
+  padding: 18px;
+  border-left: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.margin-hero > div:first-child {
+  border-left: 0;
+}
+
+.margin-hero span,
+.margin-hero em,
+.margin-card span,
+.margin-card em,
+.margin-window-grid span,
+.margin-window-grid em {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.margin-hero strong {
+  display: block;
+  margin: 7px 0;
+  color: var(--text-1);
+  font-size: 26px;
+  line-height: 1.15;
+}
+
+.margin-hero .good strong,
+.margin-card em.good,
+.margin-card em.up,
+.margin-window-grid strong.good,
+.margin-window-grid strong.up {
+  color: var(--up);
+}
+
+.margin-hero .risk strong,
+.margin-card em.risk,
+.margin-card em.down,
+.margin-window-grid strong.risk,
+.margin-window-grid strong.down {
+  color: var(--dn);
+}
+
+.margin-hero .watch strong {
+  color: #facc15;
+}
+
+.margin-card-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.margin-card,
+.margin-window-grid > div {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.72);
+}
+
+.margin-card strong,
+.margin-window-grid strong {
+  display: block;
+  margin: 8px 0;
+  color: var(--text-1);
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.margin-window-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 10px 0;
+}
+
+.margin-risk-grid {
+  margin-top: 0;
+}
+
+.margin-table-wrap {
+  margin-top: 0;
 }
 
 .complete-fundamental-grid {
@@ -3067,6 +3326,30 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .institutional-trend-head {
+    flex-direction: column;
+  }
+
+  .institutional-streak-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .institutional-bar-chart {
+    grid-template-columns: repeat(20, 28px);
+    min-height: 170px;
+  }
+
+  .institutional-trend-table {
+    overflow-x: auto;
+  }
+
+  .institutional-trend-table-row {
+    grid-template-columns: 82px repeat(4, 78px);
+    min-width: 394px;
+    padding: 9px 10px;
+    font-size: 11px;
+  }
+
   .page-title + .search-row {
     margin-top: 12px;
   }
@@ -3393,6 +3676,31 @@ button {
 
   .peer-ranking-row.head {
     font-size: 11px;
+  }
+
+  .margin-hero,
+  .margin-card-grid,
+  .margin-window-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .margin-hero > div {
+    padding: 14px;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    border-left: 0;
+  }
+
+  .margin-hero > div:first-child {
+    border-top: 0;
+  }
+
+  .margin-hero strong {
+    font-size: 22px;
+  }
+
+  .margin-card strong,
+  .margin-window-grid strong {
+    font-size: 19px;
   }
 
   .quote-metric-cell {

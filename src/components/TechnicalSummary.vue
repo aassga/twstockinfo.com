@@ -15,6 +15,8 @@ const tabs = [
   { key: 'ma', label: 'MA' },
   { key: 'rsi', label: 'RSI' },
   { key: 'macd', label: 'MACD' },
+  { key: 'kd', label: 'KD' },
+  { key: 'bollinger', label: '布林通道' },
   { key: 'volume', label: '量價訊號' },
   { key: 'levels', label: '支撐壓力' }
 ];
@@ -51,11 +53,29 @@ const cards = computed(() => {
       { label: '訊號', value: histogram > 0 ? '偏多' : histogram < 0 ? '偏空' : '中性', detail: data.momentum.label, tone: signTone(histogram) }
     ];
   }
+  if (active.value === 'kd') {
+    return [
+      { label: 'K 值', value: num(data.kd?.k), detail: data.kdSignal.label, tone: kdTone(data.kd?.k) },
+      { label: 'D 值', value: num(data.kd?.d), detail: '慢速隨機指標', tone: kdTone(data.kd?.d) },
+      { label: 'J 值', value: num(data.kd?.j), detail: '3K - 2D', tone: signTone(Number(data.kd?.j || 0) - 50) },
+      { label: '訊號', value: data.kdSignal.label, detail: 'KD 適合觀察短線轉折', tone: data.kdSignal.type }
+    ];
+  }
+  if (active.value === 'bollinger') {
+    const bollinger = data.bollinger || {};
+    return [
+      { label: '上軌', value: num(bollinger.upper), detail: '20MA + 2σ', tone: compareTone(data.latestClose, bollinger.upper) },
+      { label: '中軌', value: num(bollinger.middle), detail: '20MA', tone: compareTone(data.latestClose, bollinger.middle) },
+      { label: '下軌', value: num(bollinger.lower), detail: '20MA - 2σ', tone: compareTone(data.latestClose, bollinger.lower) },
+      { label: '帶寬', value: pct(bollinger.widthPct, 2), detail: data.bollingerSignal.label, tone: data.bollingerSignal.type }
+    ];
+  }
   if (active.value === 'volume') {
     return [
       { label: '量價', value: data.volumeSignal.label, detail: data.priceVolumeNote, tone: data.volumeSignal.type },
       { label: '量比', value: pct(data.volumeRatio, 0), detail: '今日量 / 20 根均量', tone: Number(data.volumeRatio || 0) >= 100 ? 'up' : 'neutral' },
-      { label: '20 均量', value: num(data.avgVolume20, 0), detail: '排除最新一根後計算', tone: 'neutral' },
+      { label: '5 均量', value: num(data.volumeMa5, 0), detail: '短線成交量均線', tone: compareTone(data.volumeMa5, data.volumeMa20) },
+      { label: '20 均量', value: num(data.volumeMa20 || data.avgVolume20, 0), detail: '中期成交量均線', tone: 'neutral' },
       { label: '漲跌', value: pct(data.changePct, 2), detail: '量價搭配用', tone: signTone(data.changePct) }
     ];
   }
@@ -75,6 +95,8 @@ const note = computed(() => {
   if (active.value === 'ma') return `均線摘要：${data.trend.label}。`;
   if (active.value === 'rsi') return `RSI 動能摘要：${data.momentum.label}。`;
   if (active.value === 'macd') return 'MACD 適合觀察動能轉折，需搭配價格位置與成交量。';
+  if (active.value === 'kd') return `KD 摘要：${data.kdSignal.label}。`;
+  if (active.value === 'bollinger') return `布林通道摘要：${data.bollingerSignal.label}，觀察價格是否沿上/下軌擴張或回到中軌。`;
   return data.priceVolumeNote;
 });
 
@@ -114,6 +136,14 @@ function rsiTone(value) {
   if (number <= 30) return 'down';
   return 'neutral';
 }
+
+function kdTone(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 'neutral';
+  if (number >= 80) return 'up';
+  if (number <= 20) return 'down';
+  return 'neutral';
+}
 </script>
 
 <template>
@@ -121,7 +151,7 @@ function rsiTone(value) {
     <div class="technical-summary-head">
       <div>
         <div class="technical-summary-title">走勢圖技術指標摘要</div>
-        <div class="technical-summary-sub">由 K 線資料即時計算，可切換 MA、RSI、MACD、量價與支撐壓力。</div>
+        <div class="technical-summary-sub">由 K 線資料即時計算，可切換 MA、RSI、MACD、KD、布林、量價與支撐壓力。</div>
       </div>
       <span v-if="summary" class="signal-pill" :class="summary.volumeSignal.type">
         {{ summary.volumeSignal.label }}

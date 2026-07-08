@@ -52,6 +52,22 @@ const selectedLoading = computed(() => {
   return Boolean(code && (institutionalStore.codeLoading[code] || institutionalStore.trendLoading[code] || searchLoading.value));
 });
 const selectedTrendSummary = computed(() => [5, 10, 20].map(days => summarizeTrend(selectedTrend.value, days)));
+const selectedTrendChartRows = computed(() => selectedTrend.value.slice(0, 20).reverse());
+const selectedTrendMaxAbs = computed(() => {
+  const values = selectedTrendChartRows.value.flatMap(row => [
+    Math.abs(Number(row.foreign || 0)),
+    Math.abs(Number(row.trust || 0)),
+    Math.abs(Number(row.dealer || 0)),
+    Math.abs(Number(row.total || 0))
+  ]);
+  return Math.max(1, ...values);
+});
+const selectedStreaks = computed(() => [
+  buildStreak(selectedTrend.value, 'foreign', '外資'),
+  buildStreak(selectedTrend.value, 'trust', '投信'),
+  buildStreak(selectedTrend.value, 'dealer', '自營商'),
+  buildStreak(selectedTrend.value, 'total', '合計')
+]);
 const selectedSignal = computed(() => {
   const total = Number(selectedInstitutional.value?.total || 0);
   if (total > 0) return '買超';
@@ -170,6 +186,37 @@ function summarizeTrend(rows, days) {
   };
 }
 
+function buildStreak(rows, key, label) {
+  const latest = rows[0];
+  const direction = Number(latest?.[key] || 0);
+  if (!latest || direction === 0) {
+    return { key, label, count: 0, direction: 'flat', text: '無連續' };
+  }
+  const sign = direction > 0 ? 1 : -1;
+  let count = 0;
+  for (const row of rows) {
+    const value = Number(row[key] || 0);
+    if (value === 0 || Math.sign(value) !== sign) break;
+    count += 1;
+  }
+  return {
+    key,
+    label,
+    count,
+    direction: sign > 0 ? 'up' : 'down',
+    text: `${sign > 0 ? '連買' : '連賣'} ${count} 日`
+  };
+}
+
+function barHeight(value) {
+  const number = Math.abs(Number(value || 0));
+  return `${Math.max(3, Math.round((number / selectedTrendMaxAbs.value) * 100))}%`;
+}
+
+function shortDate(value) {
+  return String(value || '').slice(5);
+}
+
 function sumRows(rows, key) {
   return rows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
 }
@@ -271,6 +318,56 @@ function normalizeSearchText(value) {
             {{ item.count ? formatSigned(item.total, 0, '張') : '--' }}
           </strong>
           <em>{{ item.count }} 筆資料</em>
+        </div>
+      </div>
+      <div v-if="selectedTrendChartRows.length" class="institutional-trend-panel">
+        <div class="institutional-trend-head">
+          <div>
+            <span>法人買賣超趨勢</span>
+            <strong>近 {{ selectedTrendChartRows.length }} 日合計買賣超</strong>
+          </div>
+          <em>來源：HiStock 法人明細</em>
+        </div>
+        <div class="institutional-streak-grid">
+          <div v-for="item in selectedStreaks" :key="item.key" :class="item.direction">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.text }}</strong>
+          </div>
+        </div>
+        <div class="institutional-bar-chart">
+          <div v-for="row in selectedTrendChartRows" :key="row.date" class="institutional-bar-col">
+            <div class="institutional-bar-area positive">
+              <i
+                v-if="Number(row.total || 0) > 0"
+                :style="{ height: barHeight(row.total) }"
+                :title="`${row.date} 合計 ${formatSigned(row.total, 0, '張')}`"
+              ></i>
+            </div>
+            <div class="institutional-bar-area negative">
+              <i
+                v-if="Number(row.total || 0) < 0"
+                :style="{ height: barHeight(row.total) }"
+                :title="`${row.date} 合計 ${formatSigned(row.total, 0, '張')}`"
+              ></i>
+            </div>
+            <span>{{ shortDate(row.date) }}</span>
+          </div>
+        </div>
+        <div class="institutional-trend-table">
+          <div class="institutional-trend-table-row head">
+            <span>日期</span>
+            <span>外資</span>
+            <span>投信</span>
+            <span>自營商</span>
+            <span>合計</span>
+          </div>
+          <div v-for="row in selectedTrend.slice(0, 10)" :key="`detail-${row.date}`" class="institutional-trend-table-row">
+            <span>{{ row.date }}</span>
+            <span :class="moveClass(row.foreign).replace('is-', '')">{{ formatSigned(row.foreign, 0, '張') }}</span>
+            <span :class="moveClass(row.trust).replace('is-', '')">{{ formatSigned(row.trust, 0, '張') }}</span>
+            <span :class="moveClass(row.dealer).replace('is-', '')">{{ formatSigned(row.dealer, 0, '張') }}</span>
+            <span :class="moveClass(row.total).replace('is-', '')">{{ formatSigned(row.total, 0, '張') }}</span>
+          </div>
         </div>
       </div>
     </div>

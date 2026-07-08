@@ -13,7 +13,7 @@ const groups = computed(() => [
   },
   {
     title: '分析工具',
-    items: moreNavItems.filter(item => ['/institutional', '/fundamental', '/ai'].includes(item.path))
+    items: moreNavItems.filter(item => ['/institutional', '/margin', '/fundamental', '/ai'].includes(item.path))
   },
   {
     title: '個人工具',
