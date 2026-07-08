@@ -7,6 +7,7 @@ import FavoritesView from '../views/FavoritesView.vue';
 import FundamentalView from '../views/FundamentalView.vue';
 import Hot100View from '../views/Hot100View.vue';
 import InstitutionalView from '../views/InstitutionalView.vue';
+import MoreView from '../views/MoreView.vue';
 import PortfolioView from '../views/PortfolioView.vue';
 import QuoteView from '../views/QuoteView.vue';
 import SearchView from '../views/SearchView.vue';
@@ -30,6 +31,7 @@ const routes = [
   { path: '/institutional', component: InstitutionalView, meta: { title: titleOf('/institutional') } },
   { path: '/fundamental', component: FundamentalView, meta: { title: titleOf('/fundamental') } },
   { path: '/ai', component: AiView, meta: { title: titleOf('/ai') } },
+  { path: '/more', component: MoreView, meta: { title: titleOf('/more') } },
   { path: '/settings', component: SettingsView, meta: { title: titleOf('/settings') } }
 ];
 

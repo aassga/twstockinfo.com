@@ -1,15 +1,26 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { IconBuildingBank, IconInfoCircle, IconSparkles } from '@tabler/icons-vue';
+import { IconBuildingBank, IconInfoCircle, IconSearch, IconSparkles } from '@tabler/icons-vue';
 import { useInstitutionalStore } from '../stores/institutionalStore';
-import { formatSigned, moveClass } from '../utils/formatters';
+import { useStockStore } from '../stores/stockStore';
+import { formatMoney, formatSigned, moveClass } from '../utils/formatters';
 
 const router = useRouter();
 const institutionalStore = useInstitutionalStore();
+const stockStore = useStockStore();
 const showAi = ref(false);
 const pageSize = 20;
 const currentPage = ref(1);
+const query = ref('');
+const candidates = ref([]);
+const showCandidates = ref(false);
+const candidateMessage = ref('');
+const searchLoading = ref(false);
+const selectedCode = ref('');
+const candidateLimit = 20;
+const stockCodePattern = /^\d{4,6}[a-z]?$/i;
+let candidateTimer = null;
 
 const totalRows = computed(() => institutionalStore.rows.length);
 const totalPages = computed(() => Math.max(1, Math.ceil(totalRows.value / pageSize)));
@@ -27,17 +38,115 @@ const visiblePages = computed(() => {
   for (let page = normalizedStart; page <= end; page += 1) pages.push(page);
   return pages;
 });
+const selectedInstitutional = computed(() => {
+  const code = selectedCode.value;
+  if (!code) return null;
+  return institutionalStore.byCode[code] || institutionalStore.rows.find(row => row.code === code) || null;
+});
+const selectedTrend = computed(() => {
+  const code = selectedCode.value;
+  return code ? institutionalStore.trendByCode[code] || [] : [];
+});
+const selectedLoading = computed(() => {
+  const code = selectedCode.value;
+  return Boolean(code && (institutionalStore.codeLoading[code] || institutionalStore.trendLoading[code] || searchLoading.value));
+});
+const selectedTrendSummary = computed(() => [5, 10, 20].map(days => summarizeTrend(selectedTrend.value, days)));
+const selectedSignal = computed(() => {
+  const total = Number(selectedInstitutional.value?.total || 0);
+  if (total > 0) return '買超';
+  if (total < 0) return '賣超';
+  return '混合';
+});
 
 onMounted(() => {
   institutionalStore.loadInstitutional();
+});
+
+onBeforeUnmount(() => {
+  clearTimeout(candidateTimer);
 });
 
 watch(totalPages, pages => {
   if (currentPage.value > pages) currentPage.value = pages;
 });
 
+watch(query, value => {
+  clearTimeout(candidateTimer);
+  const input = String(value || '').trim();
+  if (!input || stockCodePattern.test(input)) {
+    candidates.value = [];
+    showCandidates.value = false;
+    candidateMessage.value = '';
+    return;
+  }
+
+  candidateTimer = setTimeout(async () => {
+    const rows = await stockStore.findStockCandidates(input, candidateLimit).catch(() => []);
+    const normalized = normalizeSearchText(input);
+    const exact = rows.find(row => normalizeSearchText(row.code) === normalized || normalizeSearchText(row.name) === normalized);
+    candidates.value = exact ? [] : rows;
+    showCandidates.value = !exact && rows.length > 0;
+    candidateMessage.value = '';
+  }, 180);
+});
+
 function openQuote(row) {
   router.push({ path: '/quote', query: { code: row.code } });
+}
+
+async function submit(value = query.value) {
+  const input = String(value || '').trim();
+  if (!input) return;
+
+  if (stockCodePattern.test(input)) return runSearch(input.toUpperCase());
+
+  const rows = await stockStore.findStockCandidates(input, candidateLimit).catch(() => []);
+  const normalized = normalizeSearchText(input);
+  const exact = rows.find(row => normalizeSearchText(row.code) === normalized || normalizeSearchText(row.name) === normalized);
+  if (exact) return runSearch(exact.code);
+  if (rows.length === 1) return runSearch(rows[0].code);
+  if (rows.length > 1) {
+    candidates.value = rows;
+    showCandidates.value = true;
+    candidateMessage.value = '找到多筆相近結果，請選擇一檔股票。';
+    return;
+  }
+
+  selectedCode.value = '';
+  candidates.value = [];
+  showCandidates.value = true;
+  candidateMessage.value = '找不到符合的股票。';
+}
+
+async function runSearch(code) {
+  const normalizedCode = String(code || '').trim().toUpperCase();
+  if (!normalizedCode) return;
+
+  searchLoading.value = true;
+  selectedCode.value = normalizedCode;
+  query.value = normalizedCode;
+  showCandidates.value = false;
+  candidates.value = [];
+  candidateMessage.value = '';
+
+  try {
+    if (!institutionalStore.loaded) await institutionalStore.loadInstitutional({ silent: true });
+    await Promise.allSettled([
+      institutionalStore.loadInstitutionalByCode(normalizedCode, { force: true }),
+      institutionalStore.loadInstitutionalTrendByCode(normalizedCode, { force: true })
+    ]);
+    if (!selectedInstitutional.value && !selectedTrend.value.length) {
+      showCandidates.value = true;
+      candidateMessage.value = '找不到法人資料，可能尚未公布或非交易所法人統計標的。';
+    }
+  } finally {
+    searchLoading.value = false;
+  }
+}
+
+function selectCandidate(stock) {
+  runSearch(stock.code);
 }
 
 function percent(value, positive = true) {
@@ -48,6 +157,26 @@ function percent(value, positive = true) {
 function setPage(page) {
   currentPage.value = Math.min(totalPages.value, Math.max(1, page));
 }
+
+function summarizeTrend(rows, days) {
+  const sliced = rows.slice(0, days);
+  return {
+    days,
+    count: sliced.length,
+    foreign: sumRows(sliced, 'foreign'),
+    trust: sumRows(sliced, 'trust'),
+    dealer: sumRows(sliced, 'dealer'),
+    total: sumRows(sliced, 'total')
+  };
+}
+
+function sumRows(rows, key) {
+  return rows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
+}
+
+function normalizeSearchText(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+}
 </script>
 
 <template>
@@ -55,6 +184,95 @@ function setPage(page) {
     <div class="page-title">
       <IconBuildingBank class="title-icon" :stroke-width="2" />
       三大法人即時動態
+    </div>
+
+    <div class="search-row institutional-search">
+      <input
+        v-model="query"
+        class="search-input"
+        placeholder="輸入股票代號或名稱，例如：2330 或 台積電"
+        @keydown.enter="submit()"
+      />
+      <button class="btn primary" type="button" :disabled="searchLoading" @click="submit()">
+        <IconSearch class="btn-icon" :stroke-width="2" />
+        {{ searchLoading ? '查詢中' : '搜尋' }}
+      </button>
+    </div>
+
+    <div v-if="showCandidates" class="search-candidates institutional-candidates">
+      <button
+        v-for="item in candidates"
+        :key="item.code"
+        class="candidate-item"
+        type="button"
+        @click="selectCandidate(item)"
+      >
+        <span class="candidate-code">{{ item.code }}</span>
+        <span class="candidate-name">{{ item.name }}</span>
+        <span class="candidate-sector">{{ item.sector }}</span>
+        <span class="candidate-price">{{ item.price ? formatMoney(item.price, 2) : '--' }}</span>
+      </button>
+      <div v-if="candidateMessage && !candidates.length" class="candidate-empty">
+        {{ candidateMessage }}
+      </div>
+      <div v-else-if="candidateMessage" class="candidate-note">
+        {{ candidateMessage }}
+      </div>
+    </div>
+
+    <div v-if="selectedCode" class="institutional-result">
+      <div class="institutional-result-head">
+        <div>
+          <span>個股法人查詢</span>
+          <strong>
+            {{ selectedCode }}
+            {{ selectedInstitutional?.name || selectedTrend[0]?.name || '' }}
+          </strong>
+        </div>
+        <button class="btn xs" type="button" @click="openQuote({ code: selectedCode })">
+          看報價
+        </button>
+      </div>
+      <div v-if="selectedLoading" class="institutional-result-loading">法人資料載入中</div>
+      <div v-else class="institutional-result-grid">
+        <div>
+          <span>外資</span>
+          <strong :class="moveClass(selectedInstitutional?.foreign).replace('is-', '')">
+            {{ selectedInstitutional ? formatSigned(selectedInstitutional.foreign, 0, '張') : '--' }}
+          </strong>
+        </div>
+        <div>
+          <span>投信</span>
+          <strong :class="moveClass(selectedInstitutional?.trust).replace('is-', '')">
+            {{ selectedInstitutional ? formatSigned(selectedInstitutional.trust, 0, '張') : '--' }}
+          </strong>
+        </div>
+        <div>
+          <span>自營商</span>
+          <strong :class="moveClass(selectedInstitutional?.dealer).replace('is-', '')">
+            {{ selectedInstitutional ? formatSigned(selectedInstitutional.dealer, 0, '張') : '--' }}
+          </strong>
+        </div>
+        <div>
+          <span>合計</span>
+          <strong :class="moveClass(selectedInstitutional?.total).replace('is-', '')">
+            {{ selectedInstitutional ? formatSigned(selectedInstitutional.total, 0, '張') : '--' }}
+          </strong>
+        </div>
+        <div>
+          <span>訊號</span>
+          <strong>{{ selectedSignal }}</strong>
+        </div>
+      </div>
+      <div v-if="selectedTrendSummary.some(item => item.count)" class="institutional-window-grid">
+        <div v-for="item in selectedTrendSummary" :key="item.days">
+          <span>近 {{ item.days }} 日</span>
+          <strong :class="moveClass(item.total).replace('is-', '')">
+            {{ item.count ? formatSigned(item.total, 0, '張') : '--' }}
+          </strong>
+          <em>{{ item.count }} 筆資料</em>
+        </div>
+      </div>
     </div>
 
     <div class="inst-overview">

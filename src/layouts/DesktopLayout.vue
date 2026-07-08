@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { IconRefresh } from '@tabler/icons-vue';
-import { visibleNavItems } from '../router/navItems';
+import { mobileMainNavItems, moreNavItems, visibleNavItems } from '../router/navItems';
 import { useChartStore } from '../stores/chartStore';
 import { useInstitutionalStore } from '../stores/institutionalStore';
 import { useMarketStore } from '../stores/marketStore';
@@ -57,6 +57,13 @@ async function refreshAll() {
 
 function go(path) {
   router.push(path);
+}
+
+function isMobileNavActive(item) {
+  if (item.path === '/more') {
+    return route.path === '/more' || moreNavItems.some(moreItem => moreItem.path === route.path);
+  }
+  return route.path === item.path;
 }
 </script>
 
@@ -141,10 +148,10 @@ function go(path) {
 
     <nav class="mobile-bottom-nav" aria-label="手機功能切換">
       <button
-        v-for="item in visibleNavItems"
+        v-for="item in mobileMainNavItems"
         :key="`mobile-${item.path}`"
         class="mobile-bottom-nav-item"
-        :class="{ active: route.path === item.path }"
+        :class="{ active: isMobileNavActive(item) }"
         type="button"
         @click="go(item.path)"
       >

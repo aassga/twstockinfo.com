@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import {
   IconBrain,
   IconChartBar,
@@ -16,6 +17,7 @@ import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from 
 import { quickStocks } from '../utils/stockMeta';
 
 const stockStore = useStockStore();
+const route = useRoute();
 const query = ref(stockStore.currentStock?.code || stockStore.activeCode || '');
 const snapshot = ref(null);
 const loading = ref(false);
@@ -77,9 +79,18 @@ watch(query, value => {
 });
 
 onMounted(() => {
-  const initialCode = stockStore.currentStock?.code || stockStore.activeCode || query.value;
+  const routeCode = normalizeRouteCode(route.query.code);
+  const initialCode = routeCode || stockStore.currentStock?.code || stockStore.activeCode || query.value;
   if (initialCode) runSearch(String(initialCode).trim().toUpperCase());
 });
+
+watch(
+  () => route.query.code,
+  code => {
+    const normalized = normalizeRouteCode(code);
+    if (normalized && normalized !== query.value) runSearch(normalized);
+  }
+);
 
 async function submit(value = query.value) {
   const input = String(value || '').trim();
@@ -131,6 +142,11 @@ function selectCandidate(stock) {
 
 function normalizeSearchText(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function normalizeRouteCode(value) {
+  const text = Array.isArray(value) ? value[0] : value;
+  return String(text || '').trim().toUpperCase();
 }
 
 function quickSearch(code) {

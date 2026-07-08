@@ -6,7 +6,7 @@ import { useMarketStore } from '../stores/marketStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useStockStore } from '../stores/stockStore';
 import { useTopVolumeStore } from '../stores/topVolumeStore';
-import { visibleNavItems } from '../router/navItems';
+import { mobileMainNavItems, moreNavItems } from '../router/navItems';
 
 const route = useRoute();
 const marketStore = useMarketStore();
@@ -33,6 +33,13 @@ async function refresh() {
     isRefreshing.value = false;
   }
 }
+
+function isMobileNavActive(item) {
+  if (item.path === '/more') {
+    return route.path === '/more' || moreNavItems.some(moreItem => moreItem.path === route.path);
+  }
+  return route.path === item.path;
+}
 </script>
 
 <template>
@@ -50,7 +57,12 @@ async function refresh() {
     </main>
 
     <van-tabbar route fixed placeholder safe-area-inset-bottom class="mobile-tabbar">
-      <van-tabbar-item v-for="item in visibleNavItems" :key="item.path" :to="item.path">
+      <van-tabbar-item
+        v-for="item in mobileMainNavItems"
+        :key="item.path"
+        :to="item.path"
+        :class="{ 'van-tabbar-item--active': isMobileNavActive(item) }"
+      >
         <template #icon>
           <component :is="item.icon" :size="21" :stroke-width="2" />
         </template>
