@@ -1429,6 +1429,421 @@ button {
   color: var(--blue);
 }
 
+.revenue-trend {
+  display: grid;
+  gap: 14px;
+}
+
+.fundamental-revenue-trend {
+  margin-top: 14px;
+}
+
+.revenue-trend-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.revenue-trend-card {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.72);
+}
+
+.revenue-trend-card span,
+.revenue-trend-card em {
+  display: block;
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.revenue-trend-card strong {
+  display: block;
+  margin: 8px 0;
+  color: var(--text-1);
+  font-size: 20px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.revenue-trend-card.good strong,
+.revenue-trend-card.up strong {
+  color: var(--up);
+}
+
+.revenue-trend-card.risk strong,
+.revenue-trend-card.down strong {
+  color: var(--dn);
+}
+
+.revenue-trend-card.watch strong,
+.revenue-trend-card.neutral strong,
+.revenue-trend-card.pending strong {
+  color: var(--blue);
+}
+
+.revenue-bars {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(10, 13, 20, 0.38);
+}
+
+.revenue-bar-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.revenue-bar-track {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(65, 81, 112, 0.6);
+}
+
+.revenue-bar-track i {
+  display: block;
+  height: 100%;
+  min-width: 6px;
+  border-radius: inherit;
+  background: var(--blue);
+}
+
+.revenue-bar-track i.up {
+  background: var(--up);
+}
+
+.revenue-bar-track i.down {
+  background: var(--dn);
+}
+
+.revenue-bar-row strong {
+  text-align: right;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.revenue-bar-row strong.up {
+  color: var(--up);
+}
+
+.revenue-bar-row strong.down {
+  color: var(--dn);
+}
+
+.valuation-range-list {
+  display: grid;
+  gap: 12px;
+}
+
+.fundamental-valuation-range {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-2);
+}
+
+.valuation-range-row {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.72);
+}
+
+.valuation-range-row div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.valuation-range-row span,
+.valuation-range-row em,
+.valuation-range-row small {
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.valuation-range-row strong {
+  color: var(--text-1);
+  font-size: 20px;
+}
+
+.valuation-range-track {
+  position: relative;
+  height: 8px;
+  margin: 12px 0 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(38, 208, 124, 0.72), rgba(74, 154, 255, 0.72), rgba(255, 77, 90, 0.72));
+}
+
+.valuation-range-track i {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--text-1);
+  border-radius: 50%;
+  background: var(--bg-1);
+  transform: translate(-50%, -50%);
+}
+
+.valuation-range-row small {
+  display: block;
+  margin-top: 4px;
+}
+
+.dividend-stability {
+  display: grid;
+  gap: 12px;
+}
+
+.fundamental-dividend-stability {
+  margin-top: 14px;
+}
+
+.dividend-main-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.72);
+}
+
+.dividend-main-card span,
+.dividend-main-card em {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.5;
+}
+
+.dividend-main-card strong {
+  display: block;
+  margin: 8px 0;
+  color: var(--text-1);
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.dividend-main-card.good strong {
+  color: var(--dn);
+}
+
+.dividend-main-card.watch strong,
+.dividend-main-card.neutral strong {
+  color: var(--blue);
+}
+
+.dividend-main-card.risk strong {
+  color: var(--up);
+}
+
+.dividend-bars {
+  display: grid;
+  gap: 8px;
+}
+
+.dividend-bar-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.dividend-bar-track {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(65, 81, 112, 0.6);
+}
+
+.dividend-bar-track i {
+  display: block;
+  height: 100%;
+  min-width: 6px;
+  border-radius: inherit;
+  background: var(--blue);
+}
+
+.dividend-bar-row strong {
+  text-align: right;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.margin-trading-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.margin-trading-grid > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.72);
+}
+
+.margin-trading-grid span,
+.margin-trading-grid em {
+  display: block;
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.margin-trading-grid strong {
+  display: block;
+  margin: 8px 0;
+  color: var(--text-1);
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.margin-main-card.good strong {
+  color: var(--dn);
+}
+
+.margin-main-card.watch strong,
+.margin-main-card.neutral strong {
+  color: var(--blue);
+}
+
+.margin-main-card.risk strong {
+  color: var(--up);
+}
+
+.score-model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fundamental-score-model,
+.fundamental-event-calendar {
+  margin-top: 14px;
+}
+
+.score-model-row {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.72);
+}
+
+.score-model-row div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.score-model-row span,
+.score-model-row em {
+  display: block;
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.score-model-row strong {
+  color: var(--text-1);
+  font-size: 17px;
+}
+
+.score-model-track {
+  height: 8px;
+  margin: 10px 0 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(65, 81, 112, 0.6);
+}
+
+.score-model-track i {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  border-radius: inherit;
+  background: var(--blue);
+}
+
+.score-model-row.good .score-model-track i {
+  background: var(--dn);
+}
+
+.score-model-row.risk .score-model-track i {
+  background: var(--up);
+}
+
+.event-calendar-list {
+  display: grid;
+  gap: 10px;
+}
+
+.event-calendar-item {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.72);
+}
+
+.event-calendar-item.upcoming {
+  border-color: rgba(74, 154, 255, 0.5);
+  background: rgba(74, 154, 255, 0.08);
+}
+
+.event-calendar-item div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.event-calendar-item span,
+.event-calendar-item em,
+.event-calendar-item small {
+  display: block;
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.event-calendar-item strong {
+  color: var(--text-1);
+  font-size: 15px;
+}
+
+.event-calendar-item em {
+  margin: 8px 0 4px;
+  color: var(--text-2);
+}
+
 .data-source-list {
   display: grid;
   gap: 10px;
@@ -2022,6 +2437,9 @@ button {
   .fundamental-card-grid,
   .complete-fundamental-grid,
   .complete-metric-strip,
+  .revenue-trend-summary,
+  .margin-trading-grid,
+  .score-model-grid,
   .fundamental-metric-grid,
   .statement-grid,
   .qualitative-list {

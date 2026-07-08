@@ -100,6 +100,20 @@ const executiveSummary = computed(() => buildExecutiveSummary(stock.value, snaps
 const riskChecks = computed(() => buildRiskChecks(stock.value, snapshot.value, inst.value));
 const instTrendSummary = computed(() => [5, 10, 20].map(days => summarizeInstitutionalTrend(instTrend.value, days)));
 const peerComparison = computed(() => buildPeerComparison(stock.value, stockStore.allStocks, snapshot.value, peerSnapshots.value));
+const revenueTrend = computed(() => snapshot.value?.revenueTrend || null);
+const revenueTrendMax = computed(() => {
+  const values = revenueTrend.value?.rows?.map(row => Number(row.revenue || 0)).filter(Number.isFinite) || [];
+  return values.length ? Math.max(...values) : 0;
+});
+const valuationHistory = computed(() => snapshot.value?.valuationHistory || null);
+const dividendStability = computed(() => snapshot.value?.dividendStability || null);
+const dividendMax = computed(() => {
+  const values = dividendStability.value?.rows?.map(row => Number(row.cashDividend || 0)).filter(Number.isFinite) || [];
+  return values.length ? Math.max(...values) : 0;
+});
+const marginTrading = computed(() => snapshot.value?.marginTrading || null);
+const eventCalendar = computed(() => snapshot.value?.eventCalendar || []);
+const scoreModel = computed(() => snapshot.value?.scoreModel || null);
 
 watch(query, value => {
   clearTimeout(candidateTimer);
@@ -289,6 +303,51 @@ function normalizeSearchText(value) {
 function pct(value, digits = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? `${number > 0 ? '+' : ''}${formatNumber(number, digits)}%` : '--';
+}
+
+function formatRevenueAmount(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number) || number === 0) return '--';
+  if (Math.abs(number) >= 100000000) return `${formatNumber(number / 100000000, 2)}億`;
+  if (Math.abs(number) >= 10000) return `${formatNumber(number / 10000, 1)}萬`;
+  return formatNumber(number, 0);
+}
+
+function revenueBarWidth(row) {
+  const max = Number(revenueTrendMax.value || 0);
+  const value = Number(row?.revenue || 0);
+  if (!max || !value) return '4%';
+  return `${Math.max(6, Math.round((value / max) * 100))}%`;
+}
+
+function revenueTone(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number === 0) return 'neutral';
+  return number > 0 ? 'up' : 'down';
+}
+
+function valuationWidth(metric) {
+  const min = Number(metric?.min || 0);
+  const max = Number(metric?.max || 0);
+  const current = Number(metric?.current || 0);
+  if (!min || !max || max <= min || !current) return '50%';
+  return `${Math.min(100, Math.max(0, Math.round(((current - min) / (max - min)) * 100)))}%`;
+}
+
+function valuationDisplay(metric, digits = 2) {
+  const value = Number(metric?.current || 0);
+  return Number.isFinite(value) && value ? formatNumber(value, digits) : '--';
+}
+
+function dividendBarWidth(row) {
+  const max = Number(dividendMax.value || 0);
+  const value = Number(row?.cashDividend || 0);
+  if (!max || !value) return '4%';
+  return `${Math.max(6, Math.round((value / max) * 100))}%`;
+}
+
+function eventStatusText(status) {
+  return status === 'upcoming' ? '即將' : '最近';
 }
 
 function sourceText(value) {
@@ -547,6 +606,45 @@ function average(rows) {
         </div>
 
         <div class="complete-panel wide">
+          <div class="panel-title">統一個股評分模型</div>
+          <div class="source-row">
+            <span class="source-badge">總分：{{ scoreModel?.total ?? '--' }}</span>
+            <span class="source-badge">結論：{{ scoreModel?.label || snapshot?.scoreLabel || '--' }}</span>
+          </div>
+          <div v-if="scoreModel" class="score-model-grid">
+            <div v-for="item in scoreModel.items" :key="item.label" class="score-model-row" :class="item.status">
+              <div>
+                <span>{{ item.label }}</span>
+                <strong>{{ item.score }} / {{ item.max }}</strong>
+              </div>
+              <div class="score-model-track">
+                <i :style="{ width: `${item.pct}%` }"></i>
+              </div>
+              <em>{{ item.detail }}</em>
+            </div>
+          </div>
+          <div v-else class="hint">{{ loadStatus.fundamental.message || '評分模型待查詢' }}</div>
+        </div>
+
+        <div class="complete-panel">
+          <div class="panel-title">事件日曆</div>
+          <div class="source-row">
+            <span class="source-badge">來源：FinMind / TWSE OpenAPI</span>
+          </div>
+          <div v-if="eventCalendar.length" class="event-calendar-list">
+            <div v-for="item in eventCalendar" :key="`${item.date}-${item.title}`" class="event-calendar-item" :class="item.status">
+              <div>
+                <span>{{ item.date }}</span>
+                <strong>{{ item.title }}</strong>
+              </div>
+              <em>{{ item.detail }}</em>
+              <small>{{ eventStatusText(item.status) }} · {{ item.source }}</small>
+            </div>
+          </div>
+          <div v-else class="hint">{{ loadStatus.fundamental.message || '事件資料待查詢' }}</div>
+        </div>
+
+        <div class="complete-panel wide">
           <TechnicalSummary
             compact
             :candles="chartStore.candles"
@@ -640,6 +738,133 @@ function average(rows) {
             </div>
           </div>
           <div v-else class="hint">{{ loadStatus.fundamental.message }}</div>
+        </div>
+
+        <div class="complete-panel wide">
+          <div class="panel-title">
+            <IconChartCandle class="inline-icon" :stroke-width="2" />
+            營收趨勢
+          </div>
+          <div class="source-row">
+            <span class="source-badge">來源：{{ revenueTrend?.source || 'FinMind / TWSE OpenAPI' }}</span>
+            <span class="source-badge">月份：{{ revenueTrend?.latestMonth || '--' }}</span>
+          </div>
+          <div v-if="revenueTrend?.available" class="revenue-trend">
+            <div class="revenue-trend-summary">
+              <div class="revenue-trend-card" :class="revenueTrend.tone">
+                <span>最新月營收</span>
+                <strong>{{ formatRevenueAmount(revenueTrend.latestRevenue) }}</strong>
+                <em>{{ revenueTrend.latestMonth }}</em>
+              </div>
+              <div class="revenue-trend-card" :class="revenueTone(revenueTrend.latestYoy)">
+                <span>YoY</span>
+                <strong>{{ pct(revenueTrend.latestYoy, 2) }}</strong>
+                <em>去年同月</em>
+              </div>
+              <div class="revenue-trend-card" :class="revenueTone(revenueTrend.latestMom)">
+                <span>MoM</span>
+                <strong>{{ pct(revenueTrend.latestMom, 2) }}</strong>
+                <em>上月比較</em>
+              </div>
+              <div class="revenue-trend-card" :class="revenueTrend.tone">
+                <span>動能</span>
+                <strong>{{ revenueTrend.label }}</strong>
+                <em>連續正成長 {{ revenueTrend.positiveStreak }} 個月</em>
+              </div>
+            </div>
+            <div class="revenue-bars">
+              <div v-for="row in revenueTrend.rows" :key="row.month" class="revenue-bar-row">
+                <span>{{ row.month }}</span>
+                <div class="revenue-bar-track">
+                  <i :class="revenueTone(row.yoy)" :style="{ width: revenueBarWidth(row) }"></i>
+                </div>
+                <strong :class="revenueTone(row.yoy)">{{ pct(row.yoy, 1) }}</strong>
+              </div>
+            </div>
+          </div>
+          <div v-else class="hint">{{ loadStatus.fundamental.message || '營收趨勢待查詢' }}</div>
+        </div>
+
+        <div class="complete-panel">
+          <div class="panel-title">歷史估值區間</div>
+          <div class="source-row">
+            <span class="source-badge">來源：{{ valuationHistory?.source || 'FinMind TaiwanStockPER' }}</span>
+            <span class="source-badge">日期：{{ valuationHistory?.latestDate || '--' }}</span>
+          </div>
+          <div v-if="valuationHistory?.available" class="valuation-range-list">
+            <div
+              v-for="metric in [valuationHistory.pe, valuationHistory.pb, valuationHistory.dividendYield]"
+              :key="metric.label"
+              class="valuation-range-row"
+            >
+              <div>
+                <span>{{ metric.label }}</span>
+                <strong>{{ valuationDisplay(metric, metric.label === '殖利率' ? 2 : 2) }}{{ metric.label === '殖利率' ? '%' : '' }}</strong>
+              </div>
+              <div class="valuation-range-track">
+                <i :style="{ left: valuationWidth(metric) }"></i>
+              </div>
+              <em>低 {{ valuationDisplay({ current: metric.min }, 2) }} / 均 {{ valuationDisplay({ current: metric.avg }, 2) }} / 高 {{ valuationDisplay({ current: metric.max }, 2) }}</em>
+              <small>百分位 {{ Number.isFinite(metric.percentile) ? `${metric.percentile}%` : '--' }}</small>
+            </div>
+          </div>
+          <div v-else class="hint">{{ loadStatus.fundamental.message || '估值區間待查詢' }}</div>
+        </div>
+
+        <div class="complete-panel">
+          <div class="panel-title">股利穩定性</div>
+          <div class="source-row">
+            <span class="source-badge">來源：{{ dividendStability?.source || 'FinMind TaiwanStockDividend' }}</span>
+            <span class="source-badge">年度：{{ dividendStability?.latestYear || '--' }}</span>
+          </div>
+          <div v-if="dividendStability?.available" class="dividend-stability">
+            <div class="dividend-main-card" :class="dividendStability.tone">
+              <span>{{ dividendStability.label }}</span>
+              <strong>{{ formatNumber(dividendStability.latestCashDividend, 2) }} 元</strong>
+              <em>連續配息 {{ dividendStability.consecutiveYears }} 年 / 近 5 年平均 {{ formatNumber(dividendStability.avg5CashDividend, 2) }} 元</em>
+            </div>
+            <div class="dividend-bars">
+              <div v-for="row in dividendStability.rows" :key="row.year" class="dividend-bar-row">
+                <span>{{ row.year }}</span>
+                <div class="dividend-bar-track">
+                  <i :style="{ width: dividendBarWidth(row) }"></i>
+                </div>
+                <strong>{{ formatNumber(row.cashDividend, 2) }}</strong>
+              </div>
+            </div>
+          </div>
+          <div v-else class="hint">{{ loadStatus.fundamental.message || '股利資料待查詢' }}</div>
+        </div>
+
+        <div class="complete-panel">
+          <div class="panel-title">融資融券與借券</div>
+          <div class="source-row">
+            <span class="source-badge">來源：{{ marginTrading?.source || 'FinMind' }}</span>
+            <span class="source-badge">日期：{{ marginTrading?.latestDate || '--' }}</span>
+          </div>
+          <div v-if="marginTrading?.available" class="margin-trading-grid">
+            <div class="margin-main-card" :class="marginTrading.tone">
+              <span>{{ marginTrading.label }}</span>
+              <strong>{{ formatSigned(marginTrading.margin5Change, 0, '張') }}</strong>
+              <em>近 5 日融資變化</em>
+            </div>
+            <div>
+              <span>融資餘額</span>
+              <strong>{{ formatNumber(marginTrading.marginBalance, 0) }} 張</strong>
+              <em>日變化 {{ formatSigned(marginTrading.marginChange, 0, '張') }}</em>
+            </div>
+            <div>
+              <span>融券餘額</span>
+              <strong>{{ formatNumber(marginTrading.shortBalance, 0) }} 張</strong>
+              <em>近 5 日 {{ formatSigned(marginTrading.short5Change, 0, '張') }}</em>
+            </div>
+            <div>
+              <span>借券成交</span>
+              <strong>{{ formatNumber(marginTrading.lendingVolume, 0) }} 張</strong>
+              <em>均費率 {{ Number.isFinite(marginTrading.lendingFeeAvg) ? pct(marginTrading.lendingFeeAvg, 2) : '--' }}</em>
+            </div>
+          </div>
+          <div v-else class="hint">{{ loadStatus.fundamental.message || '融資融券資料待查詢' }}</div>
         </div>
 
         <div class="complete-panel">
