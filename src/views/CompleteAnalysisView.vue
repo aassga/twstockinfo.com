@@ -318,6 +318,7 @@ function eventTypeText(type) {
   if (type === 'major') return '重大訊息';
   if (type === 'news') return '新聞';
   if (type === 'dividend') return '除權息';
+  if (type === 'disclosure') return '公告';
   if (type === 'attention') return '注意股';
   if (type === 'disposition') return '處置股';
   if (type === 'revenue') return '月營收';
@@ -332,6 +333,11 @@ function eventTone(type) {
   if (type === 'attention' || type === 'financial' || type === 'margin') return 'watch';
   if (type === 'dividend') return 'good';
   return 'neutral';
+}
+
+function openEventLink(link) {
+  if (!link) return;
+  window.open(link, '_blank', 'noopener,noreferrer');
 }
 
 function summarizeInstitutionalTrend(rows, days) {
@@ -533,6 +539,9 @@ function buildRiskChecks(current, fundamental, institutional) {
               </div>
               <em>{{ item.detail }}</em>
               <small>{{ item.source }}</small>
+              <button v-if="item.link" class="btn xs event-link-btn" type="button" @click="openEventLink(item.link)">
+                {{ item.linkLabel || '查看原文' }}
+              </button>
             </div>
           </div>
           <div v-else class="hint">{{ loadStatus.fundamental.status === 'loading' ? '事件資料載入中' : '目前沒有可顯示的近期事件。' }}</div>

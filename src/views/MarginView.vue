@@ -134,6 +134,21 @@ function formatRatio(value) {
   return Number.isFinite(number) ? `${number.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}%` : '--';
 }
 
+function formatAmount(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number) || number === 0) return '--';
+  if (Math.abs(number) >= 100000000) return `${(number / 100000000).toLocaleString('zh-TW', { maximumFractionDigits: 2 })} 億`;
+  if (Math.abs(number) >= 10000) return `${(number / 10000).toLocaleString('zh-TW', { maximumFractionDigits: 1 })} 萬`;
+  return number.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+}
+
+function buyAfterSaleText(value) {
+  const text = String(value || '').trim();
+  if (text === '＊') return '限先買後賣';
+  if (text === 'Y') return '可先賣後買';
+  return '可當沖';
+}
+
 function buildCreditRiskRows(data) {
   if (!data?.available) return [];
   return [
@@ -157,9 +172,21 @@ function buildCreditRiskRows(data) {
     },
     {
       label: '借券賣壓',
-      value: formatShares(data.lendingVolume || 0),
-      detail: '最新借券成交量',
-      status: data.lendingVolume > 0 ? 'watch' : 'neutral'
+      value: formatSigned(data.sblShortSaleBalanceChange || 0, 0, '張'),
+      detail: `借券賣出餘額 ${formatShares(data.sblShortSaleBalance || 0)}`,
+      status: data.sblShortSaleBalanceChange > 0 ? 'risk' : data.sblShortSaleBalanceChange < 0 ? 'good' : 'neutral'
+    },
+    {
+      label: '當沖熱度',
+      value: formatRatio(data.dayTradingRatio),
+      detail: `當沖量 ${formatShares(data.dayTradingVolume || 0)}`,
+      status: data.dayTradingRatio >= 35 ? 'risk' : data.dayTradingRatio >= 20 ? 'watch' : 'neutral'
+    },
+    {
+      label: '現股當沖成交比重',
+      value: formatRatio(data.dayTradingValueRatio),
+      detail: buyAfterSaleText(data.dayTradingBuyAfterSale),
+      status: data.dayTradingValueRatio >= 35 ? 'risk' : data.dayTradingValueRatio >= 20 ? 'watch' : 'neutral'
     }
   ];
 }
@@ -252,6 +279,26 @@ function buildCreditRiskRows(data) {
           <strong>{{ formatShares(marginTrading.lendingVolume) }}</strong>
           <em>平均費率 {{ marginTrading.lendingFeeAvg ? formatRatio(marginTrading.lendingFeeAvg) : '--' }}</em>
         </div>
+        <div class="margin-card">
+          <span>借券賣出餘額</span>
+          <strong>{{ formatShares(marginTrading.sblShortSaleBalance) }}</strong>
+          <em :class="signedClass(marginTrading.sblShortSaleBalanceChange)">日變化 {{ formatSigned(marginTrading.sblShortSaleBalanceChange || 0, 0, '張') }}</em>
+        </div>
+        <div class="margin-card">
+          <span>借券賣出量</span>
+          <strong>{{ formatShares(marginTrading.sblShortSaleSell) }}</strong>
+          <em>借券回補 {{ formatShares(marginTrading.sblShortSaleReturn || 0) }}</em>
+        </div>
+        <div class="margin-card">
+          <span>當沖比例</span>
+          <strong>{{ formatRatio(marginTrading.dayTradingRatio) }}</strong>
+          <em>{{ marginTrading.dayTradingDate || '--' }} / {{ formatShares(marginTrading.dayTradingVolume || 0) }}</em>
+        </div>
+        <div class="margin-card">
+          <span>現股當沖成交比重</span>
+          <strong>{{ formatRatio(marginTrading.dayTradingValueRatio) }}</strong>
+          <em>{{ buyAfterSaleText(marginTrading.dayTradingBuyAfterSale) }} / {{ formatAmount(marginTrading.dayTradingValue) }}</em>
+        </div>
       </div>
 
       <div v-if="marginTrading?.available" class="margin-window-grid">
@@ -285,7 +332,7 @@ function buildCreditRiskRows(data) {
 
       <div class="table-hint">
         <IconInfoCircle class="inline-icon" :stroke-width="2" />
-        融資融券與借券資料來源為 FinMind；當沖比例尚未接入，後續需補 TWSE 當沖統計或第三方資料源。
+        融資融券、借券賣出與當沖量值資料來源為 FinMind；當沖量值通常於收盤後更新，盤中不視為即時資料。
       </div>
 
       <div v-if="recentRows.length" class="table-wrapper margin-table-wrap">
@@ -306,6 +353,10 @@ function buildCreditRiskRows(data) {
               <th>融券餘額</th>
               <th>融券增減</th>
               <th>資券相抵</th>
+              <th>借券賣出餘額</th>
+              <th>借券賣出量</th>
+              <th>當沖比例</th>
+              <th>現股當沖成交比重</th>
             </tr>
           </thead>
           <tbody>
@@ -317,6 +368,10 @@ function buildCreditRiskRows(data) {
               <td>{{ formatShares(row.shortBalance) }}</td>
               <td :class="signedClass(row.shortChange)">{{ formatSigned(row.shortChange || 0, 0, '張') }}</td>
               <td>{{ formatShares(row.offset) }}</td>
+              <td :class="signedClass(row.sblShortSaleBalanceChange)">{{ formatShares(row.sblShortSaleBalance) }}</td>
+              <td>{{ formatShares(row.sblShortSaleSell) }}</td>
+              <td>{{ formatRatio(row.dayTradingRatio) }}</td>
+              <td>{{ formatRatio(row.dayTradingValueRatio) }}</td>
             </tr>
           </tbody>
         </table>

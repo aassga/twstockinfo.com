@@ -337,6 +337,7 @@ function eventTypeText(type) {
   if (type === 'major') return '重大訊息';
   if (type === 'news') return '新聞';
   if (type === 'dividend') return '除權息';
+  if (type === 'disclosure') return '公告';
   if (type === 'attention') return '注意股';
   if (type === 'disposition') return '處置股';
   if (type === 'revenue') return '月營收';
@@ -688,10 +689,12 @@ function average(values) {
             <div class="financial-trend-row head">
               <span>季度</span>
               <span>EPS</span>
+              <span>年化 ROE</span>
               <span>毛利率</span>
               <span>營益率</span>
               <span>淨利率</span>
               <span>自由現金流</span>
+              <span>負債比</span>
             </div>
             <div v-for="row in financialTrends.rows" :key="row.date" class="financial-trend-row">
               <span>
@@ -701,6 +704,10 @@ function average(values) {
               <span>
                 <strong>{{ valuationDisplay({ current: row.eps }) }}</strong>
                 <i class="mini-bar neutral" :style="{ width: financialBarWidth(row, 'eps', financialTrends.ranges.epsMax) }"></i>
+              </span>
+              <span>
+                <strong>{{ pct(row.roe, 2) }}</strong>
+                <i class="mini-bar good" :style="{ width: financialBarWidth(row, 'roe', financialTrends.ranges.roeMax) }"></i>
               </span>
               <span>
                 <strong>{{ pct(row.grossMargin, 2) }}</strong>
@@ -718,6 +725,23 @@ function average(values) {
                 <strong :class="financialTone(row.freeCashFlow)">{{ formatTrendAmount(row.freeCashFlow) }}</strong>
                 <i class="mini-bar" :class="financialTone(row.freeCashFlow)" :style="{ width: financialBarWidth(row, 'freeCashFlow', financialTrends.ranges.cashFlowMax) }"></i>
               </span>
+              <span>
+                <strong>{{ pct(row.debtRatio, 2) }}</strong>
+                <i class="mini-bar watch" :style="{ width: financialBarWidth(row, 'debtRatio', financialTrends.ranges.debtMax) }"></i>
+              </span>
+            </div>
+          </div>
+          <div v-if="financialTrends.annualRoeRows?.length" class="annual-roe-strip">
+            <div class="annual-roe-head">
+              <span>ROE 近 5 年</span>
+              <em>以年度淨利 / 平均權益估算，當年度未滿 4 季時以已揭露季度呈現。</em>
+            </div>
+            <div class="annual-roe-list">
+              <div v-for="row in financialTrends.annualRoeRows" :key="row.year" class="annual-roe-card">
+                <span>{{ row.year }}</span>
+                <strong>{{ pct(row.roe, 2) }}</strong>
+                <em>{{ row.quarterCount }} 季資料</em>
+              </div>
             </div>
           </div>
         </div>
@@ -878,6 +902,9 @@ function average(values) {
             </div>
             <em>{{ item.detail }}</em>
             <small>{{ eventStatusText(item.status) }} · {{ item.source }}</small>
+            <button v-if="item.link" class="btn xs event-link-btn" type="button" @click="openEventLink(item.link)">
+              {{ item.linkLabel || '查看原文' }}
+            </button>
           </div>
         </div>
         <div v-else class="hint">目前沒有可顯示的近期事件。</div>

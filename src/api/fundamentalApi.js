@@ -93,7 +93,7 @@ async function fetchFundamentalSnapshotFresh(normalized) {
   ]);
 
   const code = normalized.code;
-  const [incomeRows, balanceRows, cashFlowRows, financialStatementRows, revenueTrendRows, valuationHistoryRows, dividendHistoryRows, marginRows, lendingRows, macro] = await Promise.all([
+  const [incomeRows, balanceRows, cashFlowRows, financialStatementRows, revenueTrendRows, valuationHistoryRows, dividendHistoryRows, marginRows, lendingRows, dayTradingRows, priceRows, shortSaleBalanceRows, macro] = await Promise.all([
     fetchFirstRowsContainingCode(endpoints.income, code),
     fetchFirstRowsContainingCode(endpoints.balance, code),
     fetchCashFlowRows(code),
@@ -103,6 +103,9 @@ async function fetchFundamentalSnapshotFresh(normalized) {
     fetchDividendHistoryRows(code),
     fetchMarginRows(code),
     fetchLendingRows(code),
+    fetchDayTradingRows(code),
+    fetchDailyPriceRows(code),
+    fetchShortSaleBalanceRows(code),
     fetchMacroSnapshot()
   ]);
   const dividendFill = await fetchDividendFillContext(normalized, dividendHistoryRows).catch(() => null);
@@ -130,6 +133,9 @@ async function fetchFundamentalSnapshotFresh(normalized) {
     dividendFill,
     marginRows,
     lendingRows,
+    dayTradingRows,
+    priceRows,
+    shortSaleBalanceRows,
     macro,
     stage: 'complete'
   });
@@ -219,7 +225,7 @@ async function fetchFundamentalSnapshotPhasedFresh(normalized, onUpdate = () => 
   }));
 
   const code = normalized.code;
-  const [incomeRows, balanceRows, cashFlowRows, financialStatementRows, revenueTrendRows, valuationHistoryRows, dividendHistoryRows, marginRows, lendingRows] = await Promise.all([
+  const [incomeRows, balanceRows, cashFlowRows, financialStatementRows, revenueTrendRows, valuationHistoryRows, dividendHistoryRows, marginRows, lendingRows, dayTradingRows, priceRows, shortSaleBalanceRows] = await Promise.all([
     fetchFirstRowsContainingCode(endpoints.income, code),
     fetchFirstRowsContainingCode(endpoints.balance, code),
     fetchCashFlowRows(code),
@@ -228,10 +234,13 @@ async function fetchFundamentalSnapshotPhasedFresh(normalized, onUpdate = () => 
     fetchValuationHistoryRows(code),
     fetchDividendHistoryRows(code),
     fetchMarginRows(code),
-    fetchLendingRows(code)
+    fetchLendingRows(code),
+    fetchDayTradingRows(code),
+    fetchDailyPriceRows(code),
+    fetchShortSaleBalanceRows(code)
   ]);
   const dividendFill = await fetchDividendFillContext(normalized, dividendHistoryRows).catch(() => null);
-  Object.assign(rows, { incomeRows, balanceRows, cashFlowRows, financialStatementRows, revenueTrendRows, valuationHistoryRows, dividendHistoryRows, dividendFill, marginRows, lendingRows });
+  Object.assign(rows, { incomeRows, balanceRows, cashFlowRows, financialStatementRows, revenueTrendRows, valuationHistoryRows, dividendHistoryRows, dividendFill, marginRows, lendingRows, dayTradingRows, priceRows, shortSaleBalanceRows });
   onUpdate(composeFundamentalSnapshot(normalized, {
     ...rows,
     stage: 'statements'
@@ -291,7 +300,7 @@ function composeFundamentalSnapshot(normalized, rows = {}) {
     eps: dividendEps,
     fill: rows.dividendFill
   });
-  const marginTrading = summarizeMarginTrading(rows.marginRows || [], rows.lendingRows || []);
+  const marginTrading = summarizeMarginTrading(rows.marginRows || [], rows.lendingRows || [], rows.dayTradingRows || [], rows.priceRows || [], rows.shortSaleBalanceRows || []);
   const majorEvents = summarizeMajorEvents(rows.majorEventRows || [], code);
   const attentionEvents = summarizeAttentionEvents(rows.attentionEventRows || [], code);
   const financialReportEvents = summarizeFinancialReportEvents(rows.financialReportRows || [], rows.financialStatementRows || [], income, balance, code);
@@ -618,6 +627,63 @@ async function fetchLendingRows(code) {
   return promise;
 }
 
+async function fetchDayTradingRows(code) {
+  const path = `/finmind/api/v4/data?dataset=TaiwanStockDayTrading&data_id=${encodeURIComponent(code)}&start_date=${marginStartDate()}`;
+  const now = Date.now();
+  const cached = cache.get(path);
+  if (cached?.rows && now - cached.at < CACHE_MS) return cached.rows;
+  if (cached?.promise) return cached.promise;
+
+  const promise = apiFetch(path)
+    .then(result => Array.isArray(result?.data) ? result.data : [])
+    .then(rows => {
+      cache.set(path, { at: Date.now(), rows });
+      return rows;
+    })
+    .catch(() => []);
+
+  cache.set(path, { at: now, promise });
+  return promise;
+}
+
+async function fetchDailyPriceRows(code) {
+  const path = `/finmind/api/v4/data?dataset=TaiwanStockPrice&data_id=${encodeURIComponent(code)}&start_date=${marginStartDate()}`;
+  const now = Date.now();
+  const cached = cache.get(path);
+  if (cached?.rows && now - cached.at < CACHE_MS) return cached.rows;
+  if (cached?.promise) return cached.promise;
+
+  const promise = apiFetch(path)
+    .then(result => Array.isArray(result?.data) ? result.data : [])
+    .then(rows => {
+      cache.set(path, { at: Date.now(), rows });
+      return rows;
+    })
+    .catch(() => []);
+
+  cache.set(path, { at: now, promise });
+  return promise;
+}
+
+async function fetchShortSaleBalanceRows(code) {
+  const path = `/finmind/api/v4/data?dataset=TaiwanDailyShortSaleBalances&data_id=${encodeURIComponent(code)}&start_date=${marginStartDate()}`;
+  const now = Date.now();
+  const cached = cache.get(path);
+  if (cached?.rows && now - cached.at < CACHE_MS) return cached.rows;
+  if (cached?.promise) return cached.promise;
+
+  const promise = apiFetch(path)
+    .then(result => Array.isArray(result?.data) ? result.data : [])
+    .then(rows => {
+      cache.set(path, { at: Date.now(), rows });
+      return rows;
+    })
+    .catch(() => []);
+
+  cache.set(path, { at: now, promise });
+  return promise;
+}
+
 async function fetchMacroSnapshot() {
   const path = `/finmind/api/v4/data?dataset=TaiwanExchangeRate&data_id=USD&start_date=${macroStartDate()}`;
   const now = Date.now();
@@ -651,13 +717,13 @@ async function fetchMacroSnapshot() {
 
 function cashFlowStartDate() {
   const date = new Date();
-  date.setFullYear(date.getFullYear() - 2);
+  date.setFullYear(date.getFullYear() - 6);
   return date.toISOString().slice(0, 10);
 }
 
 function financialStatementStartDate() {
   const date = new Date();
-  date.setFullYear(date.getFullYear() - 3);
+  date.setFullYear(date.getFullYear() - 6);
   return date.toISOString().slice(0, 10);
 }
 
@@ -805,20 +871,35 @@ function summarizeFinancialTrends(statementRows, cashFlowRows, fallbackMetrics =
     statementMap.set(date, current);
   }
 
-  const rows = Array.from(statementMap.values())
+  const allRows = Array.from(statementMap.values())
     .map(row => {
       const revenue = Number(row.revenue || 0);
+      const totalEquity = Number(row.totalEquity || 0);
+      const netIncome = Number(row.netIncome || 0);
       return {
         ...row,
         label: quarterLabel(row.date),
         grossMargin: ratio(row.grossProfit, revenue),
         operatingMargin: ratio(row.operatingIncome, revenue),
-        netMargin: ratio(row.netIncome, revenue)
+        netMargin: ratio(row.netIncome, revenue),
+        roe: totalEquity ? Number(((netIncome * 4 / totalEquity) * 100).toFixed(2)) : 0,
+        debtRatio: ratio(row.totalLiabilities, row.totalAssets)
       };
     })
-    .filter(row => row.date && (row.eps || row.revenue || row.grossMargin || row.operatingMargin || row.netMargin || row.freeCashFlow))
-    .sort((a, b) => rowDateValue(a.date) - rowDateValue(b.date))
-    .slice(-8);
+    .filter(row => row.date && (
+      row.eps
+      || row.revenue
+      || row.grossMargin
+      || row.operatingMargin
+      || row.netMargin
+      || row.roe
+      || row.debtRatio
+      || row.freeCashFlow
+    ))
+    .sort((a, b) => rowDateValue(a.date) - rowDateValue(b.date));
+
+  const rows = allRows.slice(-8);
+  const annualRoeRows = summarizeAnnualRoeRows(allRows);
 
   if (!rows.length) {
     return {
@@ -837,12 +918,17 @@ function summarizeFinancialTrends(statementRows, cashFlowRows, fallbackMetrics =
   const epsChange = previous?.eps ? roundPercentChange(latestEps, previous.eps) : null;
   const fcfPositiveStreak = countPositiveStreak(rows.map(row => Number(row.freeCashFlow || 0)));
   const marginTone = Number(latest.grossMargin || 0) >= Number(previous?.grossMargin || 0) ? 'good' : 'watch';
+  const roeValues = rows.map(row => Number(row.roe)).filter(Number.isFinite);
+  const debtValues = rows.map(row => Number(row.debtRatio)).filter(Number.isFinite);
+  const latestRoe = Number(latest.roe || 0);
+  const latestDebtRatio = Number(latest.debtRatio || fallbackMetrics.debtRatio || 0);
 
   return {
     available: true,
     source: 'FinMind TaiwanStockFinancialStatements + TaiwanStockCashFlowsStatement',
     latestDate: latest.date,
     rows,
+    annualRoeRows,
     label: trendLabel(epsChange, fcfPositiveStreak),
     tone: trendTone(epsChange, fcfPositiveStreak),
     summary: [
@@ -859,6 +945,12 @@ function summarizeFinancialTrends(statementRows, cashFlowRows, fallbackMetrics =
         status: marginTone
       },
       {
+        label: '年化 ROE',
+        value: formatPercent(latestRoe),
+        detail: annualRoeRows.length ? `近 ${annualRoeRows.length} 年趨勢` : '以最新季年化',
+        status: statusByNumber(latestRoe, [5, 10, 15])
+      },
+      {
         label: '淨利率',
         value: formatPercent(latest.netMargin),
         detail: '獲利轉換效率',
@@ -869,11 +961,19 @@ function summarizeFinancialTrends(statementRows, cashFlowRows, fallbackMetrics =
         value: formatTrendAmount(latest.freeCashFlow),
         detail: fcfPositiveStreak ? `連續 ${fcfPositiveStreak} 季為正` : '需觀察',
         status: latest.freeCashFlow > 0 ? 'good' : latest.freeCashFlow < 0 ? 'risk' : 'neutral'
+      },
+      {
+        label: '負債比',
+        value: formatPercent(latestDebtRatio),
+        detail: previous?.debtRatio ? `季變化 ${formatSignedPercent(latestDebtRatio - previous.debtRatio)}` : '資產負債表',
+        status: statusByDebt(latestDebtRatio)
       }
     ],
     ranges: {
       epsMax: Math.max(...epsValues.map(value => Math.abs(value)), 1),
+      roeMax: Math.max(...roeValues.map(value => Math.abs(value)), 1),
       marginMax: Math.max(...rows.flatMap(row => [row.grossMargin, row.operatingMargin, row.netMargin]).map(value => Math.abs(Number(value || 0))), 1),
+      debtMax: Math.max(...debtValues.map(value => Math.abs(value)), 1),
       cashFlowMax: Math.max(...rows.map(row => Math.abs(Number(row.freeCashFlow || 0))), 1)
     }
   };
@@ -886,6 +986,9 @@ function financialStatementField(type, originName) {
   if (/^GrossProfit$/i.test(type) || /營業毛利/i.test(source)) return 'grossProfit';
   if (/^OperatingIncome$/i.test(type) || /營業利益/i.test(source)) return 'operatingIncome';
   if (/IncomeAfterTaxes|NetIncome/i.test(type) || /本期淨利|稅後淨利/i.test(source)) return 'netIncome';
+  if (/TotalAssets/i.test(type) || /資產總額|資產總計/i.test(source)) return 'totalAssets';
+  if (/TotalLiabilities/i.test(type) || /負債總額|負債總計/i.test(source)) return 'totalLiabilities';
+  if (/Equity|EquityAttributableToOwnersOfParent/i.test(type) || /權益總額|權益總計|歸屬於母公司業主之權益合計/i.test(source)) return 'totalEquity';
   return '';
 }
 
@@ -899,6 +1002,35 @@ function cashFlowStatementField(type, originName) {
 function rowDateValue(date) {
   const time = Date.parse(String(date || ''));
   return Number.isFinite(time) ? time : 0;
+}
+
+function summarizeAnnualRoeRows(rows) {
+  const groups = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const year = new Date(String(row.date || '')).getFullYear();
+    if (!Number.isFinite(year)) continue;
+    const current = groups.get(year) || { year, netIncome: 0, equities: [], quarterCount: 0 };
+    if (Number.isFinite(Number(row.netIncome))) current.netIncome += Number(row.netIncome || 0);
+    if (Number.isFinite(Number(row.totalEquity)) && Number(row.totalEquity) > 0) current.equities.push(Number(row.totalEquity));
+    current.quarterCount += 1;
+    groups.set(year, current);
+  }
+
+  return Array.from(groups.values())
+    .map(row => {
+      const avgEquity = average(row.equities);
+      const roe = avgEquity ? Number(((row.netIncome / avgEquity) * 100).toFixed(2)) : 0;
+      return {
+        year: row.year,
+        roe,
+        quarterCount: row.quarterCount,
+        netIncome: row.netIncome,
+        avgEquity
+      };
+    })
+    .filter(row => row.roe || row.avgEquity)
+    .sort((a, b) => a.year - b.year)
+    .slice(-5);
 }
 
 function quarterLabel(date) {
@@ -1290,21 +1422,27 @@ function buildDividendEvents(rows) {
           title: '除息交易日',
           type: 'dividend',
           detail: `${row.fiscalLabel || row.fiscalYear} ${cashText}`.trim(),
-          source: 'FinMind TaiwanStockDividend'
+          source: 'FinMind TaiwanStockDividend',
+          link: 'https://finmind.github.io/tutor/TaiwanMarket/DataList/',
+          linkLabel: '查詢來源'
         } : null,
         row.paymentDate ? {
           date: row.paymentDate,
           title: '現金股利發放日',
           type: 'dividend',
           detail: `${row.fiscalLabel || row.fiscalYear} ${cashText}`.trim(),
-          source: 'FinMind TaiwanStockDividend'
+          source: 'FinMind TaiwanStockDividend',
+          link: 'https://finmind.github.io/tutor/TaiwanMarket/DataList/',
+          linkLabel: '查詢來源'
         } : null,
         row.announcementDate ? {
           date: row.announcementDate,
           title: '股利公告日',
           type: 'disclosure',
           detail: `${row.fiscalLabel || row.fiscalYear} ${cashText}`.trim(),
-          source: 'FinMind TaiwanStockDividend'
+          source: 'FinMind TaiwanStockDividend',
+          link: 'https://finmind.github.io/tutor/TaiwanMarket/DataList/',
+          linkLabel: '查詢來源'
         } : null
       ];
     })
@@ -1324,7 +1462,9 @@ function summarizeMajorEvents(rows, code) {
         title,
         type: 'major',
         detail: `${time ? `${time} ` : ''}${description || title}`.trim(),
-        source: 'MOPS 重大訊息 OpenAPI'
+        source: 'MOPS 重大訊息 OpenAPI',
+        link: 'https://mops.twse.com.tw/mops/web/t05st01',
+        linkLabel: '查詢來源'
       };
     })
     .filter(row => row.date && row.title)
@@ -1351,7 +1491,11 @@ function summarizeAttentionEvents(rows, code) {
         title,
         type: isDisposition ? 'disposition' : 'attention',
         detail,
-        source: isDisposition ? 'TWSE/TPEX 處置有價證券 OpenAPI' : 'TWSE/TPEX 注意有價證券 OpenAPI'
+        source: isDisposition ? 'TWSE/TPEX 處置有價證券 OpenAPI' : 'TWSE/TPEX 注意有價證券 OpenAPI',
+        link: isDisposition
+          ? 'https://www.twse.com.tw/zh/announcement/disposition.html'
+          : 'https://www.twse.com.tw/zh/announcement/attention.html',
+        linkLabel: '查詢來源'
       };
     })
     .filter(row => row.date && row.title)
@@ -1370,7 +1514,9 @@ function summarizeFinancialReportEvents(reportRows, statementRows, income, balan
         title: `${name} 財報承認公告`,
         type: 'financial',
         detail: auditCommittee ? `財務報告經監察人/審計委員會承認，審計委員會：${auditCommittee}` : '財務報告承認情形更新',
-        source: 'TWSE/TPEX 財務報告承認 OpenAPI'
+        source: 'TWSE/TPEX 財務報告承認 OpenAPI',
+        link: 'https://mops.twse.com.tw/mops/web/t163sb04',
+        linkLabel: '查詢來源'
       };
     })
     .filter(row => row.date && row.title)
@@ -1382,7 +1528,9 @@ function summarizeFinancialReportEvents(reportRows, statementRows, income, balan
     title: '財報資料更新',
     type: 'financial',
     detail: `最新財報期間 ${quarterLabel(latestStatementDate)}，EPS / 獲利率 / 現金流趨勢已更新`,
-    source: 'FinMind TaiwanStockFinancialStatements'
+    source: 'FinMind TaiwanStockFinancialStatements',
+    link: 'https://finmind.github.io/tutor/TaiwanMarket/DataList/',
+    linkLabel: '查詢來源'
   }] : [];
 
   if (!officialRows.length && !statementEvent.length) {
@@ -1393,7 +1541,9 @@ function summarizeFinancialReportEvents(reportRows, statementRows, income, balan
         title: '財報資料更新',
         type: 'financial',
         detail: `最新財報期間 ${period}`,
-        source: 'TWSE/TPEX OpenAPI 財報資料'
+        source: 'TWSE/TPEX OpenAPI 財報資料',
+        link: 'https://mops.twse.com.tw/mops/web/t163sb04',
+        linkLabel: '查詢來源'
       }];
     }
   }
@@ -1422,7 +1572,9 @@ function summarizeExDividendEvents(rows, code) {
         title: `${name} 除權息預告`,
         type: 'dividend',
         detail: details || '除權息資訊更新',
-        source: 'TWSE/TPEX 除權息預告 OpenAPI'
+        source: 'TWSE/TPEX 除權息預告 OpenAPI',
+        link: 'https://www.twse.com.tw/zh/trading/exchange/TWT48U.html',
+        linkLabel: '查詢來源'
       };
     })
     .filter(row => row.date && row.title)
@@ -1439,7 +1591,8 @@ function summarizeNewsEvents(rows, code) {
       type: 'news',
       detail: read(row, ['source']) || 'FinMind TaiwanStockNews',
       source: read(row, ['source']) ? `FinMind TaiwanStockNews / ${read(row, ['source'])}` : 'FinMind TaiwanStockNews',
-      link: read(row, ['link'])
+      link: read(row, ['link']),
+      linkLabel: read(row, ['link']) ? '查看原文' : '查詢來源'
     }))
     .filter(row => row.date && row.title)
     .sort((a, b) => `${b.date} ${b.time || ''}`.localeCompare(`${a.date} ${a.time || ''}`))
@@ -1495,16 +1648,32 @@ function dividendFiscalYear(row) {
   return 0;
 }
 
-function summarizeMarginTrading(marginRows, lendingRows) {
+function summarizeMarginTrading(marginRows, lendingRows, dayTradingRows, priceRows, shortSaleBalanceRows) {
   const margin = (Array.isArray(marginRows) ? marginRows : [])
     .filter(row => row?.date)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const lending = (Array.isArray(lendingRows) ? lendingRows : [])
     .filter(row => row?.date)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const dayTrading = (Array.isArray(dayTradingRows) ? dayTradingRows : [])
+    .filter(row => row?.date)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const prices = (Array.isArray(priceRows) ? priceRows : [])
+    .filter(row => row?.date)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const shortSales = (Array.isArray(shortSaleBalanceRows) ? shortSaleBalanceRows : [])
+    .filter(row => row?.date)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
   const latest = margin.at(-1);
-  if (!latest && !lending.length) return null;
+  const latestDayTrading = dayTrading.at(-1);
+  const latestShortSale = shortSales.at(-1);
+  if (!latest && !lending.length && !latestDayTrading && !latestShortSale) return null;
+
+  const priceByDate = new Map(prices.map(row => [String(row.date), row]));
+  const marginByDate = new Map(margin.map(row => [String(row.date), row]));
+  const dayTradingByDate = new Map(dayTrading.map(row => [String(row.date), row]));
+  const shortSaleByDate = new Map(shortSales.map(row => [String(row.date), row]));
 
   const latestMargin = latest ? {
     date: latest.date,
@@ -1518,6 +1687,8 @@ function summarizeMarginTrading(marginRows, lendingRows) {
   const latestLendingRows = latestLendingDate ? lending.filter(row => row.date === latestLendingDate) : [];
   const lendingVolume = latestLendingRows.reduce((sum, row) => sum + parseNumber(row.volume), 0);
   const lendingFeeAvg = average(latestLendingRows.map(row => parseNumber(row.fee_rate)).filter(value => value > 0));
+  const latestDayTradingSummary = summarizeDayTradingRow(latestDayTrading, priceByDate.get(String(latestDayTrading?.date || '')));
+  const latestShortSaleSummary = summarizeShortSaleBalanceRow(latestShortSale);
   const recent5 = margin.slice(-5);
   const recent10 = margin.slice(-10);
   const recent20 = margin.slice(-20);
@@ -1539,32 +1710,52 @@ function summarizeMarginTrading(marginRows, lendingRows) {
   const short20Change = recent20.length
     ? parseNumber(recent20.at(-1).ShortSaleTodayBalance) - parseNumber(recent20[0].ShortSaleYesterdayBalance)
     : 0;
-  const recentRows = recent20.map(row => ({
-    date: row.date,
-    marginBuy: parseNumber(row.MarginPurchaseBuy),
-    marginSell: parseNumber(row.MarginPurchaseSell),
-    marginCashRepayment: parseNumber(row.MarginPurchaseCashRepayment),
-    marginBalance: parseNumber(row.MarginPurchaseTodayBalance),
-    marginChange: parseNumber(row.MarginPurchaseTodayBalance) - parseNumber(row.MarginPurchaseYesterdayBalance),
-    shortBuy: parseNumber(row.ShortSaleBuy),
-    shortSell: parseNumber(row.ShortSaleSell),
-    shortCashRepayment: parseNumber(row.ShortSaleCashRepayment),
-    shortBalance: parseNumber(row.ShortSaleTodayBalance),
-    shortChange: parseNumber(row.ShortSaleTodayBalance) - parseNumber(row.ShortSaleYesterdayBalance),
-    offset: parseNumber(row.OffsetLoanAndShort)
-  }));
+  const recentDates = Array.from(new Set([
+    ...margin.map(row => String(row.date)),
+    ...dayTrading.map(row => String(row.date)),
+    ...shortSales.map(row => String(row.date))
+  ])).sort().slice(-20);
+  const recentRows = recentDates.map(date => {
+    const row = marginByDate.get(date);
+    const dayRow = dayTradingByDate.get(date);
+    const shortSaleRow = shortSaleByDate.get(date);
+    return {
+      date,
+      marginBuy: parseNumber(row?.MarginPurchaseBuy),
+      marginSell: parseNumber(row?.MarginPurchaseSell),
+      marginCashRepayment: parseNumber(row?.MarginPurchaseCashRepayment),
+      marginBalance: parseNumber(row?.MarginPurchaseTodayBalance),
+      marginChange: row ? parseNumber(row.MarginPurchaseTodayBalance) - parseNumber(row.MarginPurchaseYesterdayBalance) : 0,
+      shortBuy: parseNumber(row?.ShortSaleBuy),
+      shortSell: parseNumber(row?.ShortSaleSell),
+      shortCashRepayment: parseNumber(row?.ShortSaleCashRepayment),
+      shortBalance: parseNumber(row?.ShortSaleTodayBalance),
+      shortChange: row ? parseNumber(row.ShortSaleTodayBalance) - parseNumber(row.ShortSaleYesterdayBalance) : 0,
+      offset: parseNumber(row?.OffsetLoanAndShort),
+      ...summarizeDayTradingRow(dayRow, priceByDate.get(date)),
+      ...summarizeShortSaleBalanceRow(shortSaleRow)
+    };
+  });
   const shortMarginRatio = latestMargin?.marginBalance
     ? Number(((latestMargin.shortBalance / latestMargin.marginBalance) * 100).toFixed(2))
     : 0;
-  const tone = margin5Change > 0 && short5Change <= 0 ? 'watch'
-    : margin5Change < 0 && short5Change <= 0 ? 'good'
-      : short5Change > 0 ? 'risk'
+  const sblBalance5Change = shortSales.length >= 2
+    ? toLots(parseNumber(shortSales.at(-1).SBLShortSalesCurrentDayBalance) - parseNumber(shortSales[Math.max(0, shortSales.length - 5)].SBLShortSalesPreviousDayBalance))
+    : 0;
+  const dayTradingRatio = Number(latestDayTradingSummary.dayTradingRatio || 0);
+  const tone = short5Change > 0 || sblBalance5Change > 0 || dayTradingRatio >= 35 ? 'risk'
+    : margin5Change > 0 || dayTradingRatio >= 20 ? 'watch'
+      : margin5Change < 0 && short5Change <= 0 ? 'good'
         : 'neutral';
+  const latestDate = [latestMargin?.date, latestLendingDate, latestDayTradingSummary.dayTradingDate, latestShortSaleSummary.shortSaleDate]
+    .filter(Boolean)
+    .sort()
+    .at(-1) || '';
 
   return {
     available: true,
-    source: 'FinMind TaiwanStockMarginPurchaseShortSale + TaiwanStockSecuritiesLending',
-    latestDate: latestMargin?.date || latestLendingDate,
+    source: 'FinMind TaiwanStockMarginPurchaseShortSale + TaiwanStockSecuritiesLending + TaiwanDailyShortSaleBalances + TaiwanStockDayTrading',
+    latestDate,
     ...latestMargin,
     margin5Change,
     short5Change,
@@ -1577,9 +1768,76 @@ function summarizeMarginTrading(marginRows, lendingRows) {
     lendingDate: latestLendingDate,
     lendingVolume,
     lendingFeeAvg,
-    label: tone === 'risk' ? '空方壓力升高' : tone === 'good' ? '信用降溫' : tone === 'watch' ? '融資偏熱' : '中性',
+    ...latestShortSaleSummary,
+    sblBalance5Change,
+    ...latestDayTradingSummary,
+    label: tone === 'risk' ? '短線籌碼偏熱' : tone === 'good' ? '信用降溫' : tone === 'watch' ? '需留意當沖/融資' : '中性',
     tone
   };
+}
+
+function summarizeDayTradingRow(dayRow, priceRow) {
+  if (!dayRow) {
+    return {
+      dayTradingDate: '',
+      dayTradingVolume: 0,
+      dayTradingBuyAmount: 0,
+      dayTradingSellAmount: 0,
+      dayTradingValue: 0,
+      dayTradingRatio: 0,
+      dayTradingValueRatio: 0,
+      dayTradingBuyAfterSale: ''
+    };
+  }
+
+  const volume = parseNumber(dayRow.Volume);
+  const buyAmount = parseNumber(dayRow.BuyAmount);
+  const sellAmount = parseNumber(dayRow.SellAmount);
+  const tradingVolume = parseNumber(priceRow?.Trading_Volume);
+  const tradingMoney = parseNumber(priceRow?.Trading_money);
+  const dayTradingValue = buyAmount || sellAmount ? (buyAmount + sellAmount) / 2 : 0;
+
+  return {
+    dayTradingDate: String(dayRow.date || ''),
+    dayTradingVolume: toLots(volume),
+    dayTradingBuyAmount: buyAmount,
+    dayTradingSellAmount: sellAmount,
+    dayTradingValue,
+    dayTradingRatio: tradingVolume ? Number(((volume / tradingVolume) * 100).toFixed(2)) : 0,
+    dayTradingValueRatio: tradingMoney ? Number(((dayTradingValue / tradingMoney) * 100).toFixed(2)) : 0,
+    dayTradingBuyAfterSale: String(dayRow.BuyAfterSale || '').trim()
+  };
+}
+
+function summarizeShortSaleBalanceRow(row) {
+  if (!row) {
+    return {
+      shortSaleDate: '',
+      marginShortSaleBalance: 0,
+      marginShortSaleSell: 0,
+      sblShortSaleBalance: 0,
+      sblShortSaleSell: 0,
+      sblShortSaleReturn: 0,
+      sblShortSaleBalanceChange: 0
+    };
+  }
+
+  const sblBalance = parseNumber(row.SBLShortSalesCurrentDayBalance);
+  const sblPreviousBalance = parseNumber(row.SBLShortSalesPreviousDayBalance);
+  return {
+    shortSaleDate: String(row.date || ''),
+    marginShortSaleBalance: toLots(parseNumber(row.MarginShortSalesCurrentDayBalance)),
+    marginShortSaleSell: toLots(parseNumber(row.MarginShortSalesShortSales)),
+    sblShortSaleBalance: toLots(sblBalance),
+    sblShortSaleSell: toLots(parseNumber(row.SBLShortSalesShortSales)),
+    sblShortSaleReturn: toLots(parseNumber(row.SBLShortSalesReturns)),
+    sblShortSaleBalanceChange: toLots(sblBalance - sblPreviousBalance)
+  };
+}
+
+function toLots(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? Number((number / 1000).toFixed(2)) : 0;
 }
 
 function buildEventCalendar({ dividendStability, revenueTrend, valuationHistory, marginTrading, cashFlow, majorEvents, attentionEvents, financialReportEvents, exDividendEvents, newsEvents }) {
@@ -1615,7 +1873,9 @@ function buildEventCalendar({ dividendStability, revenueTrend, valuationHistory,
       title: '月營收更新',
       type: 'revenue',
       detail: `YoY ${formatSignedPercent(revenueTrend.latestYoy)}，近 3 月平均 ${formatSignedPercent(revenueTrend.avg3Yoy)}`,
-      source: revenueTrend.source || 'FinMind TaiwanStockMonthRevenue'
+      source: revenueTrend.source || 'FinMind TaiwanStockMonthRevenue',
+      link: 'https://mops.twse.com.tw/mops/web/t05st10_ifrs',
+      linkLabel: '查詢來源'
     });
   }
 
@@ -1625,7 +1885,9 @@ function buildEventCalendar({ dividendStability, revenueTrend, valuationHistory,
       title: '估值資料更新',
       type: 'valuation',
       detail: `${valuationHistory.label || '估值'}，PE 百分位 ${Number.isFinite(valuationHistory.pe?.percentile) ? `${valuationHistory.pe.percentile}%` : '--'}`,
-      source: valuationHistory.source || 'FinMind TaiwanStockPER'
+      source: valuationHistory.source || 'FinMind TaiwanStockPER',
+      link: 'https://finmind.github.io/tutor/TaiwanMarket/DataList/',
+      linkLabel: '查詢來源'
     });
   }
 
@@ -1635,7 +1897,9 @@ function buildEventCalendar({ dividendStability, revenueTrend, valuationHistory,
       title: '信用交易更新',
       type: 'margin',
       detail: `${marginTrading.label || '融資融券'}，近 5 日融資 ${formatSignedPlain(marginTrading.margin5Change, 0)} 張`,
-      source: marginTrading.source || 'FinMind'
+      source: marginTrading.source || 'FinMind',
+      link: 'https://www.twse.com.tw/zh/trading/margin/MI_MARGN.html',
+      linkLabel: '查詢來源'
     });
   }
 
@@ -1645,7 +1909,9 @@ function buildEventCalendar({ dividendStability, revenueTrend, valuationHistory,
       title: '現金流量表更新',
       type: 'financial',
       detail: `營業現金流 ${formatMillion(cashFlow.operating)}，自由現金流 ${formatMillion(cashFlow.freeCashFlow)}`,
-      source: CASHFLOW_SOURCE_NOTE
+      source: CASHFLOW_SOURCE_NOTE,
+      link: 'https://mops.twse.com.tw/mops/web/t164sb03',
+      linkLabel: '查詢來源'
     });
   }
 
@@ -1661,6 +1927,8 @@ function buildEventCalendar({ dividendStability, revenueTrend, valuationHistory,
     unique.push({
       ...event,
       date,
+      link: normalizeEventLink(event.link || event.url || event.sourceUrl || ''),
+      linkLabel: event.linkLabel || (event.link ? '查看原文' : '查詢來源'),
       status: date >= today ? 'upcoming' : 'recent'
     });
   }
@@ -1671,6 +1939,13 @@ function buildEventCalendar({ dividendStability, revenueTrend, valuationHistory,
       return a.status === 'upcoming' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date);
     })
     .slice(0, 18);
+}
+
+function normalizeEventLink(link) {
+  const value = String(link || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  return '';
 }
 
 function normalizeEventDate(value) {

@@ -30,6 +30,7 @@ body {
 }
 
 @supports not (height: 100dvh) {
+
   #app,
   .app,
   .main,
@@ -904,8 +905,8 @@ button {
   border-top: 1px solid var(--border);
 }
 
-.institutional-result-grid > div,
-.institutional-window-grid > div {
+.institutional-result-grid>div,
+.institutional-window-grid>div {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--border);
@@ -973,7 +974,7 @@ button {
   gap: 10px;
 }
 
-.institutional-streak-grid > div {
+.institutional-streak-grid>div {
   min-width: 0;
   padding: 10px;
   border: 1px solid var(--border);
@@ -1731,7 +1732,7 @@ button {
   line-height: 1.75;
 }
 
-.complete-summary-list li + li {
+.complete-summary-list li+li {
   margin-top: 6px;
 }
 
@@ -1823,6 +1824,10 @@ button {
 
 .complete-event-item em {
   color: var(--text-2);
+}
+
+.event-link-btn {
+  justify-self: flex-start;
 }
 
 .event-coverage-grid {
@@ -1937,7 +1942,7 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.peer-grid > div {
+.peer-grid>div {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--border);
@@ -2061,6 +2066,7 @@ button {
 .margin-window-grid {
   display: grid;
   gap: 12px;
+  margin-top: 10px;
 }
 
 .margin-hero {
@@ -2071,13 +2077,13 @@ button {
   background: var(--panel);
 }
 
-.margin-hero > div {
+.margin-hero>div {
   min-width: 0;
   padding: 18px;
   border-left: 1px solid rgba(148, 163, 184, 0.12);
 }
 
-.margin-hero > div:first-child {
+.margin-hero>div:first-child {
   border-left: 0;
 }
 
@@ -2127,7 +2133,7 @@ button {
 }
 
 .margin-card,
-.margin-window-grid > div {
+.margin-window-grid>div {
   min-width: 0;
   padding: 15px;
   border: 1px solid var(--border);
@@ -2188,7 +2194,7 @@ button {
 
 .margin-table-wrap .margin-stock-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1380px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -2260,7 +2266,7 @@ button {
   margin-bottom: 12px;
 }
 
-.complete-fundamental-summary > div {
+.complete-fundamental-summary>div {
   min-width: 0;
   padding: 14px;
   border: 1px solid var(--border);
@@ -2403,7 +2409,7 @@ button {
 
 .financial-trend-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
 }
 
@@ -2444,8 +2450,8 @@ button {
 
 .financial-trend-row {
   display: grid;
-  grid-template-columns: 1.1fr repeat(5, minmax(110px, 1fr));
-  min-width: 840px;
+  grid-template-columns: 1.1fr repeat(7, minmax(110px, 1fr));
+  min-width: 1060px;
   border-top: 1px solid rgba(148, 163, 184, 0.12);
 }
 
@@ -2460,7 +2466,7 @@ button {
   font-weight: 800;
 }
 
-.financial-trend-row > span {
+.financial-trend-row>span {
   min-width: 0;
   padding: 11px 12px;
   color: var(--text-1);
@@ -2486,6 +2492,61 @@ button {
 
 .financial-trend-row .risk {
   color: var(--up);
+}
+
+.annual-roe-strip {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.52);
+}
+
+.annual-roe-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.annual-roe-head span {
+  color: var(--text-1);
+  font-weight: 800;
+}
+
+.annual-roe-head em,
+.annual-roe-card em {
+  color: var(--text-3);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.annual-roe-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.annual-roe-card {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: var(--radius);
+  background: rgba(15, 19, 28, 0.42);
+}
+
+.annual-roe-card span {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.annual-roe-card strong {
+  display: block;
+  margin: 7px 0 4px;
+  color: var(--blue);
+  font-size: 20px;
 }
 
 .mini-bar {
@@ -2733,7 +2794,7 @@ button {
   gap: 10px;
 }
 
-.dividend-info-grid > div {
+.dividend-info-grid>div {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--border);
@@ -2812,7 +2873,7 @@ button {
   gap: 10px;
 }
 
-.margin-trading-grid > div {
+.margin-trading-grid>div {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--border);
@@ -2977,7 +3038,8 @@ button {
   color: var(--text-2);
 }
 
-.event-calendar-item .btn.xs {
+.event-calendar-item .btn.xs,
+.complete-event-item .btn.xs {
   min-height: 28px;
   margin-top: 6px;
   padding: 4px 10px;
@@ -3065,7 +3127,7 @@ button {
   padding-left: 1.4em;
 }
 
-.ai-content li + li {
+.ai-content li+li {
   margin-top: 0.35em;
 }
 
@@ -3350,7 +3412,7 @@ button {
   background: var(--blue);
 }
 
-.fundamental-score > span {
+.fundamental-score>span {
   display: block;
   margin-top: 8px;
   color: var(--text-3);
@@ -3694,6 +3756,7 @@ button {
   .complete-metric-strip,
   .revenue-trend-summary,
   .financial-trend-summary,
+  .annual-roe-list,
   .margin-trading-grid,
   .score-model-grid,
   .fundamental-metric-grid,
@@ -3801,13 +3864,14 @@ button {
   }
 
   .financial-trend-head,
+  .annual-roe-head,
   .margin-table-header {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .financial-trend-row {
-    min-width: 760px;
+    min-width: 1060px;
   }
 
   .quote-view {
@@ -3836,7 +3900,7 @@ button {
     border-radius: 12px;
   }
 
-  .quote-tape > div:first-child {
+  .quote-tape>div:first-child {
     min-width: 0;
     flex: 1 1 auto;
   }
@@ -4114,7 +4178,7 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .page-title + .search-row {
+  .page-title+.search-row {
     margin-top: 12px;
   }
 
@@ -4152,7 +4216,7 @@ button {
     gap: 12px;
   }
 
-  .chart-header > div:first-child,
+  .chart-header>div:first-child,
   .chart-controls,
   .chart-search {
     width: 100%;
@@ -4322,7 +4386,7 @@ button {
     overflow: hidden;
   }
 
-  .mobile-chart-readout > div {
+  .mobile-chart-readout>div {
     min-width: 0;
   }
 
@@ -4448,13 +4512,13 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .margin-hero > div {
+  .margin-hero>div {
     padding: 14px;
     border-top: 1px solid rgba(148, 163, 184, 0.12);
     border-left: 0;
   }
 
-  .margin-hero > div:first-child {
+  .margin-hero>div:first-child {
     border-top: 0;
   }
 
