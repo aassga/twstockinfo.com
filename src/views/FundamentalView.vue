@@ -48,6 +48,7 @@ const tabs = [
 const company = computed(() => snapshot.value?.company || null);
 const changeClass = computed(() => moveClass(company.value?.chgPct).replace('is-', ''));
 const revenueTrend = computed(() => snapshot.value?.revenueTrend || null);
+const financialTrends = computed(() => snapshot.value?.financialTrends || null);
 const revenueTrendMax = computed(() => {
   const values = revenueTrend.value?.rows?.map(row => Number(row.revenue || 0)).filter(Number.isFinite) || [];
   return values.length ? Math.max(...values) : 0;
@@ -289,8 +290,59 @@ function dividendBarWidth(row) {
   return `${Math.max(6, Math.round((value / max) * 100))}%`;
 }
 
+function financialBarWidth(row, key, fallbackMax = 1) {
+  const value = Math.abs(Number(row?.[key] || 0));
+  const max = Math.max(Number(fallbackMax || 1), 1);
+  if (!value) return '4%';
+  return `${Math.max(5, Math.min(100, Math.round((value / max) * 100)))}%`;
+}
+
+function financialTone(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number === 0) return 'neutral';
+  return number > 0 ? 'good' : 'risk';
+}
+
+function formatTrendAmount(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number) || number === 0) return '--';
+  const abs = Math.abs(number);
+  const sign = number > 0 ? '+' : '-';
+  if (abs >= 100000000) return `${sign}${(abs / 100000000).toLocaleString('zh-TW', { maximumFractionDigits: 2 })}億`;
+  if (abs >= 10000) return `${sign}${(abs / 10000).toLocaleString('zh-TW', { maximumFractionDigits: 1 })}萬`;
+  return `${sign}${abs.toLocaleString('zh-TW', { maximumFractionDigits: 0 })}`;
+}
+
 function eventStatusText(status) {
   return status === 'upcoming' ? '即將' : '最近';
+}
+
+function eventTypeText(type) {
+  if (type === 'major') return '重大訊息';
+  if (type === 'news') return '新聞';
+  if (type === 'dividend') return '除權息';
+  if (type === 'attention') return '注意股';
+  if (type === 'disposition') return '處置股';
+  if (type === 'revenue') return '月營收';
+  if (type === 'valuation') return '估值';
+  if (type === 'margin') return '信用';
+  if (type === 'financial') return '財報';
+  return '事件';
+}
+
+function eventTypeClass(type) {
+  if (type === 'major') return 'risk';
+  if (type === 'attention') return 'watch';
+  if (type === 'disposition') return 'risk';
+  if (type === 'news') return 'neutral';
+  if (type === 'dividend') return 'good';
+  if (type === 'margin') return 'watch';
+  return 'neutral';
+}
+
+function openEventLink(link) {
+  if (!link) return;
+  window.open(link, '_blank', 'noopener,noreferrer');
 }
 
 function buildPeerComparison(current, allStocks, currentSnapshot, snapshots) {
@@ -583,6 +635,7 @@ function average(values) {
               <i :style="{ width: `${item.pct}%` }"></i>
             </div>
             <em>{{ item.detail }}</em>
+            <button v-if="item.link" class="btn xs" type="button" @click="openEventLink(item.link)">開啟</button>
           </div>
         </div>
       </div>
@@ -599,6 +652,59 @@ function average(values) {
             <div class="metric-rule">{{ metric.rule }}</div>
           </div>
         </div>
+        <div v-if="financialTrends?.available" class="financial-trend-panel">
+          <div class="financial-trend-head">
+            <div>
+              <span>財報歷史趨勢</span>
+              <strong>{{ financialTrends.label }}</strong>
+            </div>
+            <em>{{ financialTrends.source }} / 最新 {{ financialTrends.latestDate }}</em>
+          </div>
+          <div class="financial-trend-summary">
+            <div v-for="item in financialTrends.summary" :key="item.label" class="financial-trend-card" :class="item.status">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <em>{{ item.detail }}</em>
+            </div>
+          </div>
+          <div class="financial-trend-table">
+            <div class="financial-trend-row head">
+              <span>季度</span>
+              <span>EPS</span>
+              <span>毛利率</span>
+              <span>營益率</span>
+              <span>淨利率</span>
+              <span>自由現金流</span>
+            </div>
+            <div v-for="row in financialTrends.rows" :key="row.date" class="financial-trend-row">
+              <span>
+                <strong>{{ row.label }}</strong>
+                <em>{{ row.date }}</em>
+              </span>
+              <span>
+                <strong>{{ valuationDisplay({ current: row.eps }) }}</strong>
+                <i class="mini-bar neutral" :style="{ width: financialBarWidth(row, 'eps', financialTrends.ranges.epsMax) }"></i>
+              </span>
+              <span>
+                <strong>{{ pct(row.grossMargin, 2) }}</strong>
+                <i class="mini-bar good" :style="{ width: financialBarWidth(row, 'grossMargin', financialTrends.ranges.marginMax) }"></i>
+              </span>
+              <span>
+                <strong>{{ pct(row.operatingMargin, 2) }}</strong>
+                <i class="mini-bar watch" :style="{ width: financialBarWidth(row, 'operatingMargin', financialTrends.ranges.marginMax) }"></i>
+              </span>
+              <span>
+                <strong>{{ pct(row.netMargin, 2) }}</strong>
+                <i class="mini-bar neutral" :style="{ width: financialBarWidth(row, 'netMargin', financialTrends.ranges.marginMax) }"></i>
+              </span>
+              <span>
+                <strong :class="financialTone(row.freeCashFlow)">{{ formatTrendAmount(row.freeCashFlow) }}</strong>
+                <i class="mini-bar" :class="financialTone(row.freeCashFlow)" :style="{ width: financialBarWidth(row, 'freeCashFlow', financialTrends.ranges.cashFlowMax) }"></i>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="financialTrends && !financialTrends.available" class="hint">財報歷史趨勢尚未取得，會先以最新一期財報判斷。</div>
         <div v-if="revenueTrend?.available" class="revenue-trend fundamental-revenue-trend">
           <div class="revenue-trend-summary">
             <div class="revenue-trend-card" :class="revenueTrend.tone">
@@ -745,9 +851,12 @@ function average(values) {
 
       <div v-if="activeTab === 'events'" class="fundamental-panel">
         <div v-if="eventCalendar.length" class="event-calendar-list fundamental-event-calendar">
-          <div v-for="item in eventCalendar" :key="`${item.date}-${item.title}`" class="event-calendar-item" :class="item.status">
+          <div v-for="item in eventCalendar" :key="`${item.date}-${item.title}`" class="event-calendar-item" :class="[item.status, item.type]">
             <div>
-              <span>{{ item.date }}</span>
+              <span>
+                {{ item.date }}
+                <b class="event-type-pill" :class="eventTypeClass(item.type)">{{ eventTypeText(item.type) }}</b>
+              </span>
               <strong>{{ item.title }}</strong>
             </div>
             <em>{{ item.detail }}</em>
@@ -755,6 +864,10 @@ function average(values) {
           </div>
         </div>
         <div v-else class="hint">目前沒有可顯示的近期事件。</div>
+        <div class="event-source-note">
+          <span>已接入：MOPS 重大訊息、FinMind 新聞、TWSE 注意/處置股、除權息/股利、月營收、估值與信用事件。</span>
+          <span>上櫃注意/處置股：TPEX 公告格式較分散，後續可再補獨立來源。</span>
+        </div>
         <div v-if="dividendStability?.available" class="dividend-stability fundamental-dividend-stability">
           <div class="dividend-main-card" :class="dividendStability.tone">
             <span>{{ dividendStability.label }}</span>

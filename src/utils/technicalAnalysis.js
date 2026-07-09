@@ -1,13 +1,26 @@
-const MA_SHORT = 5;
-const MA_MID = 20;
-const MA_LONG = 60;
-const RSI_PERIOD = 14;
-const MACD_FAST = 12;
-const MACD_SLOW = 26;
-const MACD_SIGNAL = 9;
-const KD_PERIOD = 9;
-const BOLLINGER_PERIOD = 20;
-const BOLLINGER_MULTIPLIER = 2;
+export const TECHNICAL_INDICATOR_SETTINGS = {
+  maShort: 5,
+  maMid: 20,
+  maLong: 60,
+  rsiPeriod: 14,
+  macdFast: 12,
+  macdSlow: 26,
+  macdSignal: 9,
+  kdPeriod: 9,
+  bollingerPeriod: 20,
+  bollingerMultiplier: 2
+};
+
+const MA_SHORT = TECHNICAL_INDICATOR_SETTINGS.maShort;
+const MA_MID = TECHNICAL_INDICATOR_SETTINGS.maMid;
+const MA_LONG = TECHNICAL_INDICATOR_SETTINGS.maLong;
+const RSI_PERIOD = TECHNICAL_INDICATOR_SETTINGS.rsiPeriod;
+const MACD_FAST = TECHNICAL_INDICATOR_SETTINGS.macdFast;
+const MACD_SLOW = TECHNICAL_INDICATOR_SETTINGS.macdSlow;
+const MACD_SIGNAL = TECHNICAL_INDICATOR_SETTINGS.macdSignal;
+const KD_PERIOD = TECHNICAL_INDICATOR_SETTINGS.kdPeriod;
+const BOLLINGER_PERIOD = TECHNICAL_INDICATOR_SETTINGS.bollingerPeriod;
+const BOLLINGER_MULTIPLIER = TECHNICAL_INDICATOR_SETTINGS.bollingerMultiplier;
 
 export function buildTechnicalSummary(candles = [], options = {}) {
   const interval = normalizeInterval(options.interval);
@@ -68,12 +81,56 @@ export function buildTechnicalSummary(candles = [], options = {}) {
   };
 }
 
+export function buildTechnicalIndicatorSeries(candles = []) {
+  const rows = candles
+    .map(row => ({
+      close: Number(row.close || 0),
+      volume: Number(row.volume || 0)
+    }))
+    .filter(row => row.close > 0);
+  const closes = rows.map(row => row.close);
+  const volumes = rows.map(row => row.volume);
+
+  return {
+    ma5: rollingAverageSeries(closes, MA_SHORT),
+    ma20: rollingAverageSeries(closes, MA_MID),
+    ma60: rollingAverageSeries(closes, MA_LONG),
+    bollinger: rollingBollingerSeries(closes, BOLLINGER_PERIOD, BOLLINGER_MULTIPLIER),
+    volumeMa20: rollingAverageSeries(volumes, MA_MID)
+  };
+}
+
 function movingAverage(values, period) {
   const sample = values
     .filter(value => Number.isFinite(value) && value > 0)
     .slice(-period);
   if (sample.length < period) return null;
   return sample.reduce((sum, value) => sum + value, 0) / sample.length;
+}
+
+function rollingAverageSeries(values, period) {
+  return values.map((_, index) => {
+    if (index + 1 < period) return null;
+    const sample = values.slice(index + 1 - period, index + 1).filter(Number.isFinite);
+    if (sample.length < period) return null;
+    return sample.reduce((sum, value) => sum + value, 0) / period;
+  });
+}
+
+function rollingBollingerSeries(values, period, multiplier) {
+  return values.map((_, index) => {
+    if (index + 1 < period) return null;
+    const sample = values.slice(index + 1 - period, index + 1).filter(Number.isFinite);
+    if (sample.length < period) return null;
+    const middle = sample.reduce((sum, value) => sum + value, 0) / period;
+    const variance = sample.reduce((sum, value) => sum + ((value - middle) ** 2), 0) / period;
+    const deviation = Math.sqrt(variance);
+    return {
+      upper: middle + deviation * multiplier,
+      middle,
+      lower: middle - deviation * multiplier
+    };
+  });
 }
 
 function calculateRsi(values, period) {

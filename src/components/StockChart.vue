@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { buildTechnicalIndicatorSeries } from '../utils/technicalAnalysis';
 import { formatChartTime, formatNumber } from '../utils/formatters';
 
 const props = defineProps({
@@ -118,13 +119,7 @@ function draw() {
 
   const priceMin = Math.min(...candles.map(row => row.low));
   const priceMax = Math.max(...candles.map(row => row.high));
-  const closes = candles.map(row => row.close);
-  const volumes = candles.map(row => row.volume || 0);
-  const ma5 = rollingAverageSeries(closes, 5);
-  const ma20 = rollingAverageSeries(closes, 20);
-  const ma60 = rollingAverageSeries(closes, 60);
-  const bollinger = rollingBollingerSeries(closes, 20, 2);
-  const volumeMa20 = rollingAverageSeries(volumes, 20);
+  const { ma5, ma20, ma60, bollinger, volumeMa20 } = buildTechnicalIndicatorSeries(candles);
   const pad = Math.max((priceMax - priceMin) * 0.08, priceMax * 0.01);
   const indicatorValues = [
     ...ma5,
@@ -434,31 +429,6 @@ function normalizeDrawableCandle(row) {
     close,
     volume: Number(row.volume || 0)
   };
-}
-
-function rollingAverageSeries(values, period) {
-  return values.map((_, index) => {
-    if (index + 1 < period) return null;
-    const sample = values.slice(index + 1 - period, index + 1).filter(Number.isFinite);
-    if (sample.length < period) return null;
-    return sample.reduce((sum, value) => sum + value, 0) / period;
-  });
-}
-
-function rollingBollingerSeries(values, period, multiplier) {
-  return values.map((_, index) => {
-    if (index + 1 < period) return null;
-    const sample = values.slice(index + 1 - period, index + 1).filter(Number.isFinite);
-    if (sample.length < period) return null;
-    const middle = sample.reduce((sum, value) => sum + value, 0) / period;
-    const variance = sample.reduce((sum, value) => sum + ((value - middle) ** 2), 0) / period;
-    const deviation = Math.sqrt(variance);
-    return {
-      upper: middle + deviation * multiplier,
-      middle,
-      lower: middle - deviation * multiplier
-    };
-  });
 }
 
 function formatChartVolume(value) {

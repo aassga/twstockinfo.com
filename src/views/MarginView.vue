@@ -289,6 +289,13 @@ function buildCreditRiskRows(data) {
       </div>
 
       <div v-if="recentRows.length" class="table-wrap margin-table-wrap">
+        <div class="margin-table-header">
+          <div>
+            <span>近 20 日信用交易明細</span>
+            <strong>{{ stock.code }} {{ stock.name || '' }}</strong>
+          </div>
+          <em>資料來源：{{ marginTrading?.source || 'FinMind' }}</em>
+        </div>
         <table>
           <thead>
             <tr>

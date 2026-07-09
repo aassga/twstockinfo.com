@@ -1851,6 +1851,67 @@ button {
   margin-top: 0;
 }
 
+.margin-table-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(31, 38, 53, 0.76);
+}
+
+.margin-table-header span,
+.margin-table-header em {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.margin-table-header strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-1);
+  font-size: 17px;
+}
+
+.margin-table-wrap table {
+  min-width: 760px;
+}
+
+.margin-table-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #20293a;
+  color: var(--text-2);
+  font-weight: 700;
+}
+
+.margin-table-wrap td,
+.margin-table-wrap th {
+  padding: 13px 16px;
+  white-space: nowrap;
+}
+
+.margin-table-wrap td:first-child {
+  color: var(--text-2);
+  font-weight: 800;
+}
+
+.margin-table-wrap .up,
+.margin-table-wrap .good {
+  color: var(--dn);
+  font-weight: 900;
+}
+
+.margin-table-wrap .down,
+.margin-table-wrap .risk {
+  color: var(--up);
+  font-weight: 900;
+}
+
 .complete-fundamental-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1968,6 +2029,149 @@ button {
 
 .fundamental-revenue-trend {
   margin-top: 14px;
+}
+
+.financial-trend-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(15, 19, 28, 0.36);
+}
+
+.financial-trend-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.financial-trend-head span,
+.financial-trend-head em,
+.financial-trend-card span,
+.financial-trend-card em {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.financial-trend-head strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-1);
+  font-size: 18px;
+}
+
+.financial-trend-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.financial-trend-card {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.72);
+}
+
+.financial-trend-card strong {
+  display: block;
+  margin: 8px 0;
+  color: var(--text-1);
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.financial-trend-card.good strong {
+  color: var(--dn);
+}
+
+.financial-trend-card.risk strong {
+  color: var(--up);
+}
+
+.financial-trend-card.watch strong,
+.financial-trend-card.neutral strong {
+  color: var(--blue);
+}
+
+.financial-trend-table {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.financial-trend-row {
+  display: grid;
+  grid-template-columns: 1.1fr repeat(5, minmax(110px, 1fr));
+  min-width: 840px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.financial-trend-row:first-child {
+  border-top: 0;
+}
+
+.financial-trend-row.head {
+  background: #20293a;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.financial-trend-row > span {
+  min-width: 0;
+  padding: 11px 12px;
+  color: var(--text-1);
+}
+
+.financial-trend-row strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.financial-trend-row em {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.financial-trend-row .good {
+  color: var(--dn);
+}
+
+.financial-trend-row .risk {
+  color: var(--up);
+}
+
+.mini-bar {
+  display: block;
+  width: 0;
+  height: 4px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: var(--blue);
+}
+
+.mini-bar.good {
+  background: var(--dn);
+}
+
+.mini-bar.risk {
+  background: var(--up);
+}
+
+.mini-bar.watch {
+  background: #facc15;
 }
 
 .revenue-trend-summary {
@@ -2344,6 +2548,24 @@ button {
   background: rgba(31, 38, 53, 0.72);
 }
 
+.event-calendar-item.major {
+  border-color: rgba(255, 67, 67, 0.35);
+}
+
+.event-calendar-item.disposition {
+  border-color: rgba(255, 67, 67, 0.46);
+  background: rgba(255, 67, 67, 0.08);
+}
+
+.event-calendar-item.attention {
+  border-color: rgba(250, 204, 21, 0.38);
+  background: rgba(250, 204, 21, 0.07);
+}
+
+.event-calendar-item.news {
+  border-color: rgba(74, 154, 255, 0.25);
+}
+
 .event-calendar-item.upcoming {
   border-color: rgba(74, 154, 255, 0.5);
   background: rgba(74, 154, 255, 0.08);
@@ -2374,6 +2596,56 @@ button {
 .event-calendar-item em {
   margin: 8px 0 4px;
   color: var(--text-2);
+}
+
+.event-calendar-item .btn.xs {
+  min-height: 28px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.event-type-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.13);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.event-type-pill.good {
+  color: var(--dn);
+  background: rgba(0, 255, 38, 0.12);
+}
+
+.event-type-pill.risk {
+  color: var(--up);
+  background: rgba(255, 67, 67, 0.13);
+}
+
+.event-type-pill.watch {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.12);
+}
+
+.event-source-note {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(74, 154, 255, 0.24);
+  border-radius: var(--radius);
+  background: rgba(74, 154, 255, 0.07);
+}
+
+.event-source-note span {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .data-source-list {
@@ -3042,6 +3314,7 @@ button {
   .complete-fundamental-grid,
   .complete-metric-strip,
   .revenue-trend-summary,
+  .financial-trend-summary,
   .margin-trading-grid,
   .score-model-grid,
   .fundamental-metric-grid,
@@ -3142,6 +3415,20 @@ button {
     margin-bottom: 0;
     white-space: normal;
     line-height: 1.35;
+  }
+
+  .financial-trend-panel {
+    padding: 12px;
+  }
+
+  .financial-trend-head,
+  .margin-table-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .financial-trend-row {
+    min-width: 760px;
   }
 
   .quote-tape {
