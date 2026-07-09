@@ -11,6 +11,7 @@ import {
   IconShieldCheck,
   IconTable
 } from '@tabler/icons-vue';
+import { stockApi } from '../api/stockApi';
 import { fetchFundamentalSnapshotPhased, fetchIndustryPeerStocks } from '../api/fundamentalApi';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
@@ -30,6 +31,7 @@ const peerSnapshots = ref([]);
 const peerLoading = ref(false);
 const peerLoaded = ref(false);
 const peerStage = ref('idle');
+const currentMarketStock = ref(null);
 const candidateLimit = 20;
 const stockCodePattern = /^\d{4,6}[a-z]?$/i;
 let candidateTimer = null;
@@ -62,10 +64,21 @@ const dividendMax = computed(() => {
 const eventCalendar = computed(() => snapshot.value?.eventCalendar || []);
 const scoreModel = computed(() => snapshot.value?.scoreModel || null);
 const peerComparison = computed(() => {
-  const result = buildPeerComparison(company.value, peerRows.value, snapshot.value, peerSnapshots.value);
+  const result = buildPeerComparison(comparisonStock.value, peerRows.value, snapshot.value, peerSnapshots.value);
   return result && (result.count || result.peerFundamentalCount) ? result : null;
 });
-const peerRankingRows = computed(() => buildPeerRankingRows(company.value, peerRows.value, snapshot.value, peerSnapshots.value));
+const peerRankingRows = computed(() => buildPeerRankingRows(comparisonStock.value, peerRows.value, snapshot.value, peerSnapshots.value));
+const peerStrengthRows = computed(() => buildPeerStrengthRows(comparisonStock.value, peerRows.value, snapshot.value, peerSnapshots.value));
+const comparisonStock = computed(() => {
+  const code = company.value?.code || stockStore.currentStock?.code || currentMarketStock.value?.code;
+  const listMarket = (stockStore.allStocks || []).find(row => String(row.code) === String(code));
+  return {
+    ...(company.value || {}),
+    ...(listMarket || {}),
+    ...(String(stockStore.currentStock?.code) === String(code) ? stockStore.currentStock : {}),
+    ...(String(currentMarketStock.value?.code) === String(code) ? currentMarketStock.value : {})
+  };
+});
 const peerStatusText = computed(() => {
   if (peerStage.value === 'industry') return '正在取得官方同業清單...';
   if (peerStage.value === 'fundamental') return '同業行情已載入，正在補同業基本面...';
@@ -145,6 +158,7 @@ async function runSearch(code) {
   try {
     const stock = await stockStore.searchStock(code);
     if (runId !== searchRunId) return;
+    currentMarketStock.value = stock;
     query.value = stock.code;
     activeTab.value = 'overview';
     snapshot.value = null;
@@ -209,9 +223,15 @@ async function loadPeerFundamentals(current, runId) {
   }
 
   peerRows.value = peers;
+  const hydratedMarketRows = await hydratePeerMarketRows([comparisonStock.value, ...peers]);
+  if (runId !== searchRunId) return;
+  const hydratedCurrent = hydratedMarketRows.find(row => String(row.code) === String(current?.code));
+  if (hydratedCurrent) currentMarketStock.value = hydratedCurrent;
+  const hydratedPeers = hydratedMarketRows.filter(row => String(row.code) !== String(current?.code));
+  peerRows.value = hydratedPeers;
   peerStage.value = 'fundamental';
   try {
-    const results = await Promise.allSettled(peers.map(peer => fetchFundamentalSnapshotPhased(peer, () => {})));
+    const results = await Promise.allSettled(hydratedPeers.map(peer => fetchFundamentalSnapshotPhased(peer, () => {})));
     if (runId !== searchRunId) return;
     peerSnapshots.value = results
       .filter(result => result.status === 'fulfilled' && result.value)
@@ -221,6 +241,40 @@ async function loadPeerFundamentals(current, runId) {
   } finally {
     if (runId === searchRunId) peerLoading.value = false;
   }
+}
+
+async function hydratePeerMarketRows(rows) {
+  const sourceByCode = new Map();
+  (rows || []).filter(row => row?.code).forEach(row => sourceByCode.set(String(row.code), row));
+  const sourceRows = [...sourceByCode.values()];
+  if (!sourceRows.length) return [];
+  const codes = sourceRows.map(row => row.code);
+  const quotedRows = await stockStore.refreshStocksByCodes(codes).catch(() => []);
+  const allByCode = new Map((stockStore.allStocks || []).map(row => [String(row.code), row]));
+  quotedRows.forEach(row => allByCode.set(String(row.code), row));
+
+  const mergedRows = sourceRows.map(row => {
+    const market = allByCode.get(String(row.code)) || {};
+    return stockStore.enrichStock({
+      ...row,
+      ...market,
+      code: row.code,
+      name: market.name || row.name,
+      sector: row.sector || market.sector,
+      industry: row.industry || market.industry
+    });
+  });
+
+  const needVolumeRatio = mergedRows.filter(row => !Number(row.volRatio || 0) && Number(row.volume || 0) > 0);
+  if (!needVolumeRatio.length) return mergedRows;
+
+  const ratioRows = await stockApi.volumeRatios(needVolumeRatio).catch(() => []);
+  if (!ratioRows.length) return mergedRows;
+
+  const ratioByCode = new Map(ratioRows.map(row => [String(row.code), row]));
+  return mergedRows.map(row => ratioByCode.has(String(row.code))
+    ? stockStore.enrichStock({ ...row, ...ratioByCode.get(String(row.code)) })
+    : row);
 }
 
 function statusText(status) {
@@ -377,12 +431,12 @@ function buildPeerComparison(current, allStocks, currentSnapshot, snapshots) {
     sector,
     count: marketRows.length,
     peerFundamentalCount: fundamentalRows.length,
-    stockChangePct: Number(current.chgPct),
-    avgChangePct: average(marketRows.map(row => Number(row.chgPct))),
-    stockVolRatio: Number(current.volRatio),
-    avgVolRatio: average(marketRows.map(row => Number(row.volRatio))),
-    stockBuyPct: Number(current.buyPct),
-    avgBuyPct: average(marketRows.map(row => Number(row.buyPct))),
+    stockChangePct: marketMetric(current.chgPct),
+    avgChangePct: average(marketRows.map(row => marketMetric(row.chgPct))),
+    stockVolRatio: marketMetric(current.volRatio),
+    avgVolRatio: average(marketRows.map(row => marketMetric(row.volRatio))),
+    stockBuyPct: marketMetric(current.buyPct),
+    avgBuyPct: average(marketRows.map(row => marketMetric(row.buyPct))),
     currentPe: highlightValue(currentSnapshot, '本益比'),
     avgPeerPe: average(fundamentalRows.map(item => highlightValue(item, '本益比'))),
     currentRoe: metricValue(currentSnapshot, '年化 ROE'),
@@ -463,6 +517,48 @@ function buildPeerRankingRows(current, peers, currentSnapshot, snapshots) {
   ];
 }
 
+function buildPeerStrengthRows(current, peers, currentSnapshot, snapshots) {
+  if (!current) return [];
+  const snapshotByCode = new Map(
+    [currentSnapshot, ...(snapshots || [])]
+      .filter(Boolean)
+      .map(item => [String(item.company?.code || '').trim(), item])
+  );
+
+  return [current, ...(peers || [])]
+    .filter(row => row?.code)
+    .map(row => {
+      const snap = snapshotByCode.get(String(row.code));
+      const chgPct = marketMetric(row.chgPct);
+      const volRatio = marketMetric(row.volRatio);
+      const buyPct = marketMetric(row.buyPct);
+      const revenueYoy = metricValue(snap, '????YoY');
+      const roe = metricValue(snap, '撟游? ROE');
+      const strengthScore = [
+        Number.isFinite(chgPct) ? chgPct * 2 : 0,
+        Number.isFinite(volRatio) ? Math.min(volRatio, 300) / 20 : 0,
+        Number.isFinite(buyPct) ? (buyPct - 50) / 10 : 0,
+        Number.isFinite(revenueYoy) ? Math.max(Math.min(revenueYoy, 60), -60) / 20 : 0,
+        Number.isFinite(roe) ? Math.max(Math.min(roe, 40), -20) / 20 : 0
+      ].reduce((sum, value) => sum + value, 0);
+
+      return {
+        code: row.code,
+        name: row.name || snap?.company?.name || row.code,
+        sector: row.sector || snap?.company?.sector || '',
+        chgPct,
+        volRatio,
+        buyPct,
+        revenueYoy,
+        roe,
+        strengthScore,
+        isCurrent: String(row.code) === String(current.code)
+      };
+    })
+    .sort((a, b) => b.strengthScore - a.strengthScore)
+    .slice(0, 12);
+}
+
 function createPeerRankRow({ label, period, value, average: avg, values, format, order }) {
   const rank = rankAmong(value, values, order);
   return {
@@ -490,6 +586,30 @@ function peerMetricDisplay(row, key = 'value') {
   const value = Number(row?.[key]);
   if (!Number.isFinite(value)) return '--';
   return row.format === 'pct' ? pct(value, 2) : valuationDisplay({ current: value }, 2);
+}
+
+function marketMetric(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function marketPct(value, digits = 0) {
+  const number = marketMetric(value);
+  if (number === null) return '--';
+  return `${number.toLocaleString('zh-TW', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  })}%`;
+}
+
+function marketNumber(value, digits = 2) {
+  const number = marketMetric(value);
+  if (number === null) return '--';
+  return number.toLocaleString('zh-TW', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
 }
 
 function peerRankLabel(row) {
@@ -858,13 +978,13 @@ function average(values) {
           </div>
           <div>
             <span>量比</span>
-            <strong>{{ valuationDisplay({ current: peerComparison.stockVolRatio }, 0) }}%</strong>
-            <em>同業平均 {{ valuationDisplay({ current: peerComparison.avgVolRatio }, 0) }}%</em>
+            <strong>{{ marketPct(peerComparison.stockVolRatio, 0) }}</strong>
+            <em>同業平均 {{ marketPct(peerComparison.avgVolRatio, 0) }}</em>
           </div>
           <div>
             <span>買入占比</span>
-            <strong>{{ valuationDisplay({ current: peerComparison.stockBuyPct }, 0) }}%</strong>
-            <em>同業平均 {{ valuationDisplay({ current: peerComparison.avgBuyPct }, 0) }}%</em>
+            <strong>{{ marketPct(peerComparison.stockBuyPct, 0) }}</strong>
+            <em>同業平均 {{ marketPct(peerComparison.avgBuyPct, 0) }}</em>
           </div>
           <div>
             <span>本益比</span>
@@ -887,7 +1007,39 @@ function average(values) {
             <em>同業平均 {{ pct(peerComparison.avgPeerRevenueYoy, 2) }}</em>
           </div>
         </div>
-        <div v-else-if="!peerLoading" class="hint">同產業樣本不足，暫時無法建立比較。</div>
+        <div v-if="peerStrengthRows.length" class="peer-strength-panel">
+          <div class="peer-strength-head">
+            <div>
+              <span>同族群強弱排行</span>
+              <strong>{{ peerComparison?.sector || company.sector || '同產業' }}</strong>
+            </div>
+            <em>綜合漲跌幅、量比、買入占比、營收 YoY 與 ROE 排序</em>
+          </div>
+          <div class="peer-strength-table">
+            <div class="peer-strength-row head">
+              <span>#</span>
+              <span>股票</span>
+              <span>漲跌</span>
+              <span>量比</span>
+              <span>買入</span>
+              <span>營收 YoY</span>
+              <span>強弱分數</span>
+            </div>
+            <div v-for="(row, index) in peerStrengthRows" :key="row.code" class="peer-strength-row" :class="{ current: row.isCurrent }">
+              <span>{{ index + 1 }}</span>
+              <span>
+                <strong>{{ row.code }} {{ row.name }}</strong>
+                <em>{{ row.sector || '--' }}</em>
+              </span>
+              <span :class="moveClass(row.chgPct).replace('is-', '')">{{ pct(row.chgPct, 2) }}</span>
+              <span>{{ marketPct(row.volRatio, 0) }}</span>
+              <span>{{ marketPct(row.buyPct, 0) }}</span>
+              <span :class="moveClass(row.revenueYoy).replace('is-', '')">{{ pct(row.revenueYoy, 2) }}</span>
+              <span>{{ marketNumber(row.strengthScore, 2) }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="!peerLoading && !peerComparison && !peerRankingRows.length && !peerStrengthRows.length" class="hint">同產業樣本不足，暫時無法建立比較。</div>
       </div>
 
       <div v-if="activeTab === 'events'" class="fundamental-panel">
