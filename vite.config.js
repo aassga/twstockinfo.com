@@ -15,13 +15,16 @@ function devRootIndexFallback() {
   };
 }
 
-export default defineConfig(({ command }) => ({
-  base: command === 'serve' ? '/' : '/twstockinfo.com/',
-  appType: 'spa',
-  plugins: [
-    devRootIndexFallback(),
-    vue(),
-    VitePWA({
+export default defineConfig(({ command }) => {
+  const disablePwa = process.env.DISABLE_PWA === 'true';
+
+  return {
+    base: command === 'serve' ? '/' : '/twstockinfo.com/',
+    appType: 'spa',
+    plugins: [
+      devRootIndexFallback(),
+      vue(),
+      disablePwa ? null : VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
         'icons/app.svg',
@@ -70,14 +73,22 @@ export default defineConfig(({ command }) => ({
         skipWaiting: true,
         globPatterns: ['**/*.{js,css,html,svg,png,ico}']
       }
-    })
-  ],
-  server: {
-    host: '0.0.0.0',
-    port: 5173
-  },
-  preview: {
-    host: '0.0.0.0',
-    port: 4173
-  }
-}));
+      })
+    ].filter(Boolean),
+    resolve: disablePwa
+      ? {
+          alias: {
+            'virtual:pwa-register': '/src/pwaRegisterStub.js'
+          }
+        }
+      : undefined,
+    server: {
+      host: '0.0.0.0',
+      port: 5173
+    },
+    preview: {
+      host: '0.0.0.0',
+      port: 4173
+    }
+  };
+});

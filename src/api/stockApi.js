@@ -490,7 +490,7 @@ function parseMisQuoteItem(item) {
     buyPct,
     sellPct: 100 - buyPct,
     forceSource: tradeFlow.reliable ? 'twse-mis-trade-flow' : 'twse-mis-book',
-    forceSourceLabel: tradeFlow.reliable ? 'TWSE MIS 逐筆成交分類' : 'TWSE MIS 五檔委買/委賣量',
+    forceSourceLabel: tradeFlow.reliable ? 'TWSE MIS 成交快照分類' : 'TWSE MIS 五檔委買/委賣量',
     forceReliable: tradeFlow.reliable || bidTotal + askTotal > 0,
     tradeFlow,
     volRatio: null,
@@ -575,7 +575,7 @@ function updateTradeFlowFromMisItem(item, context = {}) {
       bestBid,
       bestAsk,
       source: 'TWSE MIS',
-      sourceLabel: base.reliable ? 'TWSE MIS 逐筆成交分類' : 'TWSE MIS 即時報價監測中'
+      sourceLabel: base.reliable ? 'TWSE MIS 成交快照分類' : 'TWSE MIS 即時報價監測中'
     };
     tradeFlowCache.set(code, next);
     return summarizeTradeFlow(next);
@@ -659,9 +659,9 @@ function summarizeTradeFlow(flow) {
     innerPct: activeSellPct,
     reliable: classifiedLots > 0,
     available: totalLots > 0,
-    sourceLabel: classifiedLots > 0 ? 'TWSE MIS 逐筆成交分類' : 'TWSE MIS 即時報價監測中',
+    sourceLabel: classifiedLots > 0 ? 'TWSE MIS 成交快照分類' : 'TWSE MIS 即時報價監測中',
     note: classifiedLots > 0
-      ? '依最新成交價相對當下五檔買賣價分類，統計自本頁開啟或資料重整後開始累積。'
+      ? '依 MIS 最新成交快照相對當下五檔買賣價分類，統計自本頁開啟或資料重整後開始累積。'
       : '尚未捕捉到可分類的新成交，暫以五檔委買委賣量顯示買賣力道。'
   };
 }

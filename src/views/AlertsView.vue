@@ -95,7 +95,7 @@ function openQuote(stock) {
 
     <div class="table-hint">
       <IconInfoCircle class="inline-icon" :stroke-width="2" />
-      買賣提醒優先採用 TWSE MIS 逐筆成交分類；尚未捕捉新成交時才退回五檔委買/委賣量。HiStock/Yahoo 推估資料不列入提醒。
+      買賣提醒優先採用 TWSE MIS 成交快照分類；尚未捕捉新成交時才退回五檔委買/委賣量。HiStock/Yahoo 推估資料不列入提醒。
     </div>
 
     <div class="table-footer" style="margin-top:1.5rem">

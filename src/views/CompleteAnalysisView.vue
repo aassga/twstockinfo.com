@@ -329,7 +329,7 @@ function buildExecutiveSummary(current, fundamental, institutional, trendSummary
     `${current.code} ${current.name || ''} 目前股價 ${formatMoney(current.price, 2)}，漲跌 ${formatPct(current.chgPct)}。`
   ];
   if (current.tradeFlow?.reliable) {
-    rows.push(`逐筆內外盤：外盤 ${Math.round(current.tradeFlow.activeBuyPct || 0)}%、內盤 ${Math.round(current.tradeFlow.activeSellPct || 0)}%，已累積 ${formatNumber(current.tradeFlow.totalLots || 0, 0)} 張可觀察成交。`);
+    rows.push(`成交快照內外盤：外盤 ${Math.round(current.tradeFlow.activeBuyPct || 0)}%、內盤 ${Math.round(current.tradeFlow.activeSellPct || 0)}%，已累積 ${formatNumber(current.tradeFlow.totalLots || 0, 0)} 張可觀察成交。`);
   }
   if (institutional) rows.push(`單日法人合計 ${formatSigned(institutional.total || 0, 0, '張')}，外資 ${formatSigned(institutional.foreign || 0, 0, '張')}、投信 ${formatSigned(institutional.trust || 0, 0, '張')}、自營商 ${formatSigned(institutional.dealer || 0, 0, '張')}。`);
   const fiveDay = trendSummary?.[0];

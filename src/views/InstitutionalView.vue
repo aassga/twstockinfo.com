@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconBuildingBank, IconInfoCircle, IconSearch, IconSparkles } from '@tabler/icons-vue';
+import { stockApi } from '../api/stockApi';
 import { useInstitutionalStore } from '../stores/institutionalStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatMoney, formatSigned, moveClass } from '../utils/formatters';
@@ -18,8 +19,17 @@ const showCandidates = ref(false);
 const candidateMessage = ref('');
 const searchLoading = ref(false);
 const selectedCode = ref('');
+const priceRelationRows = ref([]);
+const priceRelationLoading = ref(false);
+const priceRelationError = ref('');
 const candidateLimit = 20;
 const stockCodePattern = /^\d{4,6}[a-z]?$/i;
+const taipeiDateKeyFormatter = new Intl.DateTimeFormat('zh-TW', {
+  timeZone: 'Asia/Taipei',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+});
 let candidateTimer = null;
 
 const totalRows = computed(() => institutionalStore.rows.length);
@@ -53,6 +63,31 @@ const selectedLoading = computed(() => {
 });
 const selectedTrendSummary = computed(() => [5, 10, 20].map(days => summarizeTrend(selectedTrend.value, days)));
 const selectedTrendChartRows = computed(() => selectedTrend.value.slice(0, 20).reverse());
+const relationChartRows = computed(() => buildRelationRows(priceRelationRows.value));
+const relationPath = computed(() => {
+  const rows = relationChartRows.value;
+  if (!rows.length) return '';
+  return rows.map((row, index) => `${index === 0 ? 'M' : 'L'} ${row.x} ${row.priceY}`).join(' ');
+});
+const relationAreaPath = computed(() => {
+  const rows = relationChartRows.value;
+  if (!rows.length) return '';
+  return `${relationPath.value} L ${rows[rows.length - 1].x} 100 L ${rows[0].x} 100 Z`;
+});
+const relationStats = computed(() => {
+  const rows = relationChartRows.value;
+  if (!rows.length) return null;
+  const latest = rows[rows.length - 1];
+  const first = rows[0];
+  const totalFlow = rows.reduce((sum, row) => sum + Number(row.total || 0), 0);
+  const priceChange = first.close ? ((latest.close - first.close) / first.close) * 100 : 0;
+  return {
+    latest,
+    totalFlow,
+    priceChange,
+    flowDirection: totalFlow > 0 ? '買超' : totalFlow < 0 ? '賣超' : '中性'
+  };
+});
 const selectedTrendMaxAbs = computed(() => {
   const values = selectedTrendChartRows.value.flatMap(row => [
     Math.abs(Number(row.foreign || 0)),
@@ -152,6 +187,7 @@ async function runSearch(code) {
       institutionalStore.loadInstitutionalByCode(normalizedCode, { force: true }),
       institutionalStore.loadInstitutionalTrendByCode(normalizedCode, { force: true })
     ]);
+    await loadPriceRelation(normalizedCode);
     if (!selectedInstitutional.value && !selectedTrend.value.length) {
       showCandidates.value = true;
       candidateMessage.value = '找不到法人資料，可能尚未公布或非交易所法人統計標的。';
@@ -163,6 +199,40 @@ async function runSearch(code) {
 
 function selectCandidate(stock) {
   runSearch(stock.code);
+}
+
+async function loadPriceRelation(code) {
+  priceRelationLoading.value = true;
+  priceRelationError.value = '';
+  priceRelationRows.value = [];
+  try {
+    const trendRows = institutionalStore.trendByCode[code] || [];
+    const chart = await stockApi.chart(code, '1Y', selectedInstitutional.value?.exchange || '');
+    const priceByDate = new Map(
+      chart.candles.map(candle => [normalizeDateKey(candle.date || candle.time), candle])
+    );
+    priceRelationRows.value = trendRows
+      .slice(0, 40)
+      .map(row => {
+        const candle = priceByDate.get(normalizeDateKey(row.date));
+        if (!candle) return null;
+        return {
+          ...row,
+          close: Number(candle.close || 0),
+          priceDate: candle.date || row.date
+        };
+      })
+      .filter(row => row && row.close > 0)
+      .reverse()
+      .slice(-24);
+    if (!priceRelationRows.value.length) {
+      priceRelationError.value = '股價與法人日期暫時無法對齊';
+    }
+  } catch (err) {
+    priceRelationError.value = err?.message || '股價關係圖載入失敗';
+  } finally {
+    priceRelationLoading.value = false;
+  }
 }
 
 function percent(value, positive = true) {
@@ -213,8 +283,40 @@ function barHeight(value) {
   return `${Math.max(3, Math.round((number / selectedTrendMaxAbs.value) * 100))}%`;
 }
 
+function buildRelationRows(rows) {
+  if (!rows.length) return [];
+  const closes = rows.map(row => Number(row.close || 0)).filter(value => value > 0);
+  const totals = rows.map(row => Math.abs(Number(row.total || 0)));
+  const minClose = Math.min(...closes);
+  const maxClose = Math.max(...closes);
+  const maxAbsTotal = Math.max(1, ...totals);
+  const closeRange = Math.max(1, maxClose - minClose);
+  const denominator = Math.max(1, rows.length - 1);
+
+  return rows.map((row, index) => {
+    const close = Number(row.close || 0);
+    const total = Number(row.total || 0);
+    return {
+      ...row,
+      x: Number(((index / denominator) * 100).toFixed(2)),
+      priceY: Number((8 + ((maxClose - close) / closeRange) * 54).toFixed(2)),
+      barHeight: `${Math.max(3, Math.round((Math.abs(total) / maxAbsTotal) * 32))}%`,
+      barClass: total >= 0 ? 'up' : 'down',
+      shortDate: shortDate(row.date)
+    };
+  });
+}
+
 function shortDate(value) {
   return String(value || '').slice(5);
+}
+
+function normalizeDateKey(value) {
+  if (typeof value === 'number') {
+    return taipeiDateKeyFormatter.format(new Date(value)).replace(/\D/g, '').slice(0, 8);
+  }
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length >= 8 ? digits.slice(0, 8) : '';
 }
 
 function sumRows(rows, key) {
@@ -332,6 +434,46 @@ function normalizeSearchText(value) {
           <div v-for="item in selectedStreaks" :key="item.key" :class="item.direction">
             <span>{{ item.label }}</span>
             <strong>{{ item.text }}</strong>
+          </div>
+        </div>
+        <div class="institutional-relation-panel">
+          <div class="institutional-relation-head">
+            <div>
+              <span>法人與股價關係圖</span>
+              <strong>
+                {{
+                  relationStats
+                    ? `${relationStats.flowDirection} ${formatSigned(relationStats.totalFlow, 0, '張')} / 股價 ${formatSigned(relationStats.priceChange, 2, '%')}`
+                    : '等待資料'
+                }}
+              </strong>
+            </div>
+            <em>{{ priceRelationLoading ? '股價載入中' : priceRelationError || 'Yahoo 日 K + HiStock 法人明細' }}</em>
+          </div>
+          <div v-if="priceRelationLoading" class="institutional-relation-empty">股價關係圖載入中...</div>
+          <div v-else-if="relationChartRows.length" class="institutional-relation-chart">
+            <svg class="institutional-price-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <path v-if="relationAreaPath" :d="relationAreaPath" class="price-area"></path>
+              <path v-if="relationPath" :d="relationPath" class="price-line"></path>
+            </svg>
+            <div class="institutional-flow-layer">
+              <div
+                v-for="row in relationChartRows"
+                :key="`relation-${row.date}`"
+                class="institutional-flow-col"
+                :title="`${row.date} 收盤 ${formatMoney(row.close, 2)} / 法人 ${formatSigned(row.total, 0, '張')}`"
+              >
+                <div class="flow-zero-line"></div>
+                <i
+                  :class="row.barClass"
+                  :style="{ height: row.barHeight }"
+                ></i>
+                <span>{{ row.shortDate }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="institutional-relation-empty">
+            {{ priceRelationError || '尚無可對齊的股價與法人資料' }}
           </div>
         </div>
         <div class="institutional-bar-chart">

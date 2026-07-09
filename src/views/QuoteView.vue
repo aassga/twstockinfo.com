@@ -52,7 +52,7 @@ const panels = [
   { label: "報價", value: "quote" },
   { label: "走勢", value: "chart" },
   { label: "五檔", value: "depth" },
-  { label: "逐筆", value: "trades" },
+  { label: "內外盤", value: "trades" },
   { label: "法人", value: "institutional" },
   { label: "基本面", value: "fundamental" },
   { label: "AI 摘要", value: "ai" },
@@ -810,7 +810,7 @@ function roundPrice(value) {
           <div v-else-if="activePanel === 'trades'" class="quote-trades-panel">
             <div class="quote-info-head">
               <div>
-                <div class="quote-section-title">真正內外盤 / 逐筆成交</div>
+                <div class="quote-section-title">內外盤監測 / 成交快照</div>
                 <span class="hint">{{ tradeFlow?.note || "等待 TWSE MIS 新成交資料。" }}</span>
               </div>
               <span class="quote-source-badge" :class="tradeFlow?.reliable ? 'realtime' : 'unknown'">
