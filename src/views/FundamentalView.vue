@@ -337,6 +337,7 @@ function eventTypeClass(type) {
   if (type === 'news') return 'neutral';
   if (type === 'dividend') return 'good';
   if (type === 'margin') return 'watch';
+  if (type === 'financial') return 'watch';
   return 'neutral';
 }
 
@@ -865,8 +866,8 @@ function average(values) {
         </div>
         <div v-else class="hint">目前沒有可顯示的近期事件。</div>
         <div class="event-source-note">
-          <span>已接入：MOPS 重大訊息、FinMind 新聞、TWSE 注意/處置股、除權息/股利、月營收、估值與信用事件。</span>
-          <span>上櫃注意/處置股：TPEX 公告格式較分散，後續可再補獨立來源。</span>
+          <span>已接入：MOPS 重大訊息、FinMind 新聞、TWSE/TPEX 注意處置股、TWSE/TPEX 除權息、月營收、財報、估值與信用事件。</span>
+          <span>法說會：官方 OpenAPI 尚未提供穩定個股法說會來源，後續可接 TDCC IR Platform 或 MOPS 來源。</span>
         </div>
         <div v-if="dividendStability?.available" class="dividend-stability fundamental-dividend-stability">
           <div class="dividend-main-card" :class="dividendStability.tone">

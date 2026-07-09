@@ -74,6 +74,8 @@ async function fetchFundamentalSnapshotFresh(normalized) {
     directorRows,
     majorEventRows,
     attentionEventRows,
+    financialReportRows,
+    exDividendRows,
     newsRows
   ] = await Promise.all([
     fetchManyRows(endpoints.valuation),
@@ -85,6 +87,8 @@ async function fetchFundamentalSnapshotFresh(normalized) {
     fetchManyRows(endpoints.director),
     fetchManyRows(endpoints.majorEvents),
     fetchManyRows(endpoints.attentionEvents),
+    fetchManyRows(endpoints.financialReport),
+    fetchManyRows(endpoints.exDividend),
     fetchNewsRows(normalized.code)
   ]);
 
@@ -112,6 +116,8 @@ async function fetchFundamentalSnapshotFresh(normalized) {
     directorRows,
     majorEventRows,
     attentionEventRows,
+    financialReportRows,
+    exDividendRows,
     newsRows,
     incomeRows,
     balanceRows,
@@ -228,16 +234,18 @@ async function fetchFundamentalSnapshotPhasedFresh(normalized, onUpdate = () => 
     stage: 'statements'
   }));
 
-  const [dividendRows, chairmanRows, directorRows, majorEventRows, attentionEventRows, newsRows, macro] = await Promise.all([
+  const [dividendRows, chairmanRows, directorRows, majorEventRows, attentionEventRows, financialReportRows, exDividendRows, newsRows, macro] = await Promise.all([
     fetchManyRows(endpoints.dividend),
     fetchManyRows(endpoints.chairman),
     fetchManyRows(endpoints.director),
     fetchManyRows(endpoints.majorEvents),
     fetchManyRows(endpoints.attentionEvents),
+    fetchManyRows(endpoints.financialReport),
+    fetchManyRows(endpoints.exDividend),
     fetchNewsRows(code),
     fetchMacroSnapshot()
   ]);
-  Object.assign(rows, { dividendRows, chairmanRows, directorRows, majorEventRows, attentionEventRows, newsRows, macro });
+  Object.assign(rows, { dividendRows, chairmanRows, directorRows, majorEventRows, attentionEventRows, financialReportRows, exDividendRows, newsRows, macro });
 
   const finalSnapshot = composeFundamentalSnapshot(normalized, {
     ...rows,
@@ -278,8 +286,11 @@ function composeFundamentalSnapshot(normalized, rows = {}) {
   const marginTrading = summarizeMarginTrading(rows.marginRows || [], rows.lendingRows || []);
   const majorEvents = summarizeMajorEvents(rows.majorEventRows || [], code);
   const attentionEvents = summarizeAttentionEvents(rows.attentionEventRows || [], code);
+  const financialReportEvents = summarizeFinancialReportEvents(rows.financialReportRows || [], rows.financialStatementRows || [], income, balance, code);
+  const exDividendEvents = summarizeExDividendEvents(rows.exDividendRows || [], code);
   const newsEvents = summarizeNewsEvents(rows.newsRows || [], code);
-  const eventCalendar = buildEventCalendar({ dividendStability, revenueTrend, valuationHistory, marginTrading, cashFlow, majorEvents, attentionEvents, newsEvents });
+  const eventCalendar = buildEventCalendar({ dividendStability, revenueTrend, valuationHistory, marginTrading, cashFlow, majorEvents, attentionEvents, financialReportEvents, exDividendEvents, newsEvents });
+  const eventCoverage = buildEventCoverage({ majorEvents, attentionEvents, financialReportEvents, exDividendEvents, newsEvents, dividendStability, revenueTrend });
   const directorSummary = summarizeDirectors((rows.directorRows || []).filter(row => codeOf(row) === code));
   const mergedCompany = mergeCompany(normalized, company, revenue, eps);
   const calculated = calculateMetrics({ stock: mergedCompany, valuation, revenue, eps, income, balance, dividend, directorSummary, cashFlow, revenueTrend, valuationHistory, dividendStability });
@@ -303,8 +314,11 @@ function composeFundamentalSnapshot(normalized, rows = {}) {
     marginTrading,
     majorEvents,
     attentionEvents,
+    financialReportEvents,
+    exDividendEvents,
     newsEvents,
     eventCalendar,
+    eventCoverage,
     scoreModel,
     score,
     scoreLabel: stage === 'quote' ? '載入中' : scoreLabel(score),
@@ -333,7 +347,11 @@ function fundamentalEndpointsFor(stock) {
     chairman: isTwse ? ['/twse/opendata/t187ap33_L'] : ['/tpex/openapi/v1/mopsfin_t187ap33_O'],
     director: isTwse ? ['/twse/opendata/t187ap11_L'] : ['/tpex/openapi/v1/mopsfin_t187ap11_O'],
     majorEvents: isTwse ? ['/twse/opendata/t187ap04_L'] : ['/tpex/openapi/v1/mopsfin_t187ap04_O'],
-    attentionEvents: isTwse ? ['/twse/announcement/punish', '/twse/announcement/notice'] : [],
+    attentionEvents: isTwse
+      ? ['/twse/announcement/punish', '/twse/announcement/notice']
+      : ['/tpex/openapi/v1/tpex_disposal_information', '/tpex/openapi/v1/tpex_trading_warning_information'],
+    financialReport: isTwse ? ['/twse/opendata/t187ap31_L'] : ['/tpex/openapi/v1/mopsfin_t187ap31_O'],
+    exDividend: isTwse ? ['/twse/exchangeReport/TWT48U_ALL'] : ['/tpex/openapi/v1/tpex_exright_prepost'],
     income: isTwse ? INCOME_ENDPOINTS : TPEX_INCOME_ENDPOINTS,
     balance: isTwse ? BALANCE_ENDPOINTS : TPEX_BALANCE_ENDPOINTS
   };
@@ -1145,11 +1163,11 @@ function summarizeMajorEvents(rows, code) {
 
 function summarizeAttentionEvents(rows, code) {
   return (Array.isArray(rows) ? rows : [])
-    .filter(row => String(read(row, ['Code', '證券代號']) || '').trim() === code)
+    .filter(row => codeOf(row) === code)
     .map(row => {
       const isDisposition = Boolean(read(row, ['ReasonsOfDisposition', 'DispositionPeriod', 'DispositionMeasures', '處置條件', '處置起迄時間']));
       const date = formatRocDate(read(row, ['Date', '公布日期', '日期']));
-      const name = read(row, ['Name', '證券名稱']) || code;
+      const name = read(row, ['Name', '證券名稱', 'CompanyName']) || code;
       const title = isDisposition ? `${name} 處置公告` : `${name} 注意交易`;
       const detail = isDisposition
         ? [
@@ -1157,17 +1175,88 @@ function summarizeAttentionEvents(rows, code) {
           read(row, ['DispositionPeriod', '處置起迄時間']),
           read(row, ['DispositionMeasures', '處置措施'])
         ].filter(Boolean).join(' / ')
-        : read(row, ['TradingInfoForAttention', '注意交易資訊']) || '公布注意交易資訊';
+        : read(row, ['TradingInfoForAttention', 'TradingInformation', '注意交易資訊']) || '公布注意交易資訊';
       return {
         date,
         title,
         type: isDisposition ? 'disposition' : 'attention',
         detail,
-        source: isDisposition ? 'TWSE 處置有價證券 OpenAPI' : 'TWSE 注意有價證券 OpenAPI'
+        source: isDisposition ? 'TWSE/TPEX 處置有價證券 OpenAPI' : 'TWSE/TPEX 注意有價證券 OpenAPI'
       };
     })
     .filter(row => row.date && row.title)
     .slice(0, 8);
+}
+
+function summarizeFinancialReportEvents(reportRows, statementRows, income, balance, code) {
+  const officialRows = (Array.isArray(reportRows) ? reportRows : [])
+    .filter(row => codeOf(row) === code)
+    .map(row => {
+      const date = formatCompactDate(read(row, ['出表日期'])) || formatRocDate(read(row, ['Date', '出表日期']));
+      const name = read(row, ['公司名稱', 'CompanyName']) || code;
+      const auditCommittee = read(row, ['是否設置審計委員會']);
+      return {
+        date,
+        title: `${name} 財報承認公告`,
+        type: 'financial',
+        detail: auditCommittee ? `財務報告經監察人/審計委員會承認，審計委員會：${auditCommittee}` : '財務報告承認情形更新',
+        source: 'TWSE/TPEX 財務報告承認 OpenAPI'
+      };
+    })
+    .filter(row => row.date && row.title)
+    .slice(0, 3);
+
+  const latestStatementDate = latestDateFromRows(statementRows);
+  const statementEvent = latestStatementDate ? [{
+    date: latestStatementDate,
+    title: '財報資料更新',
+    type: 'financial',
+    detail: `最新財報期間 ${quarterLabel(latestStatementDate)}，EPS / 獲利率 / 現金流趨勢已更新`,
+    source: 'FinMind TaiwanStockFinancialStatements'
+  }] : [];
+
+  if (!officialRows.length && !statementEvent.length) {
+    const period = financialPeriod(income || balance);
+    if (period) {
+      return [{
+        date: new Date().toISOString().slice(0, 10),
+        title: '財報資料更新',
+        type: 'financial',
+        detail: `最新財報期間 ${period}`,
+        source: 'TWSE/TPEX OpenAPI 財報資料'
+      }];
+    }
+  }
+
+  return [...officialRows, ...statementEvent];
+}
+
+function summarizeExDividendEvents(rows, code) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter(row => codeOf(row) === code)
+    .map(row => {
+      const date = formatCompactDate(read(row, ['Date', '日期'])) || formatRocDate(read(row, ['Date', '日期', 'ExDividendDate', 'ExdividendDate']));
+      const name = read(row, ['Name', 'CompanyName', '證券名稱', '公司名稱']) || code;
+      const exType = read(row, ['Exdividend', '除權息', '除權息別']) || '除權息';
+      const cashDividend = parseNumber(read(row, ['CashDividend', 'CashDividendPerShare', '現金股利', '現金股利(元)']));
+      const stockRatio = read(row, ['StockDividendRatio', '股票股利', '無償配股率']);
+      const subscriptionPrice = read(row, ['SubscriptionPricePerShare', '承銷價格', '認購價']);
+      const details = [
+        exType,
+        cashDividend ? `現金股利 ${formatPlain(cashDividend, 2)} 元` : '',
+        stockRatio ? `股票股利/配股 ${stockRatio}` : '',
+        subscriptionPrice ? `認購價 ${subscriptionPrice}` : ''
+      ].filter(Boolean).join(' / ');
+      return {
+        date,
+        title: `${name} 除權息預告`,
+        type: 'dividend',
+        detail: details || '除權息資訊更新',
+        source: 'TWSE/TPEX 除權息預告 OpenAPI'
+      };
+    })
+    .filter(row => row.date && row.title)
+    .slice(0, 6);
 }
 
 function summarizeNewsEvents(rows, code) {
@@ -1185,6 +1274,46 @@ function summarizeNewsEvents(rows, code) {
     .filter(row => row.date && row.title)
     .sort((a, b) => `${b.date} ${b.time || ''}`.localeCompare(`${a.date} ${a.time || ''}`))
     .slice(0, 10);
+}
+
+function buildEventCoverage({ majorEvents, attentionEvents, financialReportEvents, exDividendEvents, newsEvents, dividendStability, revenueTrend }) {
+  return [
+    {
+      label: '重大訊息',
+      status: majorEvents?.length ? 'done' : 'empty',
+      source: 'MOPS 重大訊息 OpenAPI'
+    },
+    {
+      label: '法說會',
+      status: 'pending',
+      source: '待接 TDCC IR Platform / MOPS 法說會來源'
+    },
+    {
+      label: '月營收公告',
+      status: revenueTrend?.available ? 'done' : 'empty',
+      source: revenueTrend?.source || 'FinMind TaiwanStockMonthRevenue'
+    },
+    {
+      label: '財報公告',
+      status: financialReportEvents?.length ? 'done' : 'empty',
+      source: 'TWSE/TPEX 財務報告承認 + FinMind 財報'
+    },
+    {
+      label: '除權息公告',
+      status: exDividendEvents?.length || dividendStability?.events?.length ? 'done' : 'empty',
+      source: 'TWSE/TPEX 除權息預告 + FinMind 股利'
+    },
+    {
+      label: '新聞摘要',
+      status: newsEvents?.length ? 'done' : 'empty',
+      source: 'FinMind TaiwanStockNews'
+    },
+    {
+      label: '注意 / 處置股',
+      status: attentionEvents?.length ? 'risk' : 'empty',
+      source: 'TWSE/TPEX 注意處置 OpenAPI'
+    }
+  ];
 }
 
 function dividendFiscalYear(row) {
@@ -1283,7 +1412,7 @@ function summarizeMarginTrading(marginRows, lendingRows) {
   };
 }
 
-function buildEventCalendar({ dividendStability, revenueTrend, valuationHistory, marginTrading, cashFlow, majorEvents, attentionEvents, newsEvents }) {
+function buildEventCalendar({ dividendStability, revenueTrend, valuationHistory, marginTrading, cashFlow, majorEvents, attentionEvents, financialReportEvents, exDividendEvents, newsEvents }) {
   const events = [];
 
   if (Array.isArray(majorEvents)) {
@@ -1292,6 +1421,14 @@ function buildEventCalendar({ dividendStability, revenueTrend, valuationHistory,
 
   if (Array.isArray(attentionEvents)) {
     events.push(...attentionEvents);
+  }
+
+  if (Array.isArray(financialReportEvents)) {
+    events.push(...financialReportEvents);
+  }
+
+  if (Array.isArray(exDividendEvents)) {
+    events.push(...exDividendEvents);
   }
 
   if (Array.isArray(newsEvents)) {
@@ -1373,6 +1510,14 @@ function normalizeEventDate(value) {
   if (/^\d{4}-\d{2}$/.test(text)) return `${text}-01`;
   if (/^\d{4}\/\d{2}$/.test(text)) return `${text.replace('/', '-')}-01`;
   return '';
+}
+
+function latestDateFromRows(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => normalizeEventDate(read(row, ['date', 'Date'])))
+    .filter(Boolean)
+    .sort()
+    .at(-1) || '';
 }
 
 function formatEventTime(value) {

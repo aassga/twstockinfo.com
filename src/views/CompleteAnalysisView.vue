@@ -99,6 +99,8 @@ const dominantForce = computed(() => {
 const executiveSummary = computed(() => buildExecutiveSummary(stock.value, snapshot.value, inst.value, instTrendSummary.value));
 const riskChecks = computed(() => buildRiskChecks(stock.value, snapshot.value, inst.value));
 const instTrendSummary = computed(() => [5, 10, 20].map(days => summarizeInstitutionalTrend(instTrend.value, days)));
+const eventItems = computed(() => snapshot.value?.eventCalendar?.slice(0, 6) || []);
+const eventCoverage = computed(() => snapshot.value?.eventCoverage || []);
 const summarySignals = computed(() => {
   const revenue = snapshot.value?.revenueTrend;
   const valuation = snapshot.value?.valuationHistory;
@@ -312,6 +314,26 @@ function statusText(status) {
   return status || '待查';
 }
 
+function eventTypeText(type) {
+  if (type === 'major') return '重大訊息';
+  if (type === 'news') return '新聞';
+  if (type === 'dividend') return '除權息';
+  if (type === 'attention') return '注意股';
+  if (type === 'disposition') return '處置股';
+  if (type === 'revenue') return '月營收';
+  if (type === 'financial') return '財報';
+  if (type === 'valuation') return '估值';
+  if (type === 'margin') return '信用';
+  return '事件';
+}
+
+function eventTone(type) {
+  if (type === 'major' || type === 'disposition') return 'risk';
+  if (type === 'attention' || type === 'financial' || type === 'margin') return 'watch';
+  if (type === 'dividend') return 'good';
+  return 'neutral';
+}
+
 function summarizeInstitutionalTrend(rows, days) {
   const sample = rows.slice(0, days);
   const sum = sample.reduce((acc, row) => ({
@@ -498,6 +520,29 @@ function buildRiskChecks(current, fundamental, institutional) {
           </div>
         </div>
 
+        <div class="complete-panel">
+          <div class="panel-title">
+            <IconAlertTriangle class="inline-icon" :stroke-width="2" />
+            新聞與事件
+          </div>
+          <div v-if="eventItems.length" class="complete-event-list">
+            <div v-for="item in eventItems" :key="`${item.date}-${item.title}`" class="complete-event-item" :class="eventTone(item.type)">
+              <div>
+                <span>{{ item.date }} · {{ eventTypeText(item.type) }}</span>
+                <strong>{{ item.title }}</strong>
+              </div>
+              <em>{{ item.detail }}</em>
+              <small>{{ item.source }}</small>
+            </div>
+          </div>
+          <div v-else class="hint">{{ loadStatus.fundamental.status === 'loading' ? '事件資料載入中' : '目前沒有可顯示的近期事件。' }}</div>
+          <div v-if="eventCoverage.length" class="event-coverage-grid">
+            <span v-for="item in eventCoverage" :key="item.label" :class="item.status">
+              {{ item.label }}
+            </span>
+          </div>
+        </div>
+
         <div class="complete-panel wide">
           <TechnicalSummary
             compact
@@ -610,6 +655,7 @@ function buildRiskChecks(current, fundamental, institutional) {
             <div><span>走勢圖</span><strong>Yahoo Chart</strong></div>
             <div><span>法人籌碼</span><strong>{{ inst?.source === 'histock' ? 'HiStock' : 'TWSE OpenAPI' }}</strong></div>
             <div><span>基本面</span><strong>{{ snapshot?.source || 'TWSE OpenAPI / FinMind' }}</strong></div>
+            <div><span>新聞事件</span><strong>MOPS / TWSE / TPEX / FinMind</strong></div>
             <div><span>技術指標</span><strong>本機由 K 線計算</strong></div>
           </div>
         </div>
