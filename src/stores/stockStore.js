@@ -381,6 +381,7 @@ export const useStockStore = defineStore('stocks', () => {
       forceSource: stock.forceSource || '',
       forceSourceLabel: stock.forceSourceLabel || '',
       forceReliable: stock.forceReliable === true,
+      tradeFlow: stock.tradeFlow || null,
       volRatio: normalizeOptionalNumber(stock.volRatio)
     };
   }

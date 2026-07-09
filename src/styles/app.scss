@@ -348,6 +348,12 @@ button {
   padding: 12px;
 }
 
+.quote-trades-panel {
+  min-height: 505px;
+  padding: 16px;
+  overflow: auto;
+}
+
 .quote-overview-panel,
 .quote-info-panel {
   min-height: 505px;
@@ -497,6 +503,88 @@ button {
   color: var(--text-1);
   font-size: 18px;
   text-align: right;
+}
+
+.trade-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.trade-flow-card {
+  min-height: 112px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.trade-flow-card span,
+.trade-flow-card em {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.trade-flow-card strong {
+  display: block;
+  margin: 9px 0;
+  color: var(--text-1);
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.trade-flow-card.up strong,
+.trade-tick-row.outer strong,
+.trade-tick-row.outer em {
+  color: var(--up);
+}
+
+.trade-flow-card.down strong,
+.trade-tick-row.inner strong,
+.trade-tick-row.inner em {
+  color: var(--dn);
+}
+
+.trade-tick-list {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.trade-tick-head,
+.trade-tick-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.8fr 0.8fr;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+.trade-tick-head {
+  background: #20293a;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trade-tick-row {
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.trade-tick-row:hover {
+  background: rgba(74, 154, 255, 0.06);
+}
+
+.trade-tick-row em {
+  font-style: normal;
 }
 
 .quote-side-panel {
@@ -1849,6 +1937,10 @@ button {
 
 .margin-table-wrap {
   margin-top: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(15, 19, 28, 0.28);
 }
 
 .margin-table-header {
@@ -1876,26 +1968,51 @@ button {
   font-size: 17px;
 }
 
-.margin-table-wrap table {
-  min-width: 760px;
+.margin-table-wrap .margin-stock-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+  table-layout: fixed;
 }
 
-.margin-table-wrap th {
+.margin-table-wrap .margin-stock-table th {
   position: sticky;
   top: 0;
   z-index: 1;
+  height: 44px;
   background: #20293a;
-  color: var(--text-2);
+  color: var(--text-3);
+  font-size: 12px;
   font-weight: 700;
+  text-align: left;
 }
 
-.margin-table-wrap td,
-.margin-table-wrap th {
-  padding: 13px 16px;
+.margin-table-wrap .margin-stock-table td,
+.margin-table-wrap .margin-stock-table th {
+  padding: 0 16px;
   white-space: nowrap;
 }
 
-.margin-table-wrap td:first-child {
+.margin-table-wrap .margin-stock-table td {
+  height: 54px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.margin-table-wrap .margin-stock-table tbody tr:hover td {
+  background: rgba(74, 154, 255, 0.06);
+}
+
+.margin-table-wrap .margin-stock-table th:first-child,
+.margin-table-wrap .margin-stock-table td:first-child {
+  width: 48px;
+  text-align: center;
+}
+
+.margin-table-wrap .margin-stock-table td:first-child,
+.margin-table-wrap .margin-stock-table td:nth-child(2) {
   color: var(--text-2);
   font-weight: 800;
 }
@@ -3537,6 +3654,29 @@ button {
     min-height: min(56dvh, 520px);
     max-height: min(56dvh, 520px);
     overflow-y: auto;
+  }
+
+  .quote-trades-panel {
+    min-height: min(56dvh, 520px);
+    max-height: min(56dvh, 520px);
+    overflow-y: auto;
+    padding: 14px;
+  }
+
+  .trade-flow-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trade-flow-card {
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .trade-tick-head,
+  .trade-tick-row {
+    grid-template-columns: 1fr 0.9fr 0.65fr 0.7fr;
+    gap: 8px;
+    padding: 0 10px;
   }
 
   .quote-depth-row {

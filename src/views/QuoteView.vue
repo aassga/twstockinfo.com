@@ -52,6 +52,7 @@ const panels = [
   { label: "報價", value: "quote" },
   { label: "走勢", value: "chart" },
   { label: "五檔", value: "depth" },
+  { label: "逐筆", value: "trades" },
   { label: "法人", value: "institutional" },
   { label: "基本面", value: "fundamental" },
   { label: "AI 摘要", value: "ai" },
@@ -64,6 +65,7 @@ const ranges = [
 ];
 
 const stock = computed(() => stockStore.currentStock);
+const tradeFlow = computed(() => stock.value?.tradeFlow || null);
 const tone = computed(() => moveClass(stock.value?.chgPct).replace("is-", ""));
 const quoteSource = computed(() => sourceMeta(stock.value));
 const institutionalTrend = computed(() => {
@@ -208,12 +210,12 @@ const quoteMetrics = computed(() => [
     tone: "neutral",
   },
   {
-    label: "買入",
+    label: tradeFlow.value?.reliable ? "外盤" : "買入",
     value: `${Math.round(stock.value?.buyPct || 0)}%`,
     tone: "up",
   },
   {
-    label: "賣出",
+    label: tradeFlow.value?.reliable ? "內盤" : "賣出",
     value: `${Math.round(stock.value?.sellPct || 0)}%`,
     tone: "down",
   },
@@ -254,6 +256,36 @@ const depthRows = computed(() => {
     width: `${Math.max(6, (Number(row.volume || 0) / maxVolume) * 100)}%`,
   }));
 });
+const tradeFlowCards = computed(() => {
+  const flow = tradeFlow.value || {};
+  return [
+    {
+      label: "外盤",
+      value: formatNumber(flow.activeBuyLots || 0, 0),
+      detail: `${Math.round(flow.activeBuyPct || stock.value?.buyPct || 0)}% 主動買進`,
+      tone: "up"
+    },
+    {
+      label: "內盤",
+      value: formatNumber(flow.activeSellLots || 0, 0),
+      detail: `${Math.round(flow.activeSellPct || stock.value?.sellPct || 0)}% 主動賣出`,
+      tone: "down"
+    },
+    {
+      label: "中性",
+      value: formatNumber(flow.neutralLots || 0, 0),
+      detail: "成交價落在買賣價中間",
+      tone: "neutral"
+    },
+    {
+      label: "最近成交",
+      value: flow.lastTradePrice ? money(flow.lastTradePrice) : "--",
+      detail: flow.lastTradeVolume ? `${flow.lastTradeVolume} 張 / ${tradeSideText(flow.lastTradeSide)}` : "等待新成交",
+      tone: flow.lastTradeSide === "outer" ? "up" : flow.lastTradeSide === "inner" ? "down" : "neutral"
+    }
+  ];
+});
+const tradeRows = computed(() => tradeFlow.value?.ticks || []);
 const institutionalWindows = computed(() =>
   [5, 10, 20].map((days) => summarizeInstitutional(institutionalTrend.value, days))
 );
@@ -466,7 +498,7 @@ async function refreshLiveQuote() {
 
   liveQuoteRefreshing = true;
   try {
-    await stockStore.refreshCurrentStock({ silent: true });
+    await stockStore.refreshCurrentStock({ silent: true, force: true });
   } catch (_error) {
     // Keep the last quote visible if the realtime endpoint briefly fails.
   } finally {
@@ -524,6 +556,12 @@ function statusText(status) {
   if (status === "neutral") return "中性";
   if (status === "risk") return "風險";
   return "待查";
+}
+
+function tradeSideText(side) {
+  if (side === "outer") return "外盤";
+  if (side === "inner") return "內盤";
+  return "中性";
 }
 
 function summarizeInstitutional(rows, days) {
@@ -705,8 +743,9 @@ function roundPrice(value) {
                 <em>參考 {{ money(stock.prev) }}</em>
               </div>
               <div class="quote-side-card">
-                <span>買賣力道</span>
+                <span>{{ tradeFlow?.reliable ? "內外盤力道" : "買賣力道" }}</span>
                 <strong>{{ Math.round(stock.buyPct || 0) }}%</strong>
+                <em>{{ tradeFlow?.reliable ? "外盤占比" : stock.forceSourceLabel || "五檔委買委賣" }}</em>
                 <div class="quote-force-line">
                   <i class="buy" :style="{ width: `${stock.buyPct || 0}%` }"></i>
                   <i class="sell" :style="{ width: `${stock.sellPct || 0}%` }"></i>
@@ -765,6 +804,54 @@ function roundPrice(value) {
             </div>
             <div v-else class="hint depth-empty">
               目前資料來源未提供五檔明細。
+            </div>
+          </div>
+
+          <div v-else-if="activePanel === 'trades'" class="quote-trades-panel">
+            <div class="quote-info-head">
+              <div>
+                <div class="quote-section-title">真正內外盤 / 逐筆成交</div>
+                <span class="hint">{{ tradeFlow?.note || "等待 TWSE MIS 新成交資料。" }}</span>
+              </div>
+              <span class="quote-source-badge" :class="tradeFlow?.reliable ? 'realtime' : 'unknown'">
+                {{ tradeFlow?.sourceLabel || "監測中" }}
+              </span>
+            </div>
+
+            <div class="trade-flow-grid">
+              <div
+                v-for="item in tradeFlowCards"
+                :key="item.label"
+                class="trade-flow-card"
+                :class="item.tone"
+              >
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <em>{{ item.detail }}</em>
+              </div>
+            </div>
+
+            <div v-if="tradeRows.length" class="trade-tick-list">
+              <div class="trade-tick-head">
+                <span>時間</span>
+                <span>成交價</span>
+                <span>張數</span>
+                <span>判定</span>
+              </div>
+              <div
+                v-for="tick in tradeRows"
+                :key="tick.key"
+                class="trade-tick-row"
+                :class="tick.side"
+              >
+                <span>{{ tick.time || "--" }}</span>
+                <strong>{{ money(tick.price) }}</strong>
+                <span>{{ formatNumber(tick.volume || 0, 0) }}</span>
+                <em>{{ tick.sideLabel || tradeSideText(tick.side) }}</em>
+              </div>
+            </div>
+            <div v-else class="hint depth-empty">
+              尚未捕捉到新成交。開盤時保持此頁開啟，系統會每 5 秒更新並累積外盤/內盤。
             </div>
           </div>
 
@@ -883,7 +970,7 @@ function roundPrice(value) {
         </div>
 
         <aside
-          v-if="['quote', 'chart', 'depth'].includes(activePanel)"
+          v-if="['quote', 'chart', 'depth', 'trades'].includes(activePanel)"
           class="quote-side-panel"
         >
           <div class="quote-side-card">

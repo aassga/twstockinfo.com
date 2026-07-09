@@ -27,6 +27,7 @@ const MIS_HOT_PRICE_LIMIT = 100;
 const VOLUME_RATIO_CACHE_MS = 30 * 60 * 1000;
 const VOLUME_RATIO_CONCURRENCY = 3;
 const YAHOO_CHART_CACHE_MS = 15000;
+const TRADE_FLOW_MAX_TICKS = 40;
 const STOCK_CODE_PATTERN = /^\d{4,6}[A-Z]?$/;
 const OTC_CODE_SET = new Set(
   otcStockNames
@@ -60,6 +61,7 @@ let otcDailyCloseCache = {
   rows: []
 };
 const misQuoteCache = new Map();
+const tradeFlowCache = new Map();
 const volumeRatioCache = new Map();
 const yahooChartCache = new Map();
 let misOutageUntil = readMisOutageUntil();
@@ -456,8 +458,16 @@ function parseMisQuoteItem(item) {
   const askLevels = parseBookLevels(item.a, item.f);
   const bidTotal = bidVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
   const askTotal = askVol.slice(0, 5).reduce((sum, value) => sum + value, 0);
-  const buyPct = bidTotal + askTotal > 0 ? Math.round((bidTotal / (bidTotal + askTotal)) * 100) : 50;
+  const bookBuyPct = bidTotal + askTotal > 0 ? Math.round((bidTotal / (bidTotal + askTotal)) * 100) : 50;
   const volume = Math.round(parseNumber(item.v) * 1000);
+  const tradeFlow = updateTradeFlowFromMisItem(item, {
+    code: String(item.c),
+    name: String(item.n || ''),
+    exchange: String(item.ex || ''),
+    bidLevels,
+    askLevels
+  });
+  const buyPct = tradeFlow.reliable ? tradeFlow.activeBuyPct : bookBuyPct;
 
   return {
     code: String(item.c),
@@ -479,9 +489,10 @@ function parseMisQuoteItem(item) {
     amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
     buyPct,
     sellPct: 100 - buyPct,
-    forceSource: 'twse-mis-book',
-    forceSourceLabel: 'TWSE MIS 五檔委買/委賣量',
-    forceReliable: bidTotal + askTotal > 0,
+    forceSource: tradeFlow.reliable ? 'twse-mis-trade-flow' : 'twse-mis-book',
+    forceSourceLabel: tradeFlow.reliable ? 'TWSE MIS 逐筆成交分類' : 'TWSE MIS 五檔委買/委賣量',
+    forceReliable: tradeFlow.reliable || bidTotal + askTotal > 0,
+    tradeFlow,
     volRatio: null,
     time: item.t || item.ot || '',
     date: item.d || '',
@@ -527,6 +538,149 @@ function resolveMisPrice(item, fallback = 0) {
   if (bestAsk > 0) return bestAsk;
 
   return fallback;
+}
+
+function updateTradeFlowFromMisItem(item, context = {}) {
+  const code = String(context.code || item?.c || '').trim().toUpperCase();
+  if (!code) return createEmptyTradeFlow();
+
+  const date = String(item?.d || item?.['^'] || '').trim();
+  const time = String(item?.t || item?.['%'] || '').trim();
+  const tradePrice = parseNumber(firstMeaningful(item?.z), 0);
+  const singleLots = parseNumber(firstMeaningful(item?.tv), 0);
+  const totalLots = parseNumber(item?.v, 0);
+  const bestBid = Number(context.bidLevels?.[0]?.price || parseFirstBookPrice(item?.b) || 0);
+  const bestAsk = Number(context.askLevels?.[0]?.price || parseFirstBookPrice(item?.a) || 0);
+  const previous = tradeFlowCache.get(code);
+  const reset = !previous || (date && previous.date && previous.date !== date);
+  const base = reset
+    ? createEmptyTradeFlow({ code, name: context.name, exchange: context.exchange, date })
+    : previous;
+  const key = [date, time, tradePrice, totalLots, singleLots].join('|');
+
+  let volumeLots = 0;
+  if (tradePrice > 0) {
+    const deltaLots = previous && !reset && totalLots > Number(previous.lastTotalLots || 0)
+      ? totalLots - Number(previous.lastTotalLots || 0)
+      : 0;
+    volumeLots = deltaLots > 0 ? deltaLots : singleLots > 0 ? singleLots : 0;
+  }
+
+  if (!volumeLots || key === base.lastKey) {
+    const next = {
+      ...base,
+      date: date || base.date,
+      time: time || base.time,
+      lastTotalLots: totalLots || base.lastTotalLots,
+      bestBid,
+      bestAsk,
+      source: 'TWSE MIS',
+      sourceLabel: base.reliable ? 'TWSE MIS 逐筆成交分類' : 'TWSE MIS 即時報價監測中'
+    };
+    tradeFlowCache.set(code, next);
+    return summarizeTradeFlow(next);
+  }
+
+  const side = classifyTradeSide(tradePrice, bestBid, bestAsk);
+  const nextTick = {
+    key,
+    date,
+    time,
+    price: tradePrice,
+    volume: Math.round(volumeLots),
+    side,
+    sideLabel: tradeSideLabel(side)
+  };
+  const next = {
+    ...base,
+    code,
+    name: context.name || base.name || '',
+    exchange: context.exchange || base.exchange || '',
+    date: date || base.date,
+    time: time || base.time,
+    lastKey: key,
+    lastTotalLots: totalLots || base.lastTotalLots,
+    lastTradePrice: tradePrice,
+    lastTradeVolume: Math.round(volumeLots),
+    lastTradeSide: side,
+    bestBid,
+    bestAsk,
+    activeBuyLots: base.activeBuyLots + (side === 'outer' ? volumeLots : 0),
+    activeSellLots: base.activeSellLots + (side === 'inner' ? volumeLots : 0),
+    neutralLots: base.neutralLots + (side === 'neutral' ? volumeLots : 0),
+    ticks: [nextTick, ...(base.ticks || [])].slice(0, TRADE_FLOW_MAX_TICKS),
+    source: 'TWSE MIS'
+  };
+  tradeFlowCache.set(code, next);
+  return summarizeTradeFlow(next);
+}
+
+function createEmptyTradeFlow(seed = {}) {
+  return {
+    code: seed.code || '',
+    name: seed.name || '',
+    exchange: seed.exchange || '',
+    date: seed.date || '',
+    time: '',
+    lastKey: '',
+    lastTotalLots: 0,
+    lastTradePrice: 0,
+    lastTradeVolume: 0,
+    lastTradeSide: '',
+    bestBid: 0,
+    bestAsk: 0,
+    activeBuyLots: 0,
+    activeSellLots: 0,
+    neutralLots: 0,
+    ticks: [],
+    source: 'TWSE MIS'
+  };
+}
+
+function summarizeTradeFlow(flow) {
+  const buyLots = Math.round(Number(flow.activeBuyLots || 0));
+  const sellLots = Math.round(Number(flow.activeSellLots || 0));
+  const neutralLots = Math.round(Number(flow.neutralLots || 0));
+  const classifiedLots = buyLots + sellLots;
+  const totalLots = classifiedLots + neutralLots;
+  const activeBuyPct = classifiedLots ? Math.round((buyLots / classifiedLots) * 100) : 50;
+  const activeSellPct = classifiedLots ? 100 - activeBuyPct : 50;
+
+  return {
+    ...flow,
+    activeBuyLots: buyLots,
+    activeSellLots: sellLots,
+    neutralLots,
+    classifiedLots,
+    totalLots,
+    activeBuyPct,
+    activeSellPct,
+    outerPct: activeBuyPct,
+    innerPct: activeSellPct,
+    reliable: classifiedLots > 0,
+    available: totalLots > 0,
+    sourceLabel: classifiedLots > 0 ? 'TWSE MIS 逐筆成交分類' : 'TWSE MIS 即時報價監測中',
+    note: classifiedLots > 0
+      ? '依最新成交價相對當下五檔買賣價分類，統計自本頁開啟或資料重整後開始累積。'
+      : '尚未捕捉到可分類的新成交，暫以五檔委買委賣量顯示買賣力道。'
+  };
+}
+
+function classifyTradeSide(price, bestBid, bestAsk) {
+  if (price > 0 && bestAsk > 0 && price >= bestAsk) return 'outer';
+  if (price > 0 && bestBid > 0 && price <= bestBid) return 'inner';
+  if (price > 0 && bestBid > 0 && bestAsk > 0) {
+    const mid = (bestBid + bestAsk) / 2;
+    if (price > mid) return 'outer';
+    if (price < mid) return 'inner';
+  }
+  return 'neutral';
+}
+
+function tradeSideLabel(side) {
+  if (side === 'outer') return '外盤';
+  if (side === 'inner') return '內盤';
+  return '中性';
 }
 
 function parseFirstBookPrice(value) {

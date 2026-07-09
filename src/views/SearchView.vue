@@ -43,6 +43,7 @@ const inst = computed(() => {
 });
 const instLoading = computed(() => Boolean(stock.value?.code && institutionalStore.codeLoading[stock.value.code]));
 const dominantBuy = computed(() => Number(stock.value?.buyPct || 0) >= Number(stock.value?.sellPct || 0));
+const usesTradeFlow = computed(() => stock.value?.forceSource === 'twse-mis-trade-flow');
 const changeClass = computed(() => moveClass(stock.value?.chgPct).replace('is-', ''));
 const quoteMetrics = computed(() => {
   const current = stock.value;
@@ -89,6 +90,11 @@ function barWidth(value) {
 function formatVolRatioValue(value) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? `${Math.round(number)}%` : '--';
+}
+
+function forceText(side) {
+  if (side === 'buy') return usesTradeFlow.value ? '外盤' : '買入';
+  return usesTradeFlow.value ? '內盤' : '賣出';
 }
 
 async function submit(value = query.value) {
@@ -199,7 +205,7 @@ function analyze(type) {
     aiText.value = [
       `${s.code} ${s.name} 技術面觀察`,
       `目前漲跌幅 ${formatPct(s.chgPct)}，量比 ${formatVolRatioValue(s.volRatio)}。`,
-      `買賣力道為買入 ${Math.round(s.buyPct)}% / 賣出 ${Math.round(s.sellPct)}%。`,
+      `買賣力道為${forceText('buy')} ${Math.round(s.buyPct)}% / ${forceText('sell')} ${Math.round(s.sellPct)}%。`,
       s.chgPct >= 0 ? '價格偏強，若量能延續可觀察突破後是否站穩。' : '價格偏弱，先觀察是否止跌並守住前低。'
     ].join('\n');
     return;
@@ -216,7 +222,7 @@ function analyze(type) {
   aiText.value = [
     `${s.code} ${s.name} 個股深度分析`,
     `產業：${s.sector}，現價 ${formatMoney(s.price, 2)}，漲跌幅 ${formatPct(s.chgPct)}。`,
-    `籌碼面：買入 ${Math.round(s.buyPct)}%，賣出 ${Math.round(s.sellPct)}%，${dominantBuy.value ? '買入主導' : '賣出主導'}。`,
+    `籌碼面：${forceText('buy')} ${Math.round(s.buyPct)}%，${forceText('sell')} ${Math.round(s.sellPct)}%，${dominantBuy.value ? `${forceText('buy')}主導` : `${forceText('sell')}主導`}。`,
     `法人面：外資 ${formatSigned(inst.value?.foreign || 0, 0, '張')}，投信 ${formatSigned(inst.value?.trust || 0, 0, '張')}，自營商 ${formatSigned(inst.value?.dealer || 0, 0, '張')}。`,
     '操作上建議搭配走勢圖確認支撐壓力與量能延續。'
   ].join('\n');
@@ -361,15 +367,15 @@ function analyze(type) {
 
       <div class="result-body">
         <div class="result-col">
-          <div class="col-title">買賣力道</div>
+          <div class="col-title">{{ usesTradeFlow ? '內外盤力道' : '買賣力道' }}</div>
           <div class="buysell-bars">
             <div class="bs-row">
-              <span class="bs-label buy">買入</span>
+              <span class="bs-label buy">{{ forceText('buy') }}</span>
               <div class="bs-track"><div class="bs-fill buy" :style="{ width: `${stock.buyPct}%` }"></div></div>
               <span class="bs-pct buy">{{ Math.round(stock.buyPct) }}%</span>
             </div>
             <div class="bs-row">
-              <span class="bs-label sell">賣出</span>
+              <span class="bs-label sell">{{ forceText('sell') }}</span>
               <div class="bs-track"><div class="bs-fill sell" :style="{ width: `${stock.sellPct}%` }"></div></div>
               <span class="bs-pct sell">{{ Math.round(stock.sellPct) }}%</span>
             </div>
@@ -382,7 +388,7 @@ function analyze(type) {
           <div class="vs-summary">
             <IconTrendingUp v-if="dominantBuy" class="inline-icon" :stroke-width="2" />
             <IconTrendingDown v-else class="inline-icon" :stroke-width="2" />
-            {{ dominantBuy ? '買方較強，市場偏多' : '賣方較強，留意拉回' }}
+            {{ dominantBuy ? `${forceText('buy')}較強，市場偏多` : `${forceText('sell')}較強，留意拉回` }}
           </div>
         </div>
 

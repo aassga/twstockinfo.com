@@ -13,6 +13,12 @@ const showAi = ref(false);
 const buySignals = computed(() => getBuySignals(stockStore.hotStocks).slice(0, 8));
 const sellSignals = computed(() => getSellSignals(stockStore.hotStocks).slice(0, 8));
 
+function forceLabel(stock, side) {
+  const isTradeFlow = stock?.forceSource === 'twse-mis-trade-flow';
+  if (side === 'buy') return isTradeFlow ? '外盤佔比' : '買入佔比';
+  return isTradeFlow ? '內盤佔比' : '賣出佔比';
+}
+
 function openQuote(stock) {
   router.push({ path: '/quote', query: { code: stock.code } });
 }
@@ -56,7 +62,7 @@ function openQuote(stock) {
             </div>
             <div class="alert-right">
               <div class="alert-pct buy">{{ Math.round(stock.buyPct) }}%</div>
-              <div class="alert-detail">買入佔比</div>
+              <div class="alert-detail">{{ forceLabel(stock, 'buy') }}</div>
             </div>
           </div>
           <div v-if="!buySignals.length" class="empty-state" style="padding:24px">目前沒有買入提醒</div>
@@ -79,7 +85,7 @@ function openQuote(stock) {
             </div>
             <div class="alert-right">
               <div class="alert-pct sell">{{ Math.round(stock.sellPct) }}%</div>
-              <div class="alert-detail">賣出佔比</div>
+              <div class="alert-detail">{{ forceLabel(stock, 'sell') }}</div>
             </div>
           </div>
           <div v-if="!sellSignals.length" class="empty-state" style="padding:24px">目前沒有賣出提醒</div>
@@ -89,7 +95,7 @@ function openQuote(stock) {
 
     <div class="table-hint">
       <IconInfoCircle class="inline-icon" :stroke-width="2" />
-      買賣提醒僅採用 TWSE MIS 五檔委買/委賣量計算；HiStock/Yahoo 推估資料不列入提醒。
+      買賣提醒優先採用 TWSE MIS 逐筆成交分類；尚未捕捉新成交時才退回五檔委買/委賣量。HiStock/Yahoo 推估資料不列入提醒。
     </div>
 
     <div class="table-footer" style="margin-top:1.5rem">

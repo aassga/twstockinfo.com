@@ -288,7 +288,7 @@ function buildCreditRiskRows(data) {
         融資融券與借券資料來源為 FinMind；當沖比例尚未接入，後續需補 TWSE 當沖統計或第三方資料源。
       </div>
 
-      <div v-if="recentRows.length" class="table-wrap margin-table-wrap">
+      <div v-if="recentRows.length" class="table-wrapper margin-table-wrap">
         <div class="margin-table-header">
           <div>
             <span>近 20 日信用交易明細</span>
@@ -296,9 +296,10 @@ function buildCreditRiskRows(data) {
           </div>
           <em>資料來源：{{ marginTrading?.source || 'FinMind' }}</em>
         </div>
-        <table>
+        <table class="stock-table margin-stock-table">
           <thead>
             <tr>
+              <th>#</th>
               <th>日期</th>
               <th>融資餘額</th>
               <th>融資增減</th>
@@ -308,7 +309,8 @@ function buildCreditRiskRows(data) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in recentRows.slice().reverse()" :key="row.date">
+            <tr v-for="(row, index) in recentRows.slice().reverse()" :key="row.date">
+              <td>{{ index + 1 }}</td>
               <td>{{ row.date }}</td>
               <td>{{ formatShares(row.marginBalance) }}</td>
               <td :class="signedClass(row.marginChange)">{{ formatSigned(row.marginChange || 0, 0, '張') }}</td>

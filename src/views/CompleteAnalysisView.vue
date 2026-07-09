@@ -36,6 +36,7 @@ let candidateTimer = null;
 let searchRunId = 0;
 
 const stock = computed(() => stockStore.currentStock);
+const tradeFlow = computed(() => stock.value?.tradeFlow || null);
 const isBusy = computed(() => Object.values(loadStatus.value).some(item => item.status === 'loading'));
 const inst = computed(() => {
   const code = stock.value?.code;
@@ -91,8 +92,8 @@ const priceTone = computed(() => moveClass(stock.value?.chgPct).replace('is-', '
 const dominantForce = computed(() => {
   const buy = Number(stock.value?.buyPct || 0);
   const sell = Number(stock.value?.sellPct || 0);
-  if (buy >= 65) return { label: '買入主導', type: 'up' };
-  if (sell >= 65) return { label: '賣出主導', type: 'down' };
+  if (buy >= 65) return { label: tradeFlow.value?.reliable ? '外盤主導' : '買入主導', type: 'up' };
+  if (sell >= 65) return { label: tradeFlow.value?.reliable ? '內盤主導' : '賣出主導', type: 'down' };
   return { label: '多空均衡', type: 'neutral' };
 });
 const executiveSummary = computed(() => buildExecutiveSummary(stock.value, snapshot.value, inst.value, instTrendSummary.value));
@@ -327,6 +328,9 @@ function buildExecutiveSummary(current, fundamental, institutional, trendSummary
   const rows = [
     `${current.code} ${current.name || ''} 目前股價 ${formatMoney(current.price, 2)}，漲跌 ${formatPct(current.chgPct)}。`
   ];
+  if (current.tradeFlow?.reliable) {
+    rows.push(`逐筆內外盤：外盤 ${Math.round(current.tradeFlow.activeBuyPct || 0)}%、內盤 ${Math.round(current.tradeFlow.activeSellPct || 0)}%，已累積 ${formatNumber(current.tradeFlow.totalLots || 0, 0)} 張可觀察成交。`);
+  }
   if (institutional) rows.push(`單日法人合計 ${formatSigned(institutional.total || 0, 0, '張')}，外資 ${formatSigned(institutional.foreign || 0, 0, '張')}、投信 ${formatSigned(institutional.trust || 0, 0, '張')}、自營商 ${formatSigned(institutional.dealer || 0, 0, '張')}。`);
   const fiveDay = trendSummary?.[0];
   if (fiveDay?.count) rows.push(`近 ${fiveDay.count} 日法人累計 ${formatSigned(fiveDay.total, 0, '張')}，用來判斷籌碼是否延續。`);
@@ -344,9 +348,9 @@ function buildRiskChecks(current, fundamental, institutional) {
 
   return [
     {
-      label: '賣壓',
+      label: current.tradeFlow?.reliable ? '內盤' : '賣壓',
       value: sellPct >= 65 ? '偏高' : '可控',
-      detail: `賣出占比 ${Math.round(sellPct)}%`,
+      detail: `${current.tradeFlow?.reliable ? '內盤占比' : '賣出占比'} ${Math.round(sellPct)}%`,
       status: sellPct >= 65 ? 'risk' : 'good'
     },
     {
@@ -455,11 +459,11 @@ function buildRiskChecks(current, fundamental, institutional) {
           <em :class="priceTone">{{ formatPct(stock.chgPct) }}</em>
         </div>
         <div class="complete-force">
-          <span>買賣力道</span>
+          <span>{{ tradeFlow?.reliable ? '內外盤力道' : '買賣力道' }}</span>
           <strong>{{ dominantForce.label }}</strong>
           <div class="complete-force-bars">
-            <div><span>買入 {{ Math.round(stock.buyPct) }}%</span><i :style="{ width: `${stock.buyPct}%` }" class="buy"></i></div>
-            <div><span>賣出 {{ Math.round(stock.sellPct) }}%</span><i :style="{ width: `${stock.sellPct}%` }" class="sell"></i></div>
+            <div><span>{{ tradeFlow?.reliable ? '外盤' : '買入' }} {{ Math.round(stock.buyPct) }}%</span><i :style="{ width: `${stock.buyPct}%` }" class="buy"></i></div>
+            <div><span>{{ tradeFlow?.reliable ? '內盤' : '賣出' }} {{ Math.round(stock.sellPct) }}%</span><i :style="{ width: `${stock.sellPct}%` }" class="sell"></i></div>
           </div>
         </div>
         <div class="complete-score">
