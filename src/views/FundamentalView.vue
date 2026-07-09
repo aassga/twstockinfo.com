@@ -240,6 +240,15 @@ function pct(value, digits = 0) {
   })}%` : '--';
 }
 
+function plainPct(value, digits = 2) {
+  if (value === null || value === undefined || value === '') return '--';
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number.toLocaleString('zh-TW', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  })}%` : '--';
+}
+
 function formatRevenueAmount(value) {
   const number = Number(value || 0);
   if (!Number.isFinite(number) || number === 0) return '--';
@@ -288,6 +297,13 @@ function dividendBarWidth(row) {
   const value = Number(row?.cashDividend || 0);
   if (!max || !value) return '4%';
   return `${Math.max(6, Math.round((value / max) * 100))}%`;
+}
+
+function fillStatusClass(status) {
+  if (status === 'filled') return 'good';
+  if (status === 'partial' || status === 'upcoming') return 'watch';
+  if (status === 'notFilled') return 'risk';
+  return 'neutral';
 }
 
 function financialBarWidth(row, key, fallbackMax = 1) {
@@ -873,7 +889,45 @@ function average(values) {
           <div class="dividend-main-card" :class="dividendStability.tone">
             <span>{{ dividendStability.label }}</span>
             <strong>{{ valuationDisplay({ current: dividendStability.latestCashDividend }) }} 元</strong>
-            <em>連續配息 {{ dividendStability.consecutiveYears }} 年 / 近 5 年平均 {{ valuationDisplay({ current: dividendStability.avg5CashDividend }) }} 元</em>
+            <em>連續配息 {{ dividendStability.consecutiveYears }} 年 / 近 5 年平均 {{ valuationDisplay({ current: dividendStability.avg5CashDividend }) }} 元 / {{ dividendStability.sourceBreakdown?.label || '來源待確認' }}</em>
+          </div>
+          <div class="dividend-info-grid">
+            <div>
+              <span>最新除息日</span>
+              <strong>{{ dividendStability.latestExDate || '--' }}</strong>
+              <em>發放日 {{ dividendStability.latestPaymentDate || '--' }}</em>
+            </div>
+            <div :class="fillStatusClass(dividendStability.fillStatus?.status)">
+              <span>填息狀態</span>
+              <strong>{{ dividendStability.fillStatus?.label || '待判斷' }}</strong>
+              <em>
+                {{
+                  dividendStability.fillStatus?.targetPrice
+                    ? `目標 ${formatMoney(dividendStability.fillStatus.targetPrice, 2)} / 最新 ${formatMoney(dividendStability.fillStatus.currentPrice, 2)}`
+                    : dividendStability.fillStatus?.source || '需除息日前收盤價'
+                }}
+              </em>
+            </div>
+            <div>
+              <span>現金殖利率</span>
+              <strong>{{ plainPct(dividendStability.dividendYield) }}</strong>
+              <em>以最新年度現金股利 / 目前股價估算</em>
+            </div>
+            <div>
+              <span>配息率</span>
+              <strong>{{ plainPct(dividendStability.payoutRatio) }}</strong>
+              <em>{{ dividendStability.payoutRatioSource || '待 EPS 資料' }}</em>
+            </div>
+            <div>
+              <span>盈餘配發</span>
+              <strong>{{ plainPct(dividendStability.sourceBreakdown?.earningsRatio, 0) }}</strong>
+              <em>現金 {{ valuationDisplay({ current: dividendStability.sourceBreakdown?.cashFromEarnings }) }} 元</em>
+            </div>
+            <div>
+              <span>資本公積 / 公積</span>
+              <strong>{{ plainPct(dividendStability.sourceBreakdown?.capitalReserveRatio, 0) }}</strong>
+              <em>現金 {{ valuationDisplay({ current: dividendStability.sourceBreakdown?.cashFromCapitalReserve }) }} 元</em>
+            </div>
           </div>
           <div class="dividend-bars">
             <div v-for="row in dividendStability.rows" :key="row.year" class="dividend-bar-row">

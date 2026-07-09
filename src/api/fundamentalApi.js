@@ -105,6 +105,7 @@ async function fetchFundamentalSnapshotFresh(normalized) {
     fetchLendingRows(code),
     fetchMacroSnapshot()
   ]);
+  const dividendFill = await fetchDividendFillContext(normalized, dividendHistoryRows).catch(() => null);
 
   return composeFundamentalSnapshot(normalized, {
     valuationRows,
@@ -126,6 +127,7 @@ async function fetchFundamentalSnapshotFresh(normalized) {
     revenueTrendRows,
     valuationHistoryRows,
     dividendHistoryRows,
+    dividendFill,
     marginRows,
     lendingRows,
     macro,
@@ -228,7 +230,8 @@ async function fetchFundamentalSnapshotPhasedFresh(normalized, onUpdate = () => 
     fetchMarginRows(code),
     fetchLendingRows(code)
   ]);
-  Object.assign(rows, { incomeRows, balanceRows, cashFlowRows, financialStatementRows, revenueTrendRows, valuationHistoryRows, dividendHistoryRows, marginRows, lendingRows });
+  const dividendFill = await fetchDividendFillContext(normalized, dividendHistoryRows).catch(() => null);
+  Object.assign(rows, { incomeRows, balanceRows, cashFlowRows, financialStatementRows, revenueTrendRows, valuationHistoryRows, dividendHistoryRows, dividendFill, marginRows, lendingRows });
   onUpdate(composeFundamentalSnapshot(normalized, {
     ...rows,
     stage: 'statements'
@@ -282,7 +285,12 @@ function composeFundamentalSnapshot(normalized, rows = {}) {
   const cashFlow = summarizeCashFlow(rows.cashFlowRows || []);
   const revenueTrend = summarizeRevenueTrend(rows.revenueTrendRows || [], revenue);
   const valuationHistory = summarizeValuationHistory(rows.valuationHistoryRows || [], valuation);
-  const dividendStability = summarizeDividendStability(rows.dividendHistoryRows || [], dividend);
+  const dividendEps = parseNumber(read(eps, ['基本每股盈餘(元)'])) || parseNumber(read(income, ['基本每股盈餘（元）']));
+  const dividendStability = summarizeDividendStability(rows.dividendHistoryRows || [], dividend, {
+    price: normalized.price,
+    eps: dividendEps,
+    fill: rows.dividendFill
+  });
   const marginTrading = summarizeMarginTrading(rows.marginRows || [], rows.lendingRows || []);
   const majorEvents = summarizeMajorEvents(rows.majorEventRows || [], code);
   const attentionEvents = summarizeAttentionEvents(rows.attentionEventRows || [], code);
@@ -491,6 +499,66 @@ async function fetchDividendHistoryRows(code) {
 
   cache.set(path, { at: now, promise });
   return promise;
+}
+
+async function fetchDividendFillContext(stock, dividendRows) {
+  const latestDividend = latestCashDividendRow(dividendRows);
+  if (!latestDividend?.exDate) return null;
+
+  const exDate = normalizeEventDate(latestDividend.exDate);
+  if (!exDate) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (exDate > today) {
+    return {
+      exDate,
+      status: 'upcoming',
+      label: '尚未除息',
+      cashDividend: latestDividend.cashDividend,
+      source: 'FinMind TaiwanStockDividend'
+    };
+  }
+
+  const chart = await stockApi.chart(stock.code, '1Y', stock.exchange || '');
+  const candles = (chart.candles || [])
+    .map(candle => ({
+      date: normalizeChartDate(candle.time || candle.date),
+      close: Number(candle.close || 0)
+    }))
+    .filter(row => row.date && row.close > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const preEx = candles.filter(row => row.date < exDate).at(-1);
+  const latest = candles.at(-1);
+  const currentPrice = Number(stock.price || latest?.close || 0);
+
+  if (!preEx || !currentPrice) {
+    return {
+      exDate,
+      status: 'unknown',
+      label: '待判斷',
+      cashDividend: latestDividend.cashDividend,
+      source: 'FinMind TaiwanStockDividend + Yahoo Chart'
+    };
+  }
+
+  const targetPrice = preEx.close;
+  const fillGap = Number((currentPrice - targetPrice).toFixed(2));
+  const progress = latestDividend.cashDividend > 0
+    ? Math.max(0, Math.min(100, Number((((currentPrice - (targetPrice - latestDividend.cashDividend)) / latestDividend.cashDividend) * 100).toFixed(0))))
+    : null;
+  const status = currentPrice >= targetPrice ? 'filled' : progress >= 50 ? 'partial' : 'notFilled';
+
+  return {
+    exDate,
+    status,
+    label: status === 'filled' ? '已填息' : status === 'partial' ? '部分填息' : '尚未填息',
+    cashDividend: latestDividend.cashDividend,
+    targetPrice,
+    currentPrice,
+    fillGap,
+    progress,
+    source: 'FinMind TaiwanStockDividend + Yahoo Chart'
+  };
 }
 
 async function fetchNewsRows(code) {
@@ -1039,18 +1107,9 @@ function summarizeValuationHistory(rows, fallbackValuation) {
   };
 }
 
-function summarizeDividendStability(rows, fallbackDividend) {
+function summarizeDividendStability(rows, fallbackDividend, context = {}) {
   const parsed = (Array.isArray(rows) ? rows : [])
-    .map(row => ({
-      date: String(read(row, ['date', 'Date']) || '').trim(),
-      fiscalLabel: String(read(row, ['year', '股利年度']) || '').trim(),
-      fiscalYear: dividendFiscalYear(row),
-      cashDividend: parseNumber(read(row, ['CashEarningsDistribution', '股東配發-盈餘分配之現金股利(元/股)', 'DividendPerShare'])),
-      stockDividend: parseNumber(read(row, ['StockEarningsDistribution'])),
-      exDate: String(read(row, ['CashExDividendTradingDate']) || '').trim(),
-      paymentDate: String(read(row, ['CashDividendPaymentDate']) || '').trim(),
-      announcementDate: String(read(row, ['AnnouncementDate']) || '').trim()
-    }))
+    .map(row => normalizeDividendRow(row))
     .filter(row => row.fiscalYear && (row.cashDividend || row.stockDividend))
     .sort((a, b) => a.fiscalYear - b.fiscalYear || a.date.localeCompare(b.date));
 
@@ -1064,6 +1123,10 @@ function summarizeDividendStability(rows, fallbackDividend) {
       latestCashDividend: cashDividend,
       avg5CashDividend: cashDividend,
       consecutiveYears: 1,
+      dividendYield: dividendYield(cashDividend, context.price),
+      payoutRatio: payoutRatio(cashDividend, context.eps),
+      sourceBreakdown: dividendSourceBreakdown([{ cashFromEarnings: cashDividend, cashFromCapitalReserve: 0, stockFromEarnings: 0, stockFromCapitalReserve: 0 }]),
+      fillStatus: context.fill || null,
       label: '單年配息',
       tone: 'neutral',
       rows: []
@@ -1072,9 +1135,22 @@ function summarizeDividendStability(rows, fallbackDividend) {
 
   const byYear = new Map();
   for (const row of parsed) {
-    const current = byYear.get(row.fiscalYear) || { year: row.fiscalYear, cashDividend: 0, stockDividend: 0, count: 0 };
+    const current = byYear.get(row.fiscalYear) || {
+      year: row.fiscalYear,
+      cashDividend: 0,
+      stockDividend: 0,
+      cashFromEarnings: 0,
+      cashFromCapitalReserve: 0,
+      stockFromEarnings: 0,
+      stockFromCapitalReserve: 0,
+      count: 0
+    };
     current.cashDividend += row.cashDividend;
     current.stockDividend += row.stockDividend;
+    current.cashFromEarnings += row.cashFromEarnings;
+    current.cashFromCapitalReserve += row.cashFromCapitalReserve;
+    current.stockFromEarnings += row.stockFromEarnings;
+    current.stockFromCapitalReserve += row.stockFromCapitalReserve;
     current.count += 1;
     byYear.set(row.fiscalYear, current);
   }
@@ -1084,12 +1160,17 @@ function summarizeDividendStability(rows, fallbackDividend) {
     .map(row => ({
       ...row,
       cashDividend: Number(row.cashDividend.toFixed(4)),
-      stockDividend: Number(row.stockDividend.toFixed(4))
+      stockDividend: Number(row.stockDividend.toFixed(4)),
+      cashFromEarnings: Number(row.cashFromEarnings.toFixed(4)),
+      cashFromCapitalReserve: Number(row.cashFromCapitalReserve.toFixed(4)),
+      stockFromEarnings: Number(row.stockFromEarnings.toFixed(4)),
+      stockFromCapitalReserve: Number(row.stockFromCapitalReserve.toFixed(4))
     }));
   const latest = annual.at(-1);
   const latestFive = annual.slice(-5);
   const avg5CashDividend = average(latestFive.map(row => row.cashDividend));
   const consecutiveYears = countPositiveStreak(annual.map(row => row.cashDividend));
+  const sourceBreakdown = dividendSourceBreakdown(parsed.filter(row => row.fiscalYear === latest.year));
   const tone = consecutiveYears >= 5 && latest.cashDividend >= (avg5CashDividend || 0) ? 'good'
     : consecutiveYears >= 3 ? 'watch'
       : latest.cashDividend > 0 ? 'neutral'
@@ -1102,10 +1183,99 @@ function summarizeDividendStability(rows, fallbackDividend) {
     latestCashDividend: latest.cashDividend,
     avg5CashDividend,
     consecutiveYears,
+    latestExDate: context.fill?.exDate || latestDividendEventDate(parsed, 'exDate'),
+    latestPaymentDate: latestDividendEventDate(parsed, 'paymentDate'),
+    latestAnnouncementDate: latestDividendEventDate(parsed, 'announcementDate'),
+    dividendYield: dividendYield(latest.cashDividend, context.price),
+    payoutRatio: payoutRatio(latest.cashDividend, context.eps),
+    payoutRatioSource: context.eps ? '最新年度現金股利 / 最新 EPS 估算' : 'EPS 不足，待資料',
+    sourceBreakdown,
+    fillStatus: context.fill || null,
     label: tone === 'good' ? '穩定配息' : tone === 'watch' ? '配息延續' : tone === 'risk' ? '配息中斷' : '需觀察',
     tone,
     events: buildDividendEvents(parsed),
     rows: latestFive
+  };
+}
+
+function normalizeDividendRow(row) {
+  const cashFromEarnings = parseNumber(read(row, [
+    'CashEarningsDistribution',
+    '股東配發-盈餘分配之現金股利(元/股)',
+    '股東配發內容-盈餘分配之現金股利(元/股)',
+    'DividendPerShare'
+  ]));
+  const cashFromCapitalReserve = parseNumber(read(row, [
+    'CashStatutorySurplus',
+    'CashCapitalReserve',
+    '股東配發-資本公積發放之現金(元/股)',
+    '股東配發內容-資本公積發放之現金(元/股)'
+  ]));
+  const stockFromEarnings = parseNumber(read(row, ['StockEarningsDistribution']));
+  const stockFromCapitalReserve = parseNumber(read(row, ['StockStatutorySurplus', 'StockCapitalReserve']));
+
+  return {
+    date: String(read(row, ['date', 'Date']) || '').trim(),
+    fiscalLabel: String(read(row, ['year', '股利年度']) || '').trim(),
+    fiscalYear: dividendFiscalYear(row),
+    cashFromEarnings,
+    cashFromCapitalReserve,
+    stockFromEarnings,
+    stockFromCapitalReserve,
+    cashDividend: cashFromEarnings + cashFromCapitalReserve,
+    stockDividend: stockFromEarnings + stockFromCapitalReserve,
+    exDate: normalizeEventDate(read(row, ['CashExDividendTradingDate'])),
+    paymentDate: normalizeEventDate(read(row, ['CashDividendPaymentDate'])),
+    announcementDate: normalizeEventDate(read(row, ['AnnouncementDate']))
+  };
+}
+
+function latestCashDividendRow(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => normalizeDividendRow(row))
+    .filter(row => row.exDate && row.cashDividend > 0)
+    .sort((a, b) => a.exDate.localeCompare(b.exDate))
+    .at(-1) || null;
+}
+
+function latestDividendEventDate(rows, key) {
+  return rows
+    .map(row => row[key])
+    .filter(Boolean)
+    .sort()
+    .at(-1) || '';
+}
+
+function dividendYield(cashDividend, price) {
+  const cash = Number(cashDividend || 0);
+  const currentPrice = Number(price || 0);
+  return cash && currentPrice ? Number(((cash / currentPrice) * 100).toFixed(2)) : null;
+}
+
+function payoutRatio(cashDividend, eps) {
+  const cash = Number(cashDividend || 0);
+  const epsValue = Number(eps || 0);
+  return cash && epsValue > 0 ? Number(((cash / epsValue) * 100).toFixed(2)) : null;
+}
+
+function dividendSourceBreakdown(rows) {
+  const totals = rows.reduce((acc, row) => ({
+    cashFromEarnings: acc.cashFromEarnings + Number(row.cashFromEarnings || 0),
+    cashFromCapitalReserve: acc.cashFromCapitalReserve + Number(row.cashFromCapitalReserve || 0),
+    stockFromEarnings: acc.stockFromEarnings + Number(row.stockFromEarnings || 0),
+    stockFromCapitalReserve: acc.stockFromCapitalReserve + Number(row.stockFromCapitalReserve || 0)
+  }), { cashFromEarnings: 0, cashFromCapitalReserve: 0, stockFromEarnings: 0, stockFromCapitalReserve: 0 });
+  const totalCash = totals.cashFromEarnings + totals.cashFromCapitalReserve;
+  const totalStock = totals.stockFromEarnings + totals.stockFromCapitalReserve;
+  const capitalReserveTotal = totals.cashFromCapitalReserve + totals.stockFromCapitalReserve;
+  const label = capitalReserveTotal > 0 ? '含資本公積/公積配發' : '主要來自盈餘分配';
+  return {
+    ...totals,
+    totalCash,
+    totalStock,
+    earningsRatio: totalCash ? Number(((totals.cashFromEarnings / totalCash) * 100).toFixed(0)) : null,
+    capitalReserveRatio: totalCash ? Number(((totals.cashFromCapitalReserve / totalCash) * 100).toFixed(0)) : null,
+    label
   };
 }
 
@@ -1510,6 +1680,19 @@ function normalizeEventDate(value) {
   if (/^\d{4}-\d{2}$/.test(text)) return `${text}-01`;
   if (/^\d{4}\/\d{2}$/.test(text)) return `${text.replace('/', '-')}-01`;
   return '';
+}
+
+function normalizeChartDate(value) {
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Taipei',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(date);
+  }
+  return normalizeEventDate(value);
 }
 
 function latestDateFromRows(rows) {

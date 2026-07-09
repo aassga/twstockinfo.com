@@ -2727,6 +2727,50 @@ button {
   color: var(--up);
 }
 
+.dividend-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dividend-info-grid > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(31, 38, 53, 0.72);
+}
+
+.dividend-info-grid span,
+.dividend-info-grid em {
+  display: block;
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.dividend-info-grid strong {
+  display: block;
+  margin: 7px 0 5px;
+  color: var(--text-1);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.dividend-info-grid .good strong {
+  color: var(--dn);
+}
+
+.dividend-info-grid .watch strong,
+.dividend-info-grid .neutral strong {
+  color: var(--blue);
+}
+
+.dividend-info-grid .risk strong {
+  color: var(--up);
+}
+
 .dividend-bars {
   display: grid;
   gap: 8px;
@@ -3766,15 +3810,29 @@ button {
     min-width: 760px;
   }
 
+  .quote-view {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .quote-workspace,
+  .quote-chart-panel,
+  .quote-detail-section,
+  .quote-status-grid {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .quote-tape {
     position: sticky;
     top: 0;
     z-index: 12;
     align-items: center;
     flex-direction: row;
-    gap: 10px;
-    margin: 8px 0 8px;
-    padding: 9px 10px;
+    gap: 8px;
+    margin: 6px 0 8px;
+    padding: 8px 9px;
     border-radius: 12px;
   }
 
@@ -3784,7 +3842,7 @@ button {
   }
 
   .quote-stock-name {
-    font-size: 19px;
+    font-size: 17px;
     line-height: 1.15;
     white-space: nowrap;
     overflow: hidden;
@@ -3792,48 +3850,60 @@ button {
   }
 
   .quote-time {
-    margin-top: 5px;
-    font-size: 12px;
+    margin-top: 4px;
+    font-size: 11px;
     line-height: 1.2;
   }
 
   .quote-source-badge {
     max-width: 100%;
-    min-height: 20px;
-    margin-top: 7px;
-    padding: 0 8px;
+    min-height: 18px;
+    margin-top: 5px;
+    padding: 0 7px;
     white-space: nowrap;
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .quote-main-price {
     flex: 0 0 auto;
-    min-width: 126px;
+    min-width: 106px;
     text-align: right;
   }
 
   .quote-main-price strong {
-    font-size: 27px;
+    font-size: 24px;
     line-height: 1;
   }
 
   .quote-main-price span {
-    margin-top: 5px;
-    font-size: 13px;
+    margin-top: 4px;
+    font-size: 11px;
     line-height: 1.15;
     white-space: nowrap;
   }
 
   .quote-panel-tabs,
   .quote-range-tabs {
-    padding: 8px;
+    gap: 7px;
+    max-width: 100%;
+    padding: 7px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .quote-panel-tabs::-webkit-scrollbar,
+  .quote-range-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .quote-panel-tab,
   .quote-range-btn {
-    min-height: 38px;
-    padding: 0 15px;
-    font-size: 16px;
+    min-height: 34px;
+    padding: 0 12px;
+    font-size: 14px;
+    scroll-snap-align: start;
   }
 
   .quote-status-grid,
@@ -3857,26 +3927,53 @@ button {
 
   .quote-overview-panel,
   .quote-info-panel {
-    min-height: min(56dvh, 520px);
-    max-height: min(56dvh, 520px);
+    min-height: min(42dvh, 390px);
+    max-height: min(42dvh, 390px);
     overflow-y: auto;
   }
 
   .quote-chart-frame,
   .quote-chart-frame .stock-chart-frame {
-    min-height: min(56dvh, 520px);
-    height: min(56dvh, 520px);
+    min-height: min(42dvh, 390px);
+    height: min(42dvh, 390px);
+  }
+
+  .quote-chart-frame .stock-chart-frame {
+    grid-template-rows: 54px minmax(0, 1fr);
+  }
+
+  .quote-chart-frame .mobile-chart-readout {
+    grid-template-columns: repeat(6, minmax(54px, 1fr));
+    gap: 4px;
+    height: 54px;
+    padding: 7px 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .quote-chart-frame .mobile-chart-readout::-webkit-scrollbar {
+    display: none;
+  }
+
+  .quote-chart-frame .mobile-chart-readout .readout-label {
+    margin-bottom: 3px;
+    font-size: 9px;
+  }
+
+  .quote-chart-frame .mobile-chart-readout strong {
+    font-size: 10px;
   }
 
   .quote-depth-panel {
-    min-height: min(56dvh, 520px);
-    max-height: min(56dvh, 520px);
+    min-height: min(42dvh, 390px);
+    max-height: min(42dvh, 390px);
     overflow-y: auto;
   }
 
   .quote-trades-panel {
-    min-height: min(56dvh, 520px);
-    max-height: min(56dvh, 520px);
+    min-height: min(42dvh, 390px);
+    max-height: min(42dvh, 390px);
     overflow-y: auto;
     padding: 14px;
   }
@@ -4011,6 +4108,10 @@ button {
     min-width: 394px;
     padding: 9px 10px;
     font-size: 11px;
+  }
+
+  .dividend-info-grid {
+    grid-template-columns: 1fr;
   }
 
   .page-title + .search-row {
@@ -4448,18 +4549,31 @@ button {
   }
 
   .quote-stock-name {
-    font-size: 17px;
+    font-size: 16px;
   }
 
   .quote-main-price {
-    min-width: 112px;
+    min-width: 98px;
   }
 
   .quote-main-price strong {
-    font-size: 24px;
+    font-size: 22px;
   }
 
   .quote-main-price span {
-    font-size: 12px;
+    font-size: 10px;
+  }
+
+  .quote-panel-tab,
+  .quote-range-btn {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .quote-chart-frame .mobile-chart-readout {
+    grid-template-columns: repeat(6, minmax(50px, 1fr));
+    height: 50px;
+    padding: 6px 7px;
   }
 }
