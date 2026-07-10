@@ -5,6 +5,7 @@ import {
   IconClock,
   IconInfoCircle
 } from '@tabler/icons-vue';
+import SourceBadge from './SourceBadge.vue';
 
 defineProps({
   items: {
@@ -33,7 +34,7 @@ function statusIcon(status) {
       <div>
         <strong>{{ item.label }}</strong>
         <span>{{ item.message || item.value }}</span>
-        <em>{{ item.source }}</em>
+        <SourceBadge v-if="item.source" :source="item.source" />
       </div>
     </div>
   </div>

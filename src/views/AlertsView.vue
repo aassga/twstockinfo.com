@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconBell, IconInfoCircle, IconRefresh, IconSparkles, IconTrendingDown, IconTrendingUp } from '@tabler/icons-vue';
+import SourceBadge from '../components/SourceBadge.vue';
 import { useStockStore } from '../stores/stockStore';
 import { getBuySignals, getSellSignals } from '../utils/analysis';
 import { formatPct } from '../utils/formatters';
@@ -58,7 +59,7 @@ function openQuote(stock) {
             <div>
               <div class="alert-stock-name">{{ stock.code }} {{ stock.name }}</div>
               <div class="alert-detail">{{ stock.sector }} · {{ formatPct(stock.chgPct) }}</div>
-              <div class="alert-detail">{{ stock.forceSourceLabel || 'TWSE MIS 五檔委買/委賣量' }}</div>
+              <div class="alert-detail"><SourceBadge :source="stock.forceSourceLabel || 'TWSE MIS 五檔委買/委賣量'" /></div>
             </div>
             <div class="alert-right">
               <div class="alert-pct buy">{{ Math.round(stock.buyPct) }}%</div>
@@ -81,7 +82,7 @@ function openQuote(stock) {
             <div>
               <div class="alert-stock-name">{{ stock.code }} {{ stock.name }}</div>
               <div class="alert-detail">{{ stock.sector }} · {{ formatPct(stock.chgPct) }}</div>
-              <div class="alert-detail">{{ stock.forceSourceLabel || 'TWSE MIS 五檔委買/委賣量' }}</div>
+              <div class="alert-detail"><SourceBadge :source="stock.forceSourceLabel || 'TWSE MIS 五檔委買/委賣量'" /></div>
             </div>
             <div class="alert-right">
               <div class="alert-pct sell">{{ Math.round(stock.sellPct) }}%</div>

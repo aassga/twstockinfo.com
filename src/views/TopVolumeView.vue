@@ -2,6 +2,7 @@
 import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconInfoCircle, IconRefresh, IconTable } from '@tabler/icons-vue';
+import SourceBadge from '../components/SourceBadge.vue';
 import { useTopVolumeStore } from '../stores/topVolumeStore';
 import { formatDateTime, formatMoney, formatNumber, formatSigned, formatVolume, moveClass } from '../utils/formatters';
 
@@ -85,7 +86,7 @@ function changeMark(value) {
 
     <div class="hot-data-meta">
       <span>最後更新：{{ topVolumeStore.updatedAt ? formatDateTime(topVolumeStore.updatedAt) : '--' }}</span>
-      <span>資料來源：TWSE 每日成交量前二十名證券</span>
+      <SourceBadge source="TWSE 每日成交量前二十名證券" />
     </div>
 
     <div v-if="topVolumeStore.error" class="empty-state volume-empty-state">

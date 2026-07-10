@@ -8,7 +8,7 @@ const router = useRouter();
 
 const groups = computed(() => [
   {
-    title: '行情與排行',
+    title: '行情工具',
     items: moreNavItems.filter(item => ['/hot100', '/top-volume', '/chart'].includes(item.path))
   },
   {
@@ -16,8 +16,8 @@ const groups = computed(() => [
     items: moreNavItems.filter(item => ['/institutional', '/margin', '/fundamental', '/ai'].includes(item.path))
   },
   {
-    title: '個人工具',
-    items: moreNavItems.filter(item => ['/favorites', '/alerts', '/settings'].includes(item.path))
+    title: '個人與系統',
+    items: moreNavItems.filter(item => ['/favorites', '/alerts', '/data-health', '/settings'].includes(item.path))
   }
 ]);
 

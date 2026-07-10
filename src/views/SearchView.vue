@@ -14,6 +14,7 @@ import {
   IconTrendingUp,
   IconWorld
 } from '@tabler/icons-vue';
+import SourceBadge from '../components/SourceBadge.vue';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useInstitutionalStore } from '../stores/institutionalStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
@@ -343,6 +344,7 @@ function analyze(type) {
           <div class="analysis-title">
             <IconSparkles class="inline-icon" :stroke-width="2" />
             AI 個股深度分析
+            <SourceBadge source="本機規則推估" label="本機規則推估" type="computed" />
           </div>
           <div class="analysis-toolbar" aria-label="分析工具">
             <button class="btn primary" type="button" @click="analyze('deep')">

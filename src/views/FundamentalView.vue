@@ -13,6 +13,7 @@ import {
 } from '@tabler/icons-vue';
 import { stockApi } from '../api/stockApi';
 import { fetchFundamentalSnapshotPhased, fetchIndustryPeerStocks } from '../api/fundamentalApi';
+import SourceBadge from '../components/SourceBadge.vue';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
 import { quickStocks } from '../utils/stockMeta';
@@ -796,7 +797,10 @@ function average(values) {
               <span>財報歷史趨勢</span>
               <strong>{{ financialTrends.label }}</strong>
             </div>
-            <em>{{ financialTrends.source }} / 最新 {{ financialTrends.latestDate }}</em>
+            <em>
+              <SourceBadge :source="financialTrends.source" />
+              最新 {{ financialTrends.latestDate }}
+            </em>
           </div>
           <div class="financial-trend-summary">
             <div v-for="item in financialTrends.summary" :key="item.label" class="financial-trend-card" :class="item.status">
@@ -935,6 +939,7 @@ function average(values) {
 
       <div v-if="activeTab === 'peers'" class="fundamental-panel">
         <div class="source-row">
+          <SourceBadge source="TWSE/TPEX OpenAPI + FinMind + TWSE MIS" label="同業比較資料源" type="financial" />
           <span class="source-badge">產業：{{ peerComparison?.sector || company.sector || '--' }}</span>
           <span class="source-badge">樣本：{{ peerComparison?.count || 0 }} 檔</span>
           <span class="source-badge">基本面樣本：{{ peerComparison?.peerFundamentalCount || 0 }} 檔</span>
@@ -1053,7 +1058,10 @@ function average(values) {
               <strong>{{ item.title }}</strong>
             </div>
             <em>{{ item.detail }}</em>
-            <small>{{ eventStatusText(item.status) }} · {{ item.source }}</small>
+            <small>
+              {{ eventStatusText(item.status) }}
+              <SourceBadge :source="item.source" />
+            </small>
             <button v-if="item.link" class="btn xs event-link-btn" type="button" @click="openEventLink(item.link)">
               {{ item.linkLabel || '查看原文' }}
             </button>
@@ -1061,7 +1069,12 @@ function average(values) {
         </div>
         <div v-else class="hint">目前沒有可顯示的近期事件。</div>
         <div class="event-source-note">
-          <span>已接入：MOPS 重大訊息、FinMind 新聞、TWSE/TPEX 注意處置股、TWSE/TPEX 除權息、月營收、財報、估值與信用事件。</span>
+          <span>已接入：</span>
+          <SourceBadge source="MOPS 重大訊息 OpenAPI" />
+          <SourceBadge source="FinMind TaiwanStockNews" />
+          <SourceBadge source="TWSE/TPEX 注意處置 OpenAPI" />
+          <SourceBadge source="TWSE/TPEX 除權息 OpenAPI" />
+          <SourceBadge source="FinMind 月營收 / 財報 / 估值 / 信用事件" />
           <span>法說會：官方 OpenAPI 尚未提供穩定個股法說會來源，後續可接 TDCC IR Platform 或 MOPS 來源。</span>
         </div>
         <div v-if="dividendStability?.available" class="dividend-stability fundamental-dividend-stability">

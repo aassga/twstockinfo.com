@@ -1,5 +1,6 @@
 export const TECHNICAL_INDICATOR_SETTINGS = {
   maShort: 5,
+  maFast: 10,
   maMid: 20,
   maLong: 60,
   rsiPeriod: 14,
@@ -12,6 +13,7 @@ export const TECHNICAL_INDICATOR_SETTINGS = {
 };
 
 const MA_SHORT = TECHNICAL_INDICATOR_SETTINGS.maShort;
+const MA_FAST = TECHNICAL_INDICATOR_SETTINGS.maFast;
 const MA_MID = TECHNICAL_INDICATOR_SETTINGS.maMid;
 const MA_LONG = TECHNICAL_INDICATOR_SETTINGS.maLong;
 const RSI_PERIOD = TECHNICAL_INDICATOR_SETTINGS.rsiPeriod;
@@ -41,6 +43,7 @@ export function buildTechnicalSummary(candles = [], options = {}) {
   const closes = rows.map(row => row.close);
   const volumes = rows.map(row => row.volume);
   const ma5 = movingAverage(closes, MA_SHORT);
+  const ma10 = movingAverage(closes, MA_FAST);
   const ma20 = movingAverage(closes, MA_MID);
   const ma60 = movingAverage(closes, MA_LONG);
   const avgVolume20 = movingAverage(volumes.slice(0, -1), MA_MID);
@@ -58,6 +61,7 @@ export function buildTechnicalSummary(candles = [], options = {}) {
     latestClose: latest.close,
     changePct,
     ma5,
+    ma10,
     ma20,
     ma60,
     rsi,
@@ -85,18 +89,27 @@ export function buildTechnicalIndicatorSeries(candles = []) {
   const rows = candles
     .map(row => ({
       close: Number(row.close || 0),
+      high: Number(row.high || row.close || 0),
+      low: Number(row.low || row.close || 0),
       volume: Number(row.volume || 0)
     }))
     .filter(row => row.close > 0);
   const closes = rows.map(row => row.close);
   const volumes = rows.map(row => row.volume);
+  const latest = rows.at(-1);
 
   return {
     ma5: rollingAverageSeries(closes, MA_SHORT),
+    ma10: rollingAverageSeries(closes, MA_FAST),
     ma20: rollingAverageSeries(closes, MA_MID),
     ma60: rollingAverageSeries(closes, MA_LONG),
     bollinger: rollingBollingerSeries(closes, BOLLINGER_PERIOD, BOLLINGER_MULTIPLIER),
-    volumeMa20: rollingAverageSeries(volumes, MA_MID)
+    volumeMa5: rollingAverageSeries(volumes, MA_SHORT),
+    volumeMa20: rollingAverageSeries(volumes, MA_MID),
+    rsi: rollingRsiSeries(closes, RSI_PERIOD),
+    macd: rollingMacdSeries(closes),
+    kd: rollingKdSeries(rows, KD_PERIOD),
+    supportResistance: latest ? calculateSupportResistance(rows, latest.close) : null
   };
 }
 
@@ -130,6 +143,55 @@ function rollingBollingerSeries(values, period, multiplier) {
       middle,
       lower: middle - deviation * multiplier
     };
+  });
+}
+
+function rollingRsiSeries(values, period) {
+  return values.map((_, index) => {
+    if (index < period) return null;
+    return calculateRsi(values.slice(0, index + 1), period);
+  });
+}
+
+function rollingMacdSeries(values) {
+  const fast = emaSeries(values, MACD_FAST);
+  const slow = emaSeries(values, MACD_SLOW);
+  const macdLine = values.map((_, index) => {
+    if (!Number.isFinite(fast[index]) || !Number.isFinite(slow[index])) return null;
+    return fast[index] - slow[index];
+  });
+  const signalLine = alignedEmaSeries(macdLine, MACD_SIGNAL);
+
+  return macdLine.map((macd, index) => {
+    const signal = signalLine[index];
+    if (!Number.isFinite(macd) || !Number.isFinite(signal)) return null;
+    return {
+      macd,
+      signal,
+      histogram: macd - signal
+    };
+  });
+}
+
+function rollingKdSeries(rows, period) {
+  let previous = null;
+  return rows.map((_, index) => {
+    if (index + 1 < period) return null;
+    const sample = rows.slice(index + 1 - period, index + 1);
+    const low = Math.min(...sample.map(row => Number(row.low || row.close || 0)).filter(Number.isFinite));
+    const high = Math.max(...sample.map(row => Number(row.high || row.close || 0)).filter(Number.isFinite));
+    const close = Number(sample.at(-1)?.close || 0);
+    if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low || !close) return null;
+    const rsv = ((close - low) / (high - low)) * 100;
+    const k = previous ? (previous.k * 2 + rsv) / 3 : (50 * 2 + rsv) / 3;
+    const d = previous ? (previous.d * 2 + k) / 3 : (50 * 2 + k) / 3;
+    previous = {
+      rsv,
+      k,
+      d,
+      j: 3 * k - 2 * d
+    };
+    return previous;
   });
 }
 
@@ -232,6 +294,24 @@ function calculateSupportResistance(rows, latestClose) {
 }
 
 function emaSeries(values, period) {
+  const result = [];
+  const multiplier = 2 / (period + 1);
+  let previous = null;
+
+  values.forEach(value => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      result.push(null);
+      return;
+    }
+    previous = previous === null ? number : (number - previous) * multiplier + previous;
+    result.push(previous);
+  });
+
+  return result;
+}
+
+function alignedEmaSeries(values, period) {
   const result = [];
   const multiplier = 2 / (period + 1);
   let previous = null;

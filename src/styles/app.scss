@@ -1300,6 +1300,8 @@ button {
 
 .chart-frame .stock-chart-frame {
   position: relative;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   width: 100%;
   height: 100%;
   min-height: 620px;
@@ -1309,9 +1311,47 @@ button {
   overflow: hidden;
 }
 
+.chart-indicator-toolbar {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(72, 84, 111, 0.55);
+  background: rgba(19, 23, 34, 0.94);
+}
+
+.chart-indicator-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chart-indicator-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(31, 41, 59, 0.72);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chart-indicator-btn.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
 .chart-frame .stock-chart-canvas {
   width: 100%;
   height: 100%;
+  min-height: 0;
 }
 
 .chart-frame .stock-chart-frame canvas {
@@ -1677,6 +1717,261 @@ button {
   line-height: 1.2;
 }
 
+.data-source-badge {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.data-source-badge.realtime {
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.data-source-badge.official {
+  border-color: rgba(74, 153, 255, 0.34);
+  color: #93c5fd;
+  background: rgba(74, 153, 255, 0.12);
+}
+
+.data-source-badge.financial {
+  border-color: rgba(45, 212, 191, 0.28);
+  color: #99f6e4;
+  background: rgba(45, 212, 191, 0.1);
+}
+
+.data-source-badge.supplemental {
+  border-color: rgba(99, 102, 241, 0.32);
+  color: #c4b5fd;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.data-source-badge.chart {
+  border-color: rgba(168, 85, 247, 0.3);
+  color: #d8b4fe;
+  background: rgba(168, 85, 247, 0.11);
+}
+
+.data-source-badge.estimated,
+.data-source-badge.fallback {
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.data-source-badge.computed {
+  border-color: rgba(148, 163, 184, 0.28);
+  color: var(--text-2);
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.data-source-badge.unknown {
+  border-color: rgba(148, 163, 184, 0.22);
+  color: var(--text-3);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.source-badge-quote {
+  min-height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.quote-tape .source-badge-quote {
+  margin-top: 10px;
+}
+
+.data-health-view {
+  display: grid;
+  gap: 16px;
+}
+
+.section-toolbar,
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-toolbar {
+  justify-content: space-between;
+}
+
+.toolbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.health-summary-grid,
+.health-check-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.health-summary-grid,
+.health-check-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.health-summary-card,
+.health-check-card {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+
+.health-summary-card {
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.health-summary-card.error {
+  box-shadow: inset 3px 0 0 var(--up);
+}
+
+.health-summary-card span,
+.health-summary-card em,
+.health-check-card span,
+.health-check-card em {
+  display: block;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.health-summary-card strong,
+.health-check-card strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-1);
+  font-size: 17px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.health-summary-card strong {
+  margin: 8px 0 4px;
+}
+
+.health-check-card {
+  display: grid;
+  gap: 8px;
+  box-shadow: inset 3px 0 0 var(--border-strong);
+}
+
+.health-check-card.done {
+  box-shadow: inset 3px 0 0 var(--dn);
+}
+
+.health-check-card.loading {
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.health-check-card.error {
+  box-shadow: inset 3px 0 0 var(--up);
+}
+
+.health-check-card.cache {
+  box-shadow: inset 3px 0 0 var(--text-3);
+}
+
+.health-check-card em,
+.health-error-cell,
+.health-path-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.health-section {
+  display: grid;
+  gap: 10px;
+}
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.data-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-1);
+  font-size: 13px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.data-table th {
+  background: var(--bg-2);
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.data-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-table strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-1);
+}
+
+.data-health-view .status-pill {
+  min-height: 22px;
+  margin-top: 0;
+  padding: 3px 9px;
+}
+
+.status-pill.done {
+  background: rgba(0, 255, 47, 0.12);
+  color: var(--dn);
+}
+
+.status-pill.error {
+  background: rgba(255, 0, 0, 0.13);
+  color: var(--up);
+}
+
+.status-pill.loading {
+  background: rgba(58, 145, 255, 0.14);
+  color: var(--blue);
+}
+
+.status-pill.cache {
+  background: rgba(130, 146, 173, 0.16);
+  color: var(--text-2);
+}
+
+.empty-cell {
+  color: var(--text-3) !important;
+  text-align: center !important;
+}
+
+.health-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
 .complete-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
@@ -1748,6 +2043,52 @@ button {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: rgba(31, 38, 53, 0.72);
+}
+
+.risk-check.good {
+  border-color: rgba(39, 255, 39, 0.22);
+}
+
+.risk-check.risk {
+  border-color: rgba(255, 0, 17, 0.28);
+  background: rgba(52, 25, 35, 0.62);
+}
+
+.risk-check.watch {
+  border-color: rgba(74, 153, 255, 0.28);
+}
+
+.risk-check-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.risk-check-head em {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(45, 55, 72, 0.75);
+  color: var(--text-2);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.risk-check.good .risk-check-head em {
+  background: rgba(39, 255, 39, 0.12);
+  color: var(--dn);
+}
+
+.risk-check.risk .risk-check-head em {
+  background: rgba(255, 0, 17, 0.14);
+  color: var(--up);
+}
+
+.risk-check.watch .risk-check-head em {
+  background: rgba(74, 153, 255, 0.14);
+  color: var(--blue);
 }
 
 .risk-check div,
@@ -3115,6 +3456,13 @@ button {
   line-height: 1.45;
 }
 
+.event-calendar-item small {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .event-calendar-item strong {
   color: var(--text-1);
   font-size: 15px;
@@ -3161,7 +3509,9 @@ button {
 }
 
 .event-source-note {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-top: 12px;
   padding: 12px;
@@ -3804,6 +4154,21 @@ button {
 }
 
 @media (max-width: 900px) {
+  .section-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .health-summary-grid,
+  .health-check-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .quote-metrics-panel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3887,6 +4252,20 @@ button {
 }
 
 @media (max-width: 640px) {
+  .health-summary-grid,
+  .health-check-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .data-health-view .btn {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+  }
+
+  .data-table {
+    min-width: 720px;
+  }
+
   :root {
     --mobile-bottom-nav-base-height: 72px;
   }
@@ -4442,7 +4821,7 @@ button {
 
   .chart-frame .stock-chart-frame {
     display: grid;
-    grid-template-rows: 76px minmax(0, 1fr);
+    grid-template-rows: auto 76px minmax(0, 1fr);
     min-height: min(58dvh, 520px);
     height: min(58dvh, 520px);
     padding-top: 0;
@@ -4450,6 +4829,29 @@ button {
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     background: #131722;
+  }
+
+  .chart-indicator-toolbar {
+    gap: 6px;
+    padding: 8px 10px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+
+  .chart-indicator-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chart-indicator-group {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+  }
+
+  .chart-indicator-btn {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
   }
 
   .chart-frame .stock-chart-canvas {

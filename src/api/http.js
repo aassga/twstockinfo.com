@@ -1,4 +1,10 @@
 import { getProxyBase } from '../config';
+import {
+  recordApiCacheHit,
+  recordApiDedupe,
+  recordApiResult,
+  startApiRequest
+} from './apiHealth';
 
 const inflightTextRequests = new Map();
 const textCache = new Map();
@@ -20,19 +26,37 @@ export async function apiTextFetch(path, options = {}) {
   const cached = textCache.get(cacheKey);
 
   if (ttl > 0 && cached && now - cached.at < ttl) {
+    recordApiCacheHit(path);
     return cached.text;
   }
 
   if (inflightTextRequests.has(cacheKey)) {
+    recordApiDedupe(path);
     return inflightTextRequests.get(cacheKey);
   }
 
+  const requestId = startApiRequest(path);
+  const startedAt = Date.now();
   const promise = fetchTextWithFallbacks(path)
     .then(text => {
       if (ttl > 0) {
         textCache.set(cacheKey, { at: Date.now(), text });
       }
+      recordApiResult(requestId, {
+        status: 'success',
+        durationMs: Date.now() - startedAt,
+        bytes: text.length
+      });
       return text;
+    })
+    .catch(error => {
+      recordApiResult(requestId, {
+        status: 'error',
+        durationMs: Date.now() - startedAt,
+        httpStatus: extractStatus(error),
+        error: error?.message || String(error)
+      });
+      throw error;
     })
     .finally(() => {
       inflightTextRequests.delete(cacheKey);
@@ -81,6 +105,11 @@ async function fetchTextWithFallbacks(path) {
   }
 
   return text;
+}
+
+function extractStatus(error) {
+  const match = String(error?.message || '').match(/HTTP\s+(\d{3})/);
+  return match ? Number(match[1]) : '';
 }
 
 function buildRequestKey(path) {

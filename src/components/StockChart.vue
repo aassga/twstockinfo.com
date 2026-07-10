@@ -24,6 +24,8 @@ const props = defineProps({
 
 const canvasEl = ref(null);
 const selectedIndex = ref(-1);
+const activeOverlay = ref('ma');
+const activePanel = ref('volume');
 let canvas;
 let resizeObserver;
 const hover = {
@@ -33,6 +35,17 @@ const hover = {
 };
 
 const drawableCandles = computed(() => props.candles.map(normalizeDrawableCandle).filter(Boolean));
+const overlayOptions = [
+  { key: 'ma', label: 'MA' },
+  { key: 'bollinger', label: '布林' },
+  { key: 'levels', label: '支撐壓力' }
+];
+const panelOptions = [
+  { key: 'volume', label: '成交量' },
+  { key: 'rsi', label: 'RSI' },
+  { key: 'macd', label: 'MACD' },
+  { key: 'kd', label: 'KD' }
+];
 
 const selectedCandle = computed(() => {
   const candles = drawableCandles.value;
@@ -53,6 +66,16 @@ onBeforeUnmount(() => {
 });
 
 watch(() => [props.candles, props.interval, props.loading, props.error], () => nextTick(draw), { deep: true });
+
+function setOverlay(key) {
+  activeOverlay.value = key;
+  nextTick(draw);
+}
+
+function setPanel(key) {
+  activePanel.value = key;
+  nextTick(draw);
+}
 
 function handlePointerDown(event) {
   event.preventDefault();
@@ -119,13 +142,24 @@ function draw() {
 
   const priceMin = Math.min(...candles.map(row => row.low));
   const priceMax = Math.max(...candles.map(row => row.high));
-  const { ma5, ma20, ma60, bollinger, volumeMa20 } = buildTechnicalIndicatorSeries(candles);
+  const {
+    ma5,
+    ma10,
+    ma20,
+    ma60,
+    bollinger,
+    volumeMa5,
+    volumeMa20,
+    rsi,
+    macd,
+    kd,
+    supportResistance
+  } = buildTechnicalIndicatorSeries(candles);
   const pad = Math.max((priceMax - priceMin) * 0.08, priceMax * 0.01);
   const indicatorValues = [
-    ...ma5,
-    ...ma20,
-    ...ma60,
-    ...bollinger.flatMap(row => row ? [row.upper, row.lower] : [])
+    ...(activeOverlay.value === 'ma' ? [...ma5, ...ma10, ...ma20, ...ma60] : []),
+    ...(activeOverlay.value === 'bollinger' ? bollinger.flatMap(row => row ? [row.upper, row.lower] : []) : []),
+    ...(activeOverlay.value === 'levels' && supportResistance ? [supportResistance.support, supportResistance.resistance] : [])
   ].filter(Number.isFinite);
   const min = Math.min(priceMin, ...indicatorValues) - pad;
   const max = Math.max(priceMax, ...indicatorValues) + pad;
@@ -154,17 +188,26 @@ function draw() {
     const bodyTop = yPrice(Math.max(row.open, row.close));
     const bodyBottom = yPrice(Math.min(row.open, row.close));
     ctx.fillRect(x - candleWidth / 2, bodyTop, candleWidth, Math.max(2, bodyBottom - bodyTop));
-    ctx.globalAlpha = 0.24;
-    ctx.fillRect(x - candleWidth / 2, yVolume(row.volume || 0), candleWidth, volumeTop + layout.volumeHeight - yVolume(row.volume || 0));
-    ctx.globalAlpha = 1;
+    if (activePanel.value === 'volume') {
+      ctx.globalAlpha = 0.24;
+      ctx.fillRect(x - candleWidth / 2, yVolume(row.volume || 0), candleWidth, volumeTop + layout.volumeHeight - yVolume(row.volume || 0));
+      ctx.globalAlpha = 1;
+    }
   });
 
-  drawBollinger(ctx, layout, candles, bollinger, yPrice, step);
-  drawLineSeries(ctx, layout, ma60, yPrice, step, '#64748b', 1);
-  drawLineSeries(ctx, layout, ma20, yPrice, step, '#60a5fa', 1.25);
-  drawLineSeries(ctx, layout, ma5, yPrice, step, '#facc15', 1.35);
-  drawVolumeLine(ctx, layout, volumeMa20, yVolume, step, '#94a3b8');
-  drawIndicatorLegend(ctx, layout);
+  if (activeOverlay.value === 'bollinger') {
+    drawBollinger(ctx, layout, candles, bollinger, yPrice, step);
+  } else if (activeOverlay.value === 'levels') {
+    drawSupportResistance(ctx, layout, width, supportResistance, yPrice);
+  } else {
+    drawLineSeries(ctx, layout, ma60, yPrice, step, '#64748b', 1);
+    drawLineSeries(ctx, layout, ma20, yPrice, step, '#60a5fa', 1.25);
+    drawLineSeries(ctx, layout, ma10, yPrice, step, '#c084fc', 1.2);
+    drawLineSeries(ctx, layout, ma5, yPrice, step, '#facc15', 1.35);
+  }
+
+  drawSubPanel(ctx, layout, width, candles, { volumeMa5, volumeMa20, rsi, macd, kd }, yVolume, step, volumeTop);
+  drawIndicatorLegend(ctx, layout, volumeTop);
   drawAxes(ctx, layout, width, height, min, max, candles);
   drawHover(ctx, layout, width, height, min, max, step, volumeTop, candles);
 }
@@ -385,18 +428,138 @@ function drawVolumeLine(ctx, layout, values, yScale, step, color) {
   ctx.restore();
 }
 
-function drawIndicatorLegend(ctx, layout) {
+function drawSupportResistance(ctx, layout, width, levels, yScale) {
+  if (!levels) return;
   const items = [
-    ['MA5', '#facc15'],
-    ['MA20', '#60a5fa'],
-    ['MA60', '#64748b'],
-    ['BB', '#38bdf8'],
-    ['Vol20', '#94a3b8']
-  ];
+    ['支撐', levels.support, '#22c55e'],
+    ['壓力', levels.resistance, '#ef4444']
+  ].filter(([, value]) => Number.isFinite(value));
+
+  ctx.save();
+  ctx.font = '11px system-ui, sans-serif';
+  items.forEach(([label, value, color]) => {
+    const y = yScale(value);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath();
+    ctx.moveTo(layout.left, y);
+    ctx.lineTo(width - layout.right, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillText(`${label} ${formatNumber(value, 2)}`, layout.left + 8, y - 6);
+  });
+  ctx.restore();
+}
+
+function drawSubPanel(ctx, layout, width, candles, series, yVolume, step, panelTop) {
+  const panelBottom = panelTop + layout.volumeHeight;
+  const panelRight = width - layout.right;
+
+  ctx.save();
+  ctx.strokeStyle = '#273246';
+  ctx.beginPath();
+  ctx.moveTo(layout.left, panelBottom);
+  ctx.lineTo(panelRight, panelBottom);
+  ctx.stroke();
+
+  if (activePanel.value === 'volume') {
+    drawVolumeLine(ctx, layout, series.volumeMa20, yVolume, step, '#94a3b8');
+    drawVolumeLine(ctx, layout, series.volumeMa5, yVolume, step, '#facc15');
+    drawPanelLabel(ctx, layout, '成交量 / VolMA5 / VolMA20');
+    ctx.restore();
+    return;
+  }
+
+  if (activePanel.value === 'rsi') {
+    const y = value => panelTop + ((100 - value) / 100) * layout.volumeHeight;
+    drawOscillatorGuide(ctx, layout, width, panelTop, [70, 50, 30], y);
+    drawLineSeries(ctx, layout, series.rsi, y, step, '#60a5fa', 1.4);
+    drawPanelLabel(ctx, layout, 'RSI 14');
+    ctx.restore();
+    return;
+  }
+
+  if (activePanel.value === 'kd') {
+    const k = series.kd.map(row => row?.k ?? null);
+    const d = series.kd.map(row => row?.d ?? null);
+    const y = value => panelTop + ((100 - value) / 100) * layout.volumeHeight;
+    drawOscillatorGuide(ctx, layout, width, panelTop, [80, 50, 20], y);
+    drawLineSeries(ctx, layout, k, y, step, '#facc15', 1.4);
+    drawLineSeries(ctx, layout, d, y, step, '#60a5fa', 1.2);
+    drawPanelLabel(ctx, layout, 'KD 9');
+    ctx.restore();
+    return;
+  }
+
+  const histogram = series.macd.map(row => row?.histogram ?? null);
+  const dif = series.macd.map(row => row?.macd ?? null);
+  const dea = series.macd.map(row => row?.signal ?? null);
+  const values = [...histogram, ...dif, ...dea].filter(Number.isFinite);
+  const maxAbs = Math.max(...values.map(value => Math.abs(value)), 1);
+  const y = value => panelTop + ((maxAbs - value) / (maxAbs * 2 || 1)) * layout.volumeHeight;
+  const zeroY = y(0);
+  ctx.strokeStyle = '#475569';
+  ctx.beginPath();
+  ctx.moveTo(layout.left, zeroY);
+  ctx.lineTo(panelRight, zeroY);
+  ctx.stroke();
+  histogram.forEach((value, index) => {
+    if (!Number.isFinite(value)) return;
+    const x = layout.left + index * step + step / 2;
+    ctx.fillStyle = value >= 0 ? '#ef4444' : '#22c55e';
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(x - Math.max(1, step * 0.25), Math.min(zeroY, y(value)), Math.max(1, step * 0.5), Math.abs(y(value) - zeroY) || 1);
+    ctx.globalAlpha = 1;
+  });
+  drawLineSeries(ctx, layout, dif, y, step, '#facc15', 1.3);
+  drawLineSeries(ctx, layout, dea, y, step, '#60a5fa', 1.1);
+  drawPanelLabel(ctx, layout, 'MACD DIF / DEA');
+  ctx.restore();
+}
+
+function drawOscillatorGuide(ctx, layout, width, panelTop, levels, yScale) {
+  ctx.save();
+  ctx.strokeStyle = '#273246';
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '10px system-ui, sans-serif';
+  levels.forEach(level => {
+    const y = yScale(level);
+    ctx.beginPath();
+    ctx.moveTo(layout.left, y);
+    ctx.lineTo(width - layout.right, y);
+    ctx.stroke();
+    ctx.fillText(String(level), width - layout.right + 8, y + 3);
+  });
+  ctx.restore();
+}
+
+function drawPanelLabel(ctx, layout, label) {
+  ctx.save();
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '10px system-ui, sans-serif';
+  ctx.fillText(label, layout.left, layout.top + layout.priceHeight + layout.gap + 12);
+  ctx.restore();
+}
+
+function drawIndicatorLegend(ctx, layout, panelTop) {
+  const overlayItems = activeOverlay.value === 'bollinger'
+    ? [['BB 上中下軌', '#38bdf8']]
+    : activeOverlay.value === 'levels'
+      ? [['支撐', '#22c55e'], ['壓力', '#ef4444']]
+      : [['MA5', '#facc15'], ['MA10', '#c084fc'], ['MA20', '#60a5fa'], ['MA60', '#64748b']];
+  const panelItems = activePanel.value === 'volume'
+    ? [['VolMA5', '#facc15'], ['VolMA20', '#94a3b8']]
+    : activePanel.value === 'rsi'
+      ? [['RSI14', '#60a5fa']]
+      : activePanel.value === 'kd'
+        ? [['K', '#facc15'], ['D', '#60a5fa']]
+        : [['DIF', '#facc15'], ['DEA', '#60a5fa'], ['柱', '#ef4444']];
+  const items = [...overlayItems, ...panelItems];
   ctx.save();
   ctx.font = '10px system-ui, sans-serif';
   let x = layout.left;
-  const y = layout.top + 12;
+  const y = Math.max(layout.top + 12, panelTop - 8);
   items.forEach(([label, color]) => {
     ctx.fillStyle = color;
     ctx.fillRect(x, y - 7, 12, 2);
@@ -450,6 +613,32 @@ function formatReadoutTime(value) {
 
 <template>
   <div class="stock-chart-frame">
+    <div class="chart-indicator-toolbar">
+      <div class="chart-indicator-group" aria-label="主圖指標">
+        <button
+          v-for="item in overlayOptions"
+          :key="item.key"
+          class="chart-indicator-btn"
+          :class="{ active: activeOverlay === item.key }"
+          type="button"
+          @click="setOverlay(item.key)"
+        >
+          {{ item.label }}
+        </button>
+      </div>
+      <div class="chart-indicator-group" aria-label="副圖指標">
+        <button
+          v-for="item in panelOptions"
+          :key="item.key"
+          class="chart-indicator-btn"
+          :class="{ active: activePanel === item.key }"
+          type="button"
+          @click="setPanel(item.key)"
+        >
+          {{ item.label }}
+        </button>
+      </div>
+    </div>
     <div v-if="selectedCandle" class="mobile-chart-readout">
       <div>
         <span class="readout-label">時間</span>

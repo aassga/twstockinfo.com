@@ -1,6 +1,7 @@
 <script setup>
 import { useRouter } from 'vue-router';
 import { IconFlame, IconInfoCircle, IconRefresh, IconSelector, IconSparkles, IconStar, IconStarFilled } from '@tabler/icons-vue';
+import SourceBadge from '../components/SourceBadge.vue';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
@@ -94,7 +95,10 @@ function formatVolRatio(stock) {
 
     <div class="hot-data-meta">
       <span>最後更新：{{ stockStore.hotUpdatedAt ? formatDateTime(stockStore.hotUpdatedAt) : '--' }}</span>
-      <span>資料來源：TWSE MIS 即時報價；HiStock 僅作排行清單輔助；走勢圖另使用 Yahoo 圖表資料（{{ realtimeMeta() }}）</span>
+      <SourceBadge source="TWSE MIS" />
+      <SourceBadge source="HiStock rank" />
+      <SourceBadge source="Yahoo Chart" />
+      <span>{{ realtimeMeta() }}</span>
     </div>
 
     <div class="table-wrapper">

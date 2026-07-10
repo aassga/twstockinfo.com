@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconBuildingBank, IconInfoCircle, IconSearch, IconSparkles } from '@tabler/icons-vue';
 import { stockApi } from '../api/stockApi';
+import SourceBadge from '../components/SourceBadge.vue';
 import { useInstitutionalStore } from '../stores/institutionalStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatMoney, formatSigned, moveClass } from '../utils/formatters';
@@ -428,7 +429,7 @@ function normalizeSearchText(value) {
             <span>法人買賣超趨勢</span>
             <strong>近 {{ selectedTrendChartRows.length }} 日合計買賣超</strong>
           </div>
-          <em>來源：HiStock 法人明細</em>
+          <SourceBadge source="HiStock 法人明細" />
         </div>
         <div class="institutional-streak-grid">
           <div v-for="item in selectedStreaks" :key="item.key" :class="item.direction">
@@ -448,7 +449,11 @@ function normalizeSearchText(value) {
                 }}
               </strong>
             </div>
-            <em>{{ priceRelationLoading ? '股價載入中' : priceRelationError || 'Yahoo 日 K + HiStock 法人明細' }}</em>
+            <SourceBadge
+              :source="priceRelationLoading ? 'Yahoo Chart' : priceRelationError || 'Yahoo 日 K + HiStock 法人明細'"
+              :label="priceRelationLoading ? '股價載入中' : priceRelationError || 'Yahoo 日 K + HiStock 法人明細'"
+              :type="priceRelationError ? 'unknown' : 'chart'"
+            />
           </div>
           <div v-if="priceRelationLoading" class="institutional-relation-empty">股價關係圖載入中...</div>
           <div v-else-if="relationChartRows.length" class="institutional-relation-chart">

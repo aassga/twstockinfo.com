@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { IconAlertTriangle, IconChartBar, IconInfoCircle, IconRefresh, IconSearch } from '@tabler/icons-vue';
 import { fetchFundamentalSnapshotPhased } from '../api/fundamentalApi';
+import SourceBadge from '../components/SourceBadge.vue';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatNumber, formatSigned, moveClass } from '../utils/formatters';
 import { quickStocks } from '../utils/stockMeta';
@@ -249,7 +250,7 @@ function buildCreditRiskRows(data) {
         <div>
           <span>最新資料日</span>
           <strong>{{ latestDateText }}</strong>
-          <em>{{ marginTrading?.source || 'FinMind' }}</em>
+          <SourceBadge :source="marginTrading?.source || 'FinMind'" />
         </div>
         <div :class="marginTrading?.tone">
           <span>信用狀態</span>
@@ -341,7 +342,7 @@ function buildCreditRiskRows(data) {
             <span>近 20 日信用交易明細</span>
             <strong>{{ stock.code }} {{ stock.name || '' }}</strong>
           </div>
-          <em>資料來源：{{ marginTrading?.source || 'FinMind' }}</em>
+          <SourceBadge :source="marginTrading?.source || 'FinMind'" />
         </div>
         <table class="stock-table margin-stock-table">
           <thead>

@@ -17,7 +17,7 @@ const tabs = [
   { key: 'macd', label: 'MACD' },
   { key: 'kd', label: 'KD' },
   { key: 'bollinger', label: '布林通道' },
-  { key: 'volume', label: '量價訊號' },
+  { key: 'volume', label: '量價' },
   { key: 'levels', label: '支撐壓力' }
 ];
 
@@ -33,6 +33,7 @@ const cards = computed(() => {
     return [
       { label: '趨勢', value: data.trend.label, detail: `收盤 ${num(data.latestClose)}`, tone: data.trend.type },
       { label: data.maLabels.short, value: num(data.ma5), detail: '短線均線', tone: compareTone(data.latestClose, data.ma5) },
+      { label: 'MA10', value: num(data.ma10), detail: '短中期均線', tone: compareTone(data.latestClose, data.ma10) },
       { label: data.maLabels.mid, value: num(data.ma20), detail: '中期均線', tone: compareTone(data.latestClose, data.ma20) },
       { label: data.maLabels.long, value: num(data.ma60), detail: '長期均線', tone: compareTone(data.latestClose, data.ma60) }
     ];

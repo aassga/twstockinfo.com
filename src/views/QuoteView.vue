@@ -11,10 +11,12 @@ import {
 } from "@tabler/icons-vue";
 import { fetchFundamentalSnapshotPhased } from "../api/fundamentalApi";
 import DataStatusGrid from "../components/DataStatusGrid.vue";
+import SourceBadge from "../components/SourceBadge.vue";
 import StockChart from "../components/StockChart.vue";
 import { useChartStore } from "../stores/chartStore";
 import { useInstitutionalStore } from "../stores/institutionalStore";
 import { useStockStore } from "../stores/stockStore";
+import { quoteSourceMeta } from "../utils/dataSources";
 import {
   formatMoney,
   formatNumber,
@@ -67,7 +69,7 @@ const ranges = [
 const stock = computed(() => stockStore.currentStock);
 const tradeFlow = computed(() => stock.value?.tradeFlow || null);
 const tone = computed(() => moveClass(stock.value?.chgPct).replace("is-", ""));
-const quoteSource = computed(() => sourceMeta(stock.value));
+const quoteSource = computed(() => quoteSourceMeta(stock.value));
 const institutionalTrend = computed(() => {
   const code = stock.value?.code;
   return code ? institutionalStore.trendByCode[code] || [] : [];
@@ -534,15 +536,6 @@ function normalizeRouteCode(value) {
   return String(text || "").trim().toUpperCase();
 }
 
-function sourceMeta(current) {
-  const source = String(current?.source || "");
-  if (source.startsWith("twse-mis")) return { label: "TWSE MIS 即時報價", type: "realtime" };
-  if (source.includes("yahoo")) return { label: "Yahoo 備援報價", type: "fallback" };
-  if (source.includes("histock")) return { label: "HiStock 排行輔助", type: "fallback" };
-  if (source.includes("openapi")) return { label: "交易所 OpenAPI 備援", type: "fallback" };
-  return { label: "資料來源待確認", type: "unknown" };
-}
-
 function stageText(stage) {
   if (stage === "quote") return "報價完成";
   if (stage === "overview") return "財務指標載入中";
@@ -677,9 +670,7 @@ function roundPrice(value) {
             {{ stock.name || stock.code }} <span>[{{ stock.code }}]</span>
           </div>
           <div class="quote-time">時 {{ marketTime }}</div>
-          <div class="quote-source-badge" :class="quoteSource.type">
-            {{ quoteSource.label }}
-          </div>
+          <SourceBadge :label="quoteSource.label" :type="quoteSource.type" variant="quote" />
         </div>
         <div class="quote-main-price">
           <strong>{{ money(stock.price) }}</strong>
@@ -693,9 +684,7 @@ function roundPrice(value) {
       <section class="quote-detail-section">
         <div class="quote-detail-head">
           <div class="quote-section-title">詳細報價</div>
-          <span class="quote-source-badge" :class="quoteSource.type">
-            {{ quoteSource.label }}
-          </span>
+          <SourceBadge :label="quoteSource.label" :type="quoteSource.type" variant="quote" />
         </div>
         <div class="quote-detail-grid">
           <div
@@ -813,9 +802,11 @@ function roundPrice(value) {
                 <div class="quote-section-title">內外盤監測 / 成交快照</div>
                 <span class="hint">{{ tradeFlow?.note || "等待 TWSE MIS 新成交資料。" }}</span>
               </div>
-              <span class="quote-source-badge" :class="tradeFlow?.reliable ? 'realtime' : 'unknown'">
-                {{ tradeFlow?.sourceLabel || "監測中" }}
-              </span>
+              <SourceBadge
+                :source="tradeFlow?.sourceLabel || 'TWSE MIS 即時報價監測中'"
+                :type="tradeFlow?.reliable ? 'realtime' : 'unknown'"
+                variant="quote"
+              />
             </div>
 
             <div class="trade-flow-grid">
@@ -861,9 +852,12 @@ function roundPrice(value) {
                 <div class="quote-section-title">法人與籌碼趨勢</div>
                 <span class="hint">單日法人與近 5 / 10 / 20 日累計買賣超。</span>
               </div>
-              <span class="quote-source-badge" :class="institutionalRow ? 'realtime' : 'unknown'">
-                {{ institutionalLoading ? "載入中" : institutionalRow ? "法人完成" : "無資料" }}
-              </span>
+              <SourceBadge
+                :source="institutionalRow?.source === 'histock' ? 'HiStock / TWSE' : 'TWSE / HiStock'"
+                :label="institutionalLoading ? '法人載入中' : institutionalRow ? '法人資料完成' : '法人資料待查'"
+                :type="institutionalRow ? 'official' : 'unknown'"
+                variant="quote"
+              />
             </div>
             <div class="quote-inst-grid">
               <div class="quote-inst-card">
@@ -916,18 +910,12 @@ function roundPrice(value) {
                 <div class="quote-section-title">基本面摘要</div>
                 <span class="hint">估值、營收、獲利能力與現金流，來源與完整分析頁一致。</span>
               </div>
-              <span
-                class="quote-source-badge"
-                :class="fundamentalSnapshot ? 'realtime' : fundamentalError ? 'fallback' : 'unknown'"
-              >
-                {{
-                  fundamentalLoading
-                    ? stageText(fundamentalSnapshot?.loadingStage)
-                    : fundamentalSnapshot
-                      ? `完整度 ${fundamentalSnapshot.dataCompleteness}%`
-                      : fundamentalError || "待查詢"
-                }}
-              </span>
+              <SourceBadge
+                :source="fundamentalSnapshot?.source || 'TWSE/TPEX OpenAPI + FinMind'"
+                :label="fundamentalLoading ? stageText(fundamentalSnapshot?.loadingStage) : fundamentalSnapshot ? `財報完整度 ${fundamentalSnapshot.dataCompleteness}%` : fundamentalError || '財報待查詢'"
+                :type="fundamentalSnapshot ? 'financial' : fundamentalError ? 'fallback' : 'unknown'"
+                variant="quote"
+              />
             </div>
             <div v-if="fundamentalSnapshot" class="quote-fundamental-grid">
               <div
@@ -961,7 +949,7 @@ function roundPrice(value) {
                 <div class="quote-section-title">AI 摘要</div>
                 <span class="hint">先用已載入的報價、法人與基本面資料產生本機摘要。</span>
               </div>
-              <span class="quote-source-badge unknown">本機摘要</span>
+              <SourceBadge source="本機摘要" label="本機摘要（推估）" type="computed" variant="quote" />
             </div>
             <ol class="quote-ai-list">
               <li v-for="item in aiSummary" :key="item">{{ item }}</li>

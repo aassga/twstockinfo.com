@@ -11,12 +11,14 @@ import {
 } from '@tabler/icons-vue';
 import { fetchFundamentalSnapshotPhased } from '../api/fundamentalApi';
 import DataStatusGrid from '../components/DataStatusGrid.vue';
+import SourceBadge from '../components/SourceBadge.vue';
 import StockChart from '../components/StockChart.vue';
 import TechnicalSummary from '../components/TechnicalSummary.vue';
 import { useChartStore } from '../stores/chartStore';
 import { useInstitutionalStore } from '../stores/institutionalStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatMoney, formatNumber, formatPct, formatSigned, moveClass } from '../utils/formatters';
+import { buildStockRiskChecks } from '../utils/riskSignals';
 import { quickStocks } from '../utils/stockMeta';
 
 const stockStore = useStockStore();
@@ -97,7 +99,14 @@ const dominantForce = computed(() => {
   return { label: '多空均衡', type: 'neutral' };
 });
 const executiveSummary = computed(() => buildExecutiveSummary(stock.value, snapshot.value, inst.value, instTrendSummary.value));
-const riskChecks = computed(() => buildRiskChecks(stock.value, snapshot.value, inst.value));
+const riskChecks = computed(() => buildStockRiskChecks({
+  current: stock.value,
+  fundamental: snapshot.value,
+  institutional: inst.value,
+  institutionalTrend: instTrend.value,
+  candles: chartStore.candles,
+  interval: chartStore.interval
+}));
 const instTrendSummary = computed(() => [5, 10, 20].map(days => summarizeInstitutionalTrend(instTrend.value, days)));
 const eventItems = computed(() => snapshot.value?.eventCalendar?.slice(0, 6) || []);
 const eventCoverage = computed(() => snapshot.value?.eventCoverage || []);
@@ -479,7 +488,7 @@ function buildRiskChecks(current, fundamental, institutional) {
           <div class="complete-code">{{ stock.code }}</div>
           <div class="complete-name">{{ stock.name || stock.code }}</div>
           <span class="sector-pill">{{ stock.sector || '未分類' }}</span>
-          <span class="source-badge">來源：{{ sourceText(stock.source || 'TWSE MIS') }}</span>
+          <SourceBadge :source="stock.source || 'TWSE MIS'" />
         </div>
         <div class="complete-price">
           <span>股價</span>
@@ -519,7 +528,10 @@ function buildRiskChecks(current, fundamental, institutional) {
           </div>
           <div class="risk-check-grid">
             <div v-for="item in riskChecks" :key="item.label" class="risk-check" :class="item.status">
-              <div>{{ item.label }}</div>
+              <div class="risk-check-head">
+                <div>{{ item.label }}</div>
+                <em>{{ statusText(item.status) }}</em>
+              </div>
               <strong>{{ item.value }}</strong>
               <span>{{ item.detail }}</span>
             </div>
@@ -538,7 +550,7 @@ function buildRiskChecks(current, fundamental, institutional) {
                 <strong>{{ item.title }}</strong>
               </div>
               <em>{{ item.detail }}</em>
-              <small>{{ item.source }}</small>
+              <small><SourceBadge :source="item.source" /></small>
               <button v-if="item.link" class="btn xs event-link-btn" type="button" @click="openEventLink(item.link)">
                 {{ item.linkLabel || '查看原文' }}
               </button>
@@ -560,8 +572,8 @@ function buildRiskChecks(current, fundamental, institutional) {
             :loading="chartStore.loading"
           />
           <div class="source-row">
-            <span class="source-badge">來源：Yahoo Chart</span>
-            <span class="source-badge">計算：本機技術指標</span>
+            <SourceBadge source="Yahoo Chart" />
+            <SourceBadge source="本機技術指標" label="本機技術指標（推估）" type="computed" />
           </div>
           <div class="chart-frame complete-chart-frame">
             <div v-if="chartStore.loading" class="chart-loading">
@@ -585,7 +597,7 @@ function buildRiskChecks(current, fundamental, institutional) {
             籌碼趨勢
           </div>
           <div class="source-row">
-            <span class="source-badge">來源：HiStock / TWSE</span>
+            <SourceBadge source="HiStock / TWSE" />
           </div>
           <div class="inst-cards complete-inst">
             <div class="inst-card">
@@ -633,7 +645,7 @@ function buildRiskChecks(current, fundamental, institutional) {
             </button>
           </div>
           <div class="source-row">
-            <span class="source-badge">來源：{{ snapshot?.source || 'TWSE OpenAPI / FinMind' }}</span>
+            <SourceBadge :source="snapshot?.source || 'TWSE OpenAPI / FinMind'" />
             <span class="source-badge">完整度：{{ snapshot ? `${snapshot.dataCompleteness}%` : '--' }}</span>
           </div>
           <div v-if="snapshot" class="complete-fundamental-summary">
@@ -660,12 +672,12 @@ function buildRiskChecks(current, fundamental, institutional) {
         <div class="complete-panel">
           <div class="panel-title">資料可信度</div>
           <div class="data-source-list">
-            <div><span>即時報價</span><strong>{{ sourceText(stock.source || 'TWSE MIS') }}</strong></div>
-            <div><span>走勢圖</span><strong>Yahoo Chart</strong></div>
-            <div><span>法人籌碼</span><strong>{{ inst?.source === 'histock' ? 'HiStock' : 'TWSE OpenAPI' }}</strong></div>
-            <div><span>基本面</span><strong>{{ snapshot?.source || 'TWSE OpenAPI / FinMind' }}</strong></div>
-            <div><span>新聞事件</span><strong>MOPS / TWSE / TPEX / FinMind</strong></div>
-            <div><span>技術指標</span><strong>本機由 K 線計算</strong></div>
+            <div><span>即時報價</span><SourceBadge :source="stock.source || 'TWSE MIS'" /></div>
+            <div><span>走勢圖</span><SourceBadge source="Yahoo Chart" /></div>
+            <div><span>法人籌碼</span><SourceBadge :source="inst?.source === 'histock' ? 'HiStock / TWSE' : 'TWSE OpenAPI'" /></div>
+            <div><span>基本面</span><SourceBadge :source="snapshot?.source || 'TWSE OpenAPI / FinMind'" /></div>
+            <div><span>新聞事件</span><SourceBadge source="MOPS / TWSE / TPEX / FinMind" /></div>
+            <div><span>技術指標</span><SourceBadge source="本機由 K 線計算" label="本機由 K 線計算（推估）" type="computed" /></div>
           </div>
         </div>
       </div>
