@@ -40,6 +40,10 @@ if ('serviceWorker' in navigator) {
 const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
-    updateSW(true);
+    window.__twstockApplyUpdate = () => updateSW(true);
+    window.dispatchEvent(new CustomEvent('twstock:pwa-update-ready'));
+  },
+  onOfflineReady() {
+    window.dispatchEvent(new CustomEvent('twstock:pwa-offline-ready'));
   }
 });

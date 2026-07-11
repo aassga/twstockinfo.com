@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import AiView from '../views/AiView.vue';
 import AlertsView from '../views/AlertsView.vue';
+import BacktestView from '../views/BacktestView.vue';
 import ChartView from '../views/ChartView.vue';
 import CompleteAnalysisView from '../views/CompleteAnalysisView.vue';
 import DataHealthView from '../views/DataHealthView.vue';
@@ -30,6 +31,7 @@ const routes = [
   { path: '/top-volume', component: TopVolumeView, meta: { title: titleOf('/top-volume') } },
   { path: '/chart', component: ChartView, meta: { title: titleOf('/chart') } },
   { path: '/alerts', component: AlertsView, meta: { title: titleOf('/alerts') } },
+  { path: '/backtest', component: BacktestView, meta: { title: titleOf('/backtest') } },
   { path: '/institutional', component: InstitutionalView, meta: { title: titleOf('/institutional') } },
   { path: '/margin', component: MarginView, meta: { title: titleOf('/margin') } },
   { path: '/fundamental', component: FundamentalView, meta: { title: titleOf('/fundamental') } },

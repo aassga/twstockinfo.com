@@ -34,6 +34,14 @@ const showCandidates = ref(false);
 const loadStatus = ref(createLoadStatus());
 const candidateLimit = 20;
 const stockCodePattern = /^\d{4,6}[a-z]?$/i;
+const analysisSections = [
+  { key: 'quote', label: '報價' },
+  { key: 'risk', label: '風險' },
+  { key: 'events', label: '事件' },
+  { key: 'technical', label: '技術' },
+  { key: 'chips', label: '籌碼' },
+  { key: 'fundamental', label: '基本面' }
+];
 let candidateTimer = null;
 let searchRunId = 0;
 
@@ -110,6 +118,14 @@ const riskChecks = computed(() => buildStockRiskChecks({
 const instTrendSummary = computed(() => [5, 10, 20].map(days => summarizeInstitutionalTrend(instTrend.value, days)));
 const eventItems = computed(() => snapshot.value?.eventCalendar?.slice(0, 6) || []);
 const eventCoverage = computed(() => snapshot.value?.eventCoverage || []);
+const timelineGroups = computed(() => groupTimelineItems(buildEventTimeline({
+  candles: chartStore.candles,
+  institutionalRows: instTrend.value,
+  eventRows: snapshot.value?.eventCalendar || [],
+  marginRows: snapshot.value?.marginTrading?.recentRows || [],
+  revenueTrend: snapshot.value?.revenueTrend,
+  financialTrends: snapshot.value?.financialTrends
+})).slice(0, 12));
 const summarySignals = computed(() => {
   const revenue = snapshot.value?.revenueTrend;
   const valuation = snapshot.value?.valuationHistory;
@@ -244,6 +260,10 @@ function selectCandidate(item) {
   runSearch(item.code);
 }
 
+function scrollToSection(key) {
+  document.getElementById(`analysis-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function createLoadStatus(activeKey = '') {
   return {
     quote: { status: activeKey === 'quote' ? 'loading' : 'idle', message: activeKey === 'quote' ? '等待報價' : '待查詢' },
@@ -349,6 +369,221 @@ function openEventLink(link) {
   window.open(link, '_blank', 'noopener,noreferrer');
 }
 
+function buildEventTimeline({ candles = [], institutionalRows = [], eventRows = [], marginRows = [], revenueTrend = null, financialTrends = null }) {
+  const items = [
+    ...buildPriceMoveTimeline(candles),
+    ...buildInstitutionalTimeline(institutionalRows),
+    ...buildMarginTimeline(marginRows),
+    ...buildKnownEventTimeline(eventRows),
+    ...buildRevenueTimeline(revenueTrend),
+    ...buildFinancialTimeline(financialTrends)
+  ];
+
+  const seen = new Set();
+  return items
+    .filter(item => item.date && item.title)
+    .sort((a, b) => {
+      const dateCompare = b.date.localeCompare(a.date);
+      if (dateCompare) return dateCompare;
+      return timelinePriority(a.category) - timelinePriority(b.category);
+    })
+    .filter(item => {
+      const key = `${item.date}:${item.category}:${item.title}:${item.detail}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function buildPriceMoveTimeline(candles = []) {
+  const dailyRows = candles
+    .map(normalizeTimelineCandle)
+    .filter(Boolean)
+    .sort((a, b) => a.time - b.time);
+
+  return dailyRows
+    .map((row, index) => {
+      const previous = dailyRows[index - 1];
+      const reference = previous?.close || row.open;
+      const changePct = reference ? ((row.close - reference) / reference) * 100 : 0;
+      if (!Number.isFinite(changePct) || Math.abs(changePct) < 3) return null;
+      return {
+        date: row.date,
+        category: 'price',
+        tone: changePct >= 0 ? 'up' : 'down',
+        title: changePct >= 0 ? '股價大漲' : '股價大跌',
+        detail: `收盤 ${formatMoney(row.close, 2)}，漲跌 ${formatSigned(changePct, 2, '%')}，成交量 ${formatNumber(row.volume || 0, 0)}`,
+        source: 'Yahoo Chart'
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => Math.abs(parseTimelinePct(b.detail)) - Math.abs(parseTimelinePct(a.detail)))
+    .slice(0, 10);
+}
+
+function buildInstitutionalTimeline(rows = []) {
+  return rows
+    .filter(row => row?.date)
+    .map(row => {
+      const total = Number(row.total || 0);
+      if (!Number.isFinite(total) || Math.abs(total) < 100) return null;
+      return {
+        date: normalizeTimelineDate(row.date),
+        category: 'institutional',
+        tone: total >= 0 ? 'up' : 'down',
+        title: total >= 0 ? '法人買超' : '法人賣超',
+        detail: `合計 ${formatSigned(total, 0, '張')}，外資 ${formatSigned(row.foreign || 0, 0, '張')}，投信 ${formatSigned(row.trust || 0, 0, '張')}，自營商 ${formatSigned(row.dealer || 0, 0, '張')}`,
+        source: row.source === 'histock' ? 'HiStock / TWSE' : 'TWSE / HiStock'
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function buildMarginTimeline(rows = []) {
+  return rows
+    .filter(row => row?.date)
+    .map(row => {
+      const marginChange = Number(row.marginChange || 0);
+      const shortChange = Number(row.shortChange || 0);
+      const hasSignal = Math.abs(marginChange) >= 100 || Math.abs(shortChange) >= 50 || Number(row.dayTradingRatio || 0) >= 20;
+      if (!hasSignal) return null;
+      return {
+        date: normalizeTimelineDate(row.date),
+        category: 'margin',
+        tone: marginChange > 0 || shortChange > 0 ? 'watch' : 'neutral',
+        title: '信用交易變化',
+        detail: `融資 ${formatSigned(marginChange, 0, '張')}，融券 ${formatSigned(shortChange, 0, '張')}，當沖比 ${pct(row.dayTradingRatio, 2)}`,
+        source: 'FinMind Margin / DayTrading'
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function buildKnownEventTimeline(rows = []) {
+  return rows.map(row => ({
+    date: normalizeTimelineDate(row.date),
+    category: row.type || 'event',
+    tone: eventTone(row.type),
+    title: row.title,
+    detail: row.detail || '',
+    source: row.source || '',
+    link: row.link,
+    linkLabel: row.linkLabel
+  }));
+}
+
+function buildRevenueTimeline(revenueTrend) {
+  if (!revenueTrend?.latestMonth) return [];
+  return [{
+    date: `${String(revenueTrend.latestMonth).replace('/', '-')}-01`,
+    category: 'revenue',
+    tone: Number(revenueTrend.latestYoy || 0) >= 0 ? 'up' : 'down',
+    title: '月營收公告',
+    detail: `YoY ${pct(revenueTrend.latestYoy, 2)}，近 3 月平均 ${pct(revenueTrend.avg3Yoy, 2)}`,
+    source: revenueTrend.source || 'FinMind TaiwanStockMonthRevenue',
+    link: 'https://mops.twse.com.tw/mops/web/t05st10_ifrs',
+    linkLabel: '查詢來源'
+  }];
+}
+
+function buildFinancialTimeline(financialTrends) {
+  const latest = financialTrends?.rows?.[0] || financialTrends?.latest;
+  if (!latest?.date) return [];
+  const eps = Number(latest.eps ?? latest.basicEps);
+  const roe = Number(latest.roe);
+  return [{
+    date: normalizeTimelineDate(latest.date),
+    category: 'financial',
+    tone: Number.isFinite(eps) && eps > 0 ? 'neutral' : 'watch',
+    title: '財報資料更新',
+    detail: `EPS ${Number.isFinite(eps) ? formatNumber(eps, 2) : '--'}，ROE ${Number.isFinite(roe) ? pct(roe, 2) : '--'}`,
+    source: 'FinMind / TWSE OpenAPI',
+    link: 'https://mops.twse.com.tw/mops/web/t163sb04',
+    linkLabel: '查詢來源'
+  }];
+}
+
+function groupTimelineItems(items = []) {
+  const groups = [];
+  const byDate = new Map();
+  items.forEach(item => {
+    const date = normalizeTimelineDate(item.date);
+    if (!date) return;
+    if (!byDate.has(date)) {
+      const group = { date, items: [] };
+      byDate.set(date, group);
+      groups.push(group);
+    }
+    byDate.get(date).items.push(item);
+  });
+  return groups.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function normalizeTimelineCandle(row) {
+  const time = Number(row?.time || row?.date || 0);
+  const date = normalizeTimelineDate(row?.date) || normalizeTimelineTime(time);
+  const open = Number(row?.open);
+  const high = Number(row?.high);
+  const low = Number(row?.low);
+  const close = Number(row?.close);
+  if (!date || ![open, high, low, close].every(Number.isFinite)) return null;
+  return {
+    date,
+    time: Number.isFinite(time) && time > 0 ? time : new Date(date).getTime(),
+    open,
+    high,
+    low,
+    close,
+    volume: Number(row?.volume || 0)
+  };
+}
+
+function normalizeTimelineDate(value) {
+  const text = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(text)) return text.replace(/\//g, '-');
+  if (/^\d{4}-\d{2}$/.test(text)) return `${text}-01`;
+  if (/^\d{4}\/\d{2}$/.test(text)) return `${text.replace('/', '-')}-01`;
+  return normalizeTimelineTime(Number(value || 0));
+}
+
+function normalizeTimelineTime(value) {
+  if (!Number.isFinite(value) || value <= 0) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date(value));
+}
+
+function timelineCategoryText(category) {
+  if (category === 'price') return '股價';
+  if (category === 'institutional') return '法人';
+  if (category === 'margin') return '融資';
+  if (category === 'news') return '新聞';
+  if (category === 'major') return '重大訊息';
+  if (category === 'revenue') return '月營收';
+  if (category === 'financial') return '財報';
+  if (category === 'dividend') return '除權息';
+  if (category === 'attention') return '注意股';
+  if (category === 'disposition') return '處置股';
+  return eventTypeText(category);
+}
+
+function timelinePriority(category) {
+  const order = ['price', 'major', 'news', 'institutional', 'margin', 'revenue', 'financial', 'dividend', 'attention', 'disposition'];
+  const index = order.indexOf(category);
+  return index >= 0 ? index : 99;
+}
+
+function parseTimelinePct(text) {
+  const match = String(text || '').match(/[-+]?\d+(?:\.\d+)?%/);
+  return match ? Number(match[0].replace('%', '')) : 0;
+}
+
 function summarizeInstitutionalTrend(rows, days) {
   const sample = rows.slice(0, days);
   const sum = sample.reduce((acc, row) => ({
@@ -419,6 +654,9 @@ function buildRiskChecks(current, fundamental, institutional) {
       <IconLayoutDashboard class="title-icon" :stroke-width="2" />
       個股完整分析
     </div>
+    <div class="page-purpose">
+      一次整理單檔股票的報價、技術、籌碼、基本面、事件與風險，適合用來做買賣前檢查與事後回看。
+    </div>
 
     <div class="search-row complete-search">
       <input
@@ -483,6 +721,23 @@ function buildRiskChecks(current, fundamental, institutional) {
 
       <DataStatusGrid :items="loadingSteps" />
 
+      <div class="analysis-section-nav">
+        <button
+          v-for="item in analysisSections"
+          :key="item.key"
+          class="quick-btn"
+          type="button"
+          @click="scrollToSection(item.key)"
+        >
+          {{ item.label }}
+        </button>
+      </div>
+
+      <div id="analysis-quote" class="complete-section-anchor"></div>
+      <div class="analysis-section-heading">
+        <span>報價</span>
+        <em>現在價格、漲跌與即時買賣力道</em>
+      </div>
       <div class="complete-hero">
         <div class="complete-company">
           <div class="complete-code">{{ stock.code }}</div>
@@ -521,6 +776,11 @@ function buildRiskChecks(current, fundamental, institutional) {
           </ol>
         </div>
 
+        <div id="analysis-risk" class="complete-section-anchor"></div>
+        <div class="analysis-section-heading">
+          <span>風險</span>
+          <em>先看是否有賣壓、量價、法人與基本面警訊</em>
+        </div>
         <div class="complete-panel">
           <div class="panel-title">
             <IconAlertTriangle class="inline-icon" :stroke-width="2" />
@@ -538,25 +798,48 @@ function buildRiskChecks(current, fundamental, institutional) {
           </div>
         </div>
 
-        <div class="complete-panel">
+        <div id="analysis-events" class="complete-section-anchor"></div>
+        <div class="analysis-section-heading">
+          <span>事件</span>
+          <em>把股價異動、籌碼、融資與新聞放回同一條時間線</em>
+        </div>
+        <div class="complete-panel timeline-panel wide">
           <div class="panel-title">
             <IconAlertTriangle class="inline-icon" :stroke-width="2" />
-            新聞與事件
+            個股事件時間線
           </div>
-          <div v-if="eventItems.length" class="complete-event-list">
-            <div v-for="item in eventItems" :key="`${item.date}-${item.title}`" class="complete-event-item" :class="eventTone(item.type)">
-              <div>
-                <span>{{ item.date }} · {{ eventTypeText(item.type) }}</span>
-                <strong>{{ item.title }}</strong>
+          <div class="timeline-subtitle">
+            整合股價大漲跌、法人變化、融資變化、新聞 / 重大訊息與財報 / 月營收，協助回看「為什麼漲跌」。
+          </div>
+          <div v-if="timelineGroups.length" class="stock-event-timeline">
+            <div v-for="group in timelineGroups" :key="group.date" class="timeline-day">
+              <div class="timeline-date">
+                <strong>{{ group.date }}</strong>
+                <span>{{ group.items.length }} 則</span>
               </div>
-              <em>{{ item.detail }}</em>
-              <small><SourceBadge :source="item.source" /></small>
-              <button v-if="item.link" class="btn xs event-link-btn" type="button" @click="openEventLink(item.link)">
-                {{ item.linkLabel || '查看原文' }}
-              </button>
+              <div class="timeline-events">
+                <article
+                  v-for="item in group.items"
+                  :key="`${group.date}-${item.category}-${item.title}-${item.detail}`"
+                  class="timeline-event"
+                  :class="item.tone"
+                >
+                  <div class="timeline-event-head">
+                    <span class="timeline-category">{{ timelineCategoryText(item.category) }}</span>
+                    <strong>{{ item.title }}</strong>
+                  </div>
+                  <p>{{ item.detail }}</p>
+                  <div class="timeline-event-meta">
+                    <SourceBadge :source="item.source || '資料來源待補'" />
+                    <button v-if="item.link" class="btn xs event-link-btn" type="button" @click="openEventLink(item.link)">
+                      {{ item.linkLabel || '查看原文' }}
+                    </button>
+                  </div>
+                </article>
+              </div>
             </div>
           </div>
-          <div v-else class="hint">{{ loadStatus.fundamental.status === 'loading' ? '事件資料載入中' : '目前沒有可顯示的近期事件。' }}</div>
+          <div v-else class="hint">{{ loadStatus.fundamental.status === 'loading' ? '事件時間線載入中' : '目前沒有可顯示的事件時間線。' }}</div>
           <div v-if="eventCoverage.length" class="event-coverage-grid">
             <span v-for="item in eventCoverage" :key="item.label" :class="item.status">
               {{ item.label }}
@@ -564,6 +847,11 @@ function buildRiskChecks(current, fundamental, institutional) {
           </div>
         </div>
 
+        <div id="analysis-technical" class="complete-section-anchor"></div>
+        <div class="analysis-section-heading">
+          <span>技術</span>
+          <em>K 線、成交量與技術指標摘要</em>
+        </div>
         <div class="complete-panel wide">
           <TechnicalSummary
             compact
@@ -591,6 +879,11 @@ function buildRiskChecks(current, fundamental, institutional) {
           </div>
         </div>
 
+        <div id="analysis-chips" class="complete-section-anchor"></div>
+        <div class="analysis-section-heading">
+          <span>籌碼</span>
+          <em>法人買賣超與近 5 / 10 / 20 日趨勢</em>
+        </div>
         <div class="complete-panel">
           <div class="panel-title">
             <IconShieldCheck class="inline-icon" :stroke-width="2" />
@@ -634,6 +927,11 @@ function buildRiskChecks(current, fundamental, institutional) {
           </div>
         </div>
 
+        <div id="analysis-fundamental" class="complete-section-anchor"></div>
+        <div class="analysis-section-heading">
+          <span>基本面</span>
+          <em>估值、營收、股利與長期體質摘要</em>
+        </div>
         <div class="complete-panel wide">
           <div class="panel-title-row compact-panel-title-row">
             <div class="panel-title">

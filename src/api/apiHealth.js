@@ -77,9 +77,11 @@ export function recordApiResult(id, result = {}) {
   group.lastUpdatedAt = call.finishedAtText;
   if (isError) {
     group.error += 1;
+    group.lastErrorAt = call.finishedAtText;
     apiHealthState.counters.error += 1;
   } else {
     group.success += 1;
+    group.lastSuccessAt = call.finishedAtText;
     apiHealthState.counters.success += 1;
   }
   apiHealthState.lastUpdatedAt = call.finishedAtText;
@@ -180,6 +182,8 @@ function ensureGroup(meta) {
       lastHttpStatus: '',
       lastDurationMs: 0,
       lastError: '',
+      lastSuccessAt: '',
+      lastErrorAt: '',
       lastPath: '',
       lastUpdatedAt: ''
     };

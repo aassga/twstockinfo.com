@@ -119,6 +119,8 @@ export default {
     if (route === '/proxy-status') {
       return jsonResp({
         ok: true,
+        version: '2026-07-11-health-v1',
+        updatedAt: '2026-07-11',
         features: {
           twseOpenApi: true,
           twseRwd: true,

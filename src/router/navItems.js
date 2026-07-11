@@ -4,6 +4,7 @@ import {
   IconBrain,
   IconBriefcase,
   IconBuildingBank,
+  IconChartDots,
   IconChartLine,
   IconDatabaseSearch,
   IconDots,
@@ -26,13 +27,14 @@ export const navItems = [
   { path: '/fundamental', label: '基本面分析', icon: IconReportAnalytics },
   { path: '/institutional', label: '三大法人', icon: IconBuildingBank },
   { path: '/margin', label: '信用籌碼', icon: IconScale },
+  { path: '/backtest', label: '策略回測', icon: IconChartDots },
   { path: '/chart', label: '走勢圖', icon: IconAdjustmentsHorizontal },
   { path: '/portfolio', label: '我的持股', icon: IconBriefcase },
   { path: '/favorites', label: '我的最愛', icon: IconStar },
   { path: '/alerts', label: '買賣提醒', icon: IconBell },
   { path: '/ai', label: 'AI 分析', icon: IconBrain },
   { path: '/more', label: '更多', icon: IconDots, hidden: true },
-  { path: '/data-health', label: '資料健康', icon: IconDatabaseSearch, hidden: true },
+  { path: '/data-health', label: '資料健康', icon: IconDatabaseSearch },
   { path: '/settings', label: '設定', icon: IconSettings, hidden: true }
 ];
 
@@ -53,6 +55,7 @@ export const moreNavItems = [
   { path: '/fundamental', label: '基本面分析', icon: IconReportAnalytics, description: '財報、估值、股利與同業比較' },
   { path: '/institutional', label: '三大法人', icon: IconBuildingBank, description: '法人買賣超與籌碼趨勢' },
   { path: '/margin', label: '信用籌碼', icon: IconScale, description: '融資融券、借券與短線籌碼風險' },
+  { path: '/backtest', label: '策略回測', icon: IconChartDots, description: '驗證法人、技術、量價與融資訊號後續表現' },
   { path: '/favorites', label: '我的最愛', icon: IconStar, description: '收藏個股快速追蹤' },
   { path: '/alerts', label: '買賣提醒', icon: IconBell, description: '高買入、高賣出與量價訊號' },
   { path: '/ai', label: 'AI 分析', icon: IconBrain, description: '個股摘要與分析輔助' },
