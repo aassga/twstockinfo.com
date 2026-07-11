@@ -1,44 +1,28 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
-import AiView from '../views/AiView.vue';
-import AlertsView from '../views/AlertsView.vue';
-import BacktestView from '../views/BacktestView.vue';
-import ChartView from '../views/ChartView.vue';
-import CompleteAnalysisView from '../views/CompleteAnalysisView.vue';
-import DataHealthView from '../views/DataHealthView.vue';
-import FavoritesView from '../views/FavoritesView.vue';
-import FundamentalView from '../views/FundamentalView.vue';
-import Hot100View from '../views/Hot100View.vue';
-import InstitutionalView from '../views/InstitutionalView.vue';
-import MarginView from '../views/MarginView.vue';
-import MoreView from '../views/MoreView.vue';
-import PortfolioView from '../views/PortfolioView.vue';
-import QuoteView from '../views/QuoteView.vue';
-import SearchView from '../views/SearchView.vue';
-import SettingsView from '../views/SettingsView.vue';
-import TopVolumeView from '../views/TopVolumeView.vue';
 import { navItems } from './navItems';
 
 const titleOf = path => navItems.find(item => item.path === path)?.label || '台股資訊';
+const view = name => () => import(`../views/${name}.vue`);
 
 const routes = [
   { path: '/', redirect: '/search' },
-  { path: '/search', component: SearchView, meta: { title: titleOf('/search') } },
-  { path: '/quote', component: QuoteView, meta: { title: titleOf('/quote') } },
-  { path: '/complete-analysis', component: CompleteAnalysisView, meta: { title: titleOf('/complete-analysis') } },
-  { path: '/portfolio', component: PortfolioView, meta: { title: titleOf('/portfolio') } },
-  { path: '/favorites', component: FavoritesView, meta: { title: titleOf('/favorites') } },
-  { path: '/hot100', component: Hot100View, meta: { title: titleOf('/hot100') } },
-  { path: '/top-volume', component: TopVolumeView, meta: { title: titleOf('/top-volume') } },
-  { path: '/chart', component: ChartView, meta: { title: titleOf('/chart') } },
-  { path: '/alerts', component: AlertsView, meta: { title: titleOf('/alerts') } },
-  { path: '/backtest', component: BacktestView, meta: { title: titleOf('/backtest') } },
-  { path: '/institutional', component: InstitutionalView, meta: { title: titleOf('/institutional') } },
-  { path: '/margin', component: MarginView, meta: { title: titleOf('/margin') } },
-  { path: '/fundamental', component: FundamentalView, meta: { title: titleOf('/fundamental') } },
-  { path: '/ai', component: AiView, meta: { title: titleOf('/ai') } },
-  { path: '/more', component: MoreView, meta: { title: titleOf('/more') } },
-  { path: '/data-health', component: DataHealthView, meta: { title: titleOf('/data-health') } },
-  { path: '/settings', component: SettingsView, meta: { title: titleOf('/settings') } }
+  { path: '/search', component: view('SearchView'), meta: { title: titleOf('/search') } },
+  { path: '/quote', component: view('QuoteView'), meta: { title: titleOf('/quote') } },
+  { path: '/complete-analysis', component: view('CompleteAnalysisView'), meta: { title: titleOf('/complete-analysis') } },
+  { path: '/portfolio', component: view('PortfolioView'), meta: { title: titleOf('/portfolio') } },
+  { path: '/favorites', component: view('FavoritesView'), meta: { title: titleOf('/favorites') } },
+  { path: '/hot100', component: view('Hot100View'), meta: { title: titleOf('/hot100') } },
+  { path: '/top-volume', component: view('TopVolumeView'), meta: { title: titleOf('/top-volume') } },
+  { path: '/chart', component: view('ChartView'), meta: { title: titleOf('/chart') } },
+  { path: '/alerts', component: view('AlertsView'), meta: { title: titleOf('/alerts') } },
+  { path: '/backtest', component: view('BacktestView'), meta: { title: titleOf('/backtest') } },
+  { path: '/institutional', component: view('InstitutionalView'), meta: { title: titleOf('/institutional') } },
+  { path: '/margin', component: view('MarginView'), meta: { title: titleOf('/margin') } },
+  { path: '/fundamental', component: view('FundamentalView'), meta: { title: titleOf('/fundamental') } },
+  { path: '/ai', component: view('AiView'), meta: { title: titleOf('/ai') } },
+  { path: '/more', component: view('MoreView'), meta: { title: titleOf('/more') } },
+  { path: '/data-health', component: view('DataHealthView'), meta: { title: titleOf('/data-health') } },
+  { path: '/settings', component: view('SettingsView'), meta: { title: titleOf('/settings') } }
 ];
 
 export default createRouter({

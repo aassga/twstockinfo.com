@@ -1,12 +1,13 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import Vant from 'vant';
-import ElementPlus from 'element-plus';
+import { NavBar, Tabbar, TabbarItem } from 'vant';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App.vue';
 import router from './router';
-import 'vant/lib/index.css';
-import 'element-plus/dist/index.css';
+import { useSystemStore } from './stores/systemStore';
+import 'vant/es/nav-bar/style';
+import 'vant/es/tabbar/style';
+import 'vant/es/tabbar-item/style';
 import '../legacy/css/style.css';
 import './styles/app.scss';
 
@@ -21,11 +22,19 @@ applyDisplayModeClasses();
 standaloneQuery?.addEventListener?.('change', applyDisplayModeClasses);
 
 const app = createApp(App);
+const pinia = createPinia();
 
-app.use(createPinia());
+app.use(pinia);
 app.use(router);
-app.use(Vant);
-app.use(ElementPlus);
+app.use(NavBar);
+app.use(Tabbar);
+app.use(TabbarItem);
+
+app.config.errorHandler = (error, _instance, info) => {
+  useSystemStore(pinia).recordError(error, `vue:${info || 'component'}`);
+  console.error(error);
+};
+
 app.mount('#app');
 
 let refreshing = false;

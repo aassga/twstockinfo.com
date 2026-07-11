@@ -7,11 +7,13 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "test": "npm run test:parsers && npm run test:local-data && npm run test:smoke",
+    "test:parsers": "node tools/api-parser-tests.mjs",
+    "test:local-data": "node tools/local-data-tests.mjs",
     "test:smoke": "node tools/smoke-tests.mjs"
   },
   "dependencies": {
     "@tabler/icons-vue": "^3.10.0",
-    "element-plus": "2.14.2",
     "pinia": "2.3.1",
     "vant": "4.9.24",
     "vue": "3.5.39",
@@ -21,7 +23,12 @@
     "@vitejs/plugin-vue": "4.6.2",
     "sass": "^1.75.0",
     "vite": "4.5.14",
-    "vite-plugin-pwa": "0.15.2"
+    "vite-plugin-pwa": "0.20.5",
+    "workbox-window": "7.1.0"
+  },
+  "overrides": {
+    "workbox-build": "7.1.0",
+    "workbox-window": "7.1.0"
   },
   "engines": {
     "node": ">=16.20"

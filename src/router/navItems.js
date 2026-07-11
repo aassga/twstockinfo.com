@@ -35,7 +35,7 @@ export const navItems = [
   { path: '/ai', label: 'AI 分析', icon: IconBrain },
   { path: '/more', label: '更多', icon: IconDots, hidden: true },
   { path: '/data-health', label: '資料健康', icon: IconDatabaseSearch },
-  { path: '/settings', label: '設定', icon: IconSettings, hidden: true }
+  { path: '/settings', label: '備份 / 設定', icon: IconSettings, hidden: true }
 ];
 
 export const visibleNavItems = navItems.filter(item => !item.hidden);
@@ -60,5 +60,5 @@ export const moreNavItems = [
   { path: '/alerts', label: '買賣提醒', icon: IconBell, description: '高買入、高賣出與量價訊號' },
   { path: '/ai', label: 'AI 分析', icon: IconBrain, description: '個股摘要與分析輔助' },
   { path: '/data-health', label: '資料健康', icon: IconDatabaseSearch, description: '檢查 Proxy、快取、失敗來源與最近 API 請求' },
-  { path: '/settings', label: '設定', icon: IconSettings, description: 'Worker 與系統資訊' }
+  { path: '/settings', label: '備份 / 設定', icon: IconSettings, description: '本機資料備份、還原、Worker 與系統資訊' }
 ];

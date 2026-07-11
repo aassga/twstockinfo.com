@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { stockApi } from '../api/stockApi';
-
-const STORAGE_KEY = 'tw_stock_portfolio_holdings';
+import { readCollection, writeCollection } from '../repositories/localDataRepository';
 
 export const usePortfolioStore = defineStore('portfolio', () => {
   const holdings = ref([]);
@@ -23,17 +22,12 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   });
 
   function loadPortfolio() {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      holdings.value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    } catch (err) {
-      holdings.value = [];
-    }
+    const rows = readCollection('portfolioHoldings');
+    holdings.value = Array.isArray(rows) ? rows : [];
   }
 
   function persist() {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings.value));
+    writeCollection('portfolioHoldings', holdings.value);
   }
 
   function saveHolding(payload) {

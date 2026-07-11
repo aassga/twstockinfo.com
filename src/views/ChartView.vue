@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { showToast } from 'vant';
+import 'vant/es/toast/style';
 import { IconChartCandle, IconSearch } from '@tabler/icons-vue';
 import StockChart from '../components/StockChart.vue';
 import TechnicalSummary from '../components/TechnicalSummary.vue';

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { showToast } from 'vant';
+import 'vant/es/toast/style';
 import {
   IconChartDots,
   IconInfoCircle,

@@ -32,13 +32,16 @@ onMounted(() => {
   timers.push(setInterval(() => runWhenVisible(() => portfolioStore.refreshQuotes()), 30000));
 
   const onUpdateReady = () => systemStore.setUpdateAvailable(true);
+  const onOfflineReady = () => systemStore.setOfflineReady(true);
   const onError = event => systemStore.recordError(event.error || event.message, 'window.error');
   const onUnhandledRejection = event => systemStore.recordError(event.reason, 'unhandledrejection');
   window.addEventListener('twstock:pwa-update-ready', onUpdateReady);
+  window.addEventListener('twstock:pwa-offline-ready', onOfflineReady);
   window.addEventListener('error', onError);
   window.addEventListener('unhandledrejection', onUnhandledRejection);
   cleanupHandlers.push(
     () => window.removeEventListener('twstock:pwa-update-ready', onUpdateReady),
+    () => window.removeEventListener('twstock:pwa-offline-ready', onOfflineReady),
     () => window.removeEventListener('error', onError),
     () => window.removeEventListener('unhandledrejection', onUnhandledRejection)
   );
@@ -64,7 +67,7 @@ function runWhenVisible(task) {
 <template>
   <DesktopLayout />
   <div v-if="systemStore.updateAvailable" class="pwa-update-banner">
-    <span>已有新版可用，更新後可避免舊快取造成資料不同步。</span>
+    <span>已有新版可用，更新後可避免舊快取造成資料不同步。App {{ systemStore.appVersion }}</span>
     <button type="button" @click="systemStore.applyUpdate()">立即更新</button>
     <button type="button" @click="systemStore.setUpdateAvailable(false)">稍後</button>
   </div>

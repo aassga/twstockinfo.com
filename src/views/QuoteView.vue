@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import {
   IconChartLine,
@@ -42,6 +42,8 @@ const candidates = ref([]);
 const showCandidates = ref(false);
 const activePanel = ref("chart");
 const activeRange = ref("D");
+const panelTabsEl = ref(null);
+const rangeTabsEl = ref(null);
 const candidateLimit = 20;
 const liveQuoteRefreshMs = 5000;
 const stockCodePattern = /^\d{4,6}[a-z]?$/i;
@@ -68,6 +70,16 @@ const ranges = [
 
 const stock = computed(() => stockStore.currentStock);
 const tradeFlow = computed(() => stock.value?.tradeFlow || null);
+const tradeFlowBadgeType = computed(() => {
+  if (tradeFlow.value?.reliable) return "computed";
+  if (tradeFlow.value?.available) return "estimated";
+  return "unknown";
+});
+const tradeFlowNoticeTitle = computed(() => {
+  if (tradeFlow.value?.reliable) return "輪詢重建中";
+  if (tradeFlow.value?.available) return "樣本累積中";
+  return "等待成交快照";
+});
 const tone = computed(() => moveClass(stock.value?.chgPct).replace("is-", ""));
 const quoteSource = computed(() => quoteSourceMeta(stock.value));
 const institutionalTrend = computed(() => {
@@ -260,27 +272,31 @@ const depthRows = computed(() => {
 });
 const tradeFlowCards = computed(() => {
   const flow = tradeFlow.value || {};
+  const hasFlow = Number(flow.classifiedLots || 0) > 0;
+  const buyPct = Math.round(flow.activeBuyPct || stock.value?.buyPct || 0);
+  const sellPct = Math.round(flow.activeSellPct || stock.value?.sellPct || 0);
+  const flowSuffix = flow.reliable ? "主動買進" : "推估 / 樣本累積";
   return [
     {
       label: "外盤",
-      value: formatNumber(flow.activeBuyLots || 0, 0),
-      detail: `${Math.round(flow.activeBuyPct || stock.value?.buyPct || 0)}% 主動買進`,
+      value: hasFlow ? formatNumber(flow.activeBuyLots || 0, 0) : "--",
+      detail: hasFlow ? `${buyPct}% ${flowSuffix}` : "等待成交快照",
       tone: "up"
     },
     {
       label: "內盤",
-      value: formatNumber(flow.activeSellLots || 0, 0),
-      detail: `${Math.round(flow.activeSellPct || stock.value?.sellPct || 0)}% 主動賣出`,
+      value: hasFlow ? formatNumber(flow.activeSellLots || 0, 0) : "--",
+      detail: hasFlow ? `${sellPct}% ${flow.reliable ? "主動賣出" : "推估 / 樣本累積"}` : "等待成交快照",
       tone: "down"
     },
     {
       label: "中性",
-      value: formatNumber(flow.neutralLots || 0, 0),
-      detail: "成交價落在買賣價中間",
+      value: flow.available ? formatNumber(flow.neutralLots || 0, 0) : "--",
+      detail: "成交價落在買賣價中間或無法分類",
       tone: "neutral"
     },
     {
-      label: "最近成交",
+      label: `最近成交${flow.observedTicks ? ` ${flow.observedTicks} 筆` : ""}`,
       value: flow.lastTradePrice ? money(flow.lastTradePrice) : "--",
       detail: flow.lastTradeVolume ? `${flow.lastTradeVolume} 張 / ${tradeSideText(flow.lastTradeSide)}` : "等待新成交",
       tone: flow.lastTradeSide === "outer" ? "up" : flow.lastTradeSide === "inner" ? "down" : "neutral"
@@ -358,6 +374,8 @@ onMounted(() => {
     }
   }
   startLiveQuoteRefresh();
+  alignActiveTab(panelTabsEl, activePanel.value, panels, 1);
+  alignActiveTab(rangeTabsEl, activeRange.value, ranges, ranges.length);
 });
 
 onBeforeUnmount(() => {
@@ -418,6 +436,7 @@ async function openChart(nextStock = stock.value) {
 
 async function setRange(value) {
   activeRange.value = value;
+  alignActiveTab(rangeTabsEl, value, ranges, ranges.length);
   if (stock.value?.code) await chartStore.openStock(stock.value, value);
 }
 
@@ -515,9 +534,43 @@ function quickSearch(code) {
 
 function setPanel(value) {
   activePanel.value = value;
+  alignActiveTab(panelTabsEl, value, panels, 1);
   if (!stock.value?.code) return;
   if (value === "institutional") void loadInstitutional(stock.value.code);
   if (value === "fundamental" || value === "ai") void loadFundamental(stock.value, searchRunId);
+}
+
+function alignActiveTab(containerRef, value, items, resetThroughIndex = 0) {
+  nextTick(() => {
+    const container = containerRef.value;
+    if (!container) return;
+
+    const index = items.findIndex((item) => item.value === value);
+    if (index >= 0 && index <= resetThroughIndex) {
+      container.scrollTo({ left: 0, behavior: "smooth" });
+      return;
+    }
+
+    const target = container.querySelector(`[data-tab-value="${value}"]`);
+    if (!target) return;
+
+    const styles = window.getComputedStyle(container);
+    const paddingLeft = Number.parseFloat(styles.paddingLeft) || 0;
+    const paddingRight = Number.parseFloat(styles.paddingRight) || 0;
+    const targetLeft = target.offsetLeft;
+    const targetRight = targetLeft + target.offsetWidth;
+    const visibleLeft = container.scrollLeft + paddingLeft;
+    const visibleRight = container.scrollLeft + container.clientWidth - paddingRight;
+
+    if (targetLeft < visibleLeft) {
+      container.scrollTo({ left: Math.max(0, targetLeft - paddingLeft), behavior: "smooth" });
+    } else if (targetRight > visibleRight) {
+      container.scrollTo({
+        left: targetRight - container.clientWidth + paddingRight,
+        behavior: "smooth",
+      });
+    }
+  });
 }
 
 function selectCandidate(item) {
@@ -706,12 +759,13 @@ function roundPrice(value) {
         :class="{ single: ['institutional', 'fundamental', 'ai'].includes(activePanel) }"
       >
         <div class="quote-chart-panel">
-          <div class="quote-panel-tabs">
+          <div ref="panelTabsEl" class="quote-panel-tabs">
             <button
               v-for="panel in panels"
               :key="panel.value"
               class="quote-panel-tab"
               :class="{ active: activePanel === panel.value }"
+              :data-tab-value="panel.value"
               type="button"
               @click="setPanel(panel.value)"
             >
@@ -744,12 +798,13 @@ function roundPrice(value) {
           </div>
 
           <div v-else-if="activePanel === 'chart'" class="quote-chart-section">
-            <div class="quote-range-tabs">
+            <div ref="rangeTabsEl" class="quote-range-tabs">
               <button
                 v-for="item in ranges"
                 :key="item.value"
                 class="quote-range-btn"
                 :class="{ active: activeRange === item.value }"
+                :data-tab-value="item.value"
                 type="button"
                 @click="setRange(item.value)"
               >
@@ -804,9 +859,17 @@ function roundPrice(value) {
               </div>
               <SourceBadge
                 :source="tradeFlow?.sourceLabel || 'TWSE MIS 即時報價監測中'"
-                :type="tradeFlow?.reliable ? 'realtime' : 'unknown'"
+                :type="tradeFlowBadgeType"
                 variant="quote"
               />
+            </div>
+
+            <div class="trade-flow-notice" :class="tradeFlow?.reliable ? 'ready' : 'pending'">
+              <strong>{{ tradeFlowNoticeTitle }}</strong>
+              <span>
+                TWSE MIS 目前不是完整逐筆成交 API；此處以每 5 秒報價快照重建成交方向。
+                若樣本不足，買入占比 / 賣出占比會先維持五檔委託量推估。
+              </span>
             </div>
 
             <div class="trade-flow-grid">

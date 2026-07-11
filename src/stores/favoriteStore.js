@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-
-const STORAGE_KEY = 'tw_stock_favorites';
+import { readCollection, writeCollection } from '../repositories/localDataRepository';
 
 export const useFavoriteStore = defineStore('favorites', () => {
   const favorites = ref([]);
@@ -9,18 +8,12 @@ export const useFavoriteStore = defineStore('favorites', () => {
   const favoriteCodes = computed(() => new Set(favorites.value.map(stock => stock.code)));
 
   function loadFavorites() {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      const rows = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      favorites.value = Array.isArray(rows) ? rows.map(normalizeFavorite).filter(Boolean) : [];
-    } catch (error) {
-      favorites.value = [];
-    }
+    const rows = readCollection('favorites');
+    favorites.value = Array.isArray(rows) ? rows.map(normalizeFavorite).filter(Boolean) : [];
   }
 
   function persist() {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(favorites.value));
+    writeCollection('favorites', favorites.value);
   }
 
   function isFavorite(code) {

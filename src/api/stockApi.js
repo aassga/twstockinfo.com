@@ -1,5 +1,6 @@
 import { apiFetch, apiTextFetch } from './http';
 import { parseAllStocks, parseOtcStocks } from './stockParsers';
+import { readCollection, writeCollection } from '../repositories/localDataRepository';
 import otcStockNames from '../data/otcStockNames.json';
 
 export const stockApi = {
@@ -27,13 +28,14 @@ const PRICE_ROWS_CACHE_MS = 15000;
 const HISTOCK_RANK_CACHE_MS = 15000;
 const MIS_QUOTE_CACHE_MS = 15000;
 const MIS_OUTAGE_COOLDOWN_MS = 180000;
-const MIS_OUTAGE_STORAGE_KEY = 'tw_stock_mis_outage_until';
 const MIS_BATCH_CODE_LIMIT = 15;
 const MIS_HOT_PRICE_LIMIT = 100;
 const VOLUME_RATIO_CACHE_MS = 30 * 60 * 1000;
 const VOLUME_RATIO_CONCURRENCY = 3;
 const YAHOO_CHART_CACHE_MS = 15000;
 const TRADE_FLOW_MAX_TICKS = 40;
+const TRADE_FLOW_RELIABLE_MIN_TICKS = 3;
+const TRADE_FLOW_RELIABLE_MIN_LOTS = 10;
 const STOCK_CODE_PATTERN = /^\d{4,6}[A-Z]?$/;
 const OTC_CODE_SET = new Set(
   otcStockNames
@@ -473,7 +475,8 @@ function parseMisQuoteItem(item) {
     bidLevels,
     askLevels
   });
-  const buyPct = tradeFlow.reliable ? tradeFlow.activeBuyPct : bookBuyPct;
+  const useTradeFlow = tradeFlow.reliable;
+  const buyPct = useTradeFlow ? tradeFlow.activeBuyPct : bookBuyPct;
 
   return {
     code: String(item.c),
@@ -495,9 +498,9 @@ function parseMisQuoteItem(item) {
     amountHundredMillion: Number(((price * volume) / 100000000).toFixed(2)),
     buyPct,
     sellPct: 100 - buyPct,
-    forceSource: tradeFlow.reliable ? 'twse-mis-trade-flow' : 'twse-mis-book',
-    forceSourceLabel: tradeFlow.reliable ? 'TWSE MIS 成交快照分類' : 'TWSE MIS 五檔委買/委賣量',
-    forceReliable: tradeFlow.reliable || bidTotal + askTotal > 0,
+    forceSource: useTradeFlow ? 'twse-mis-snapshot-flow' : 'twse-mis-book-estimated',
+    forceSourceLabel: useTradeFlow ? 'TWSE MIS 輪詢重建內外盤' : 'TWSE MIS 五檔委託量推估',
+    forceReliable: useTradeFlow,
     tradeFlow,
     volRatio: null,
     time: item.t || item.ot || '',
@@ -581,13 +584,13 @@ function updateTradeFlowFromMisItem(item, context = {}) {
       bestBid,
       bestAsk,
       source: 'TWSE MIS',
-      sourceLabel: base.reliable ? 'TWSE MIS 成交快照分類' : 'TWSE MIS 即時報價監測中'
+      sourceLabel: base.reliable ? 'TWSE MIS 輪詢重建內外盤' : 'TWSE MIS 即時報價監測中'
     };
     tradeFlowCache.set(code, next);
     return summarizeTradeFlow(next);
   }
 
-  const side = classifyTradeSide(tradePrice, bestBid, bestAsk);
+  const side = classifyTradeSide(tradePrice, bestBid, bestAsk, base.lastTradePrice);
   const nextTick = {
     key,
     date,
@@ -595,7 +598,9 @@ function updateTradeFlowFromMisItem(item, context = {}) {
     price: tradePrice,
     volume: Math.round(volumeLots),
     side,
-    sideLabel: tradeSideLabel(side)
+    sideLabel: tradeSideLabel(side),
+    method: 'mis-snapshot-polling',
+    inferred: true
   };
   const next = {
     ...base,
@@ -615,7 +620,8 @@ function updateTradeFlowFromMisItem(item, context = {}) {
     activeSellLots: base.activeSellLots + (side === 'inner' ? volumeLots : 0),
     neutralLots: base.neutralLots + (side === 'neutral' ? volumeLots : 0),
     ticks: [nextTick, ...(base.ticks || [])].slice(0, TRADE_FLOW_MAX_TICKS),
-    source: 'TWSE MIS'
+    source: 'TWSE MIS',
+    sourceLabel: 'TWSE MIS 快照輪詢重建'
   };
   tradeFlowCache.set(code, next);
   return summarizeTradeFlow(next);
@@ -639,7 +645,9 @@ function createEmptyTradeFlow(seed = {}) {
     activeSellLots: 0,
     neutralLots: 0,
     ticks: [],
-    source: 'TWSE MIS'
+    source: 'TWSE MIS',
+    sourceLabel: 'TWSE MIS 即時報價監測中',
+    completeTape: false
   };
 }
 
@@ -651,6 +659,13 @@ function summarizeTradeFlow(flow) {
   const totalLots = classifiedLots + neutralLots;
   const activeBuyPct = classifiedLots ? Math.round((buyLots / classifiedLots) * 100) : 50;
   const activeSellPct = classifiedLots ? 100 - activeBuyPct : 50;
+  const ticks = Array.isArray(flow.ticks) ? flow.ticks : [];
+  const classifiedTicks = ticks.filter(tick => tick.side === 'outer' || tick.side === 'inner').length;
+  const observedTicks = ticks.length;
+  const reliable =
+    classifiedTicks >= TRADE_FLOW_RELIABLE_MIN_TICKS &&
+    classifiedLots >= TRADE_FLOW_RELIABLE_MIN_LOTS;
+  const hasClassifiedFlow = classifiedLots > 0;
 
   return {
     ...flow,
@@ -663,22 +678,36 @@ function summarizeTradeFlow(flow) {
     activeSellPct,
     outerPct: activeBuyPct,
     innerPct: activeSellPct,
-    reliable: classifiedLots > 0,
+    observedTicks,
+    classifiedTicks,
+    reliable,
     available: totalLots > 0,
-    sourceLabel: classifiedLots > 0 ? 'TWSE MIS 成交快照分類' : 'TWSE MIS 即時報價監測中',
-    note: classifiedLots > 0
-      ? '依 MIS 最新成交快照相對當下五檔買賣價分類，統計自本頁開啟或資料重整後開始累積。'
-      : '尚未捕捉到可分類的新成交，暫以五檔委買委賣量顯示買賣力道。'
+    completeTape: false,
+    confidence: reliable ? 'medium' : hasClassifiedFlow ? 'low' : 'pending',
+    sourceLabel: reliable
+      ? 'TWSE MIS 輪詢重建內外盤'
+      : hasClassifiedFlow
+        ? 'TWSE MIS 快照推估'
+        : 'TWSE MIS 即時報價監測中',
+    note: reliable
+      ? '以 TWSE MIS 最新成交快照輪詢重建內外盤，統計自本頁開啟或資料重整後開始累積；不是交易所完整逐筆明細。'
+      : hasClassifiedFlow
+        ? `已捕捉 ${classifiedTicks} 筆可分類成交，樣本仍少，買入/賣出占比暫列推估。`
+        : '尚未捕捉到可分類的新成交，暫以五檔委託量推估買賣力道。'
   };
 }
 
-function classifyTradeSide(price, bestBid, bestAsk) {
+function classifyTradeSide(price, bestBid, bestAsk, previousPrice = 0) {
   if (price > 0 && bestAsk > 0 && price >= bestAsk) return 'outer';
   if (price > 0 && bestBid > 0 && price <= bestBid) return 'inner';
   if (price > 0 && bestBid > 0 && bestAsk > 0) {
     const mid = (bestBid + bestAsk) / 2;
     if (price > mid) return 'outer';
     if (price < mid) return 'inner';
+  }
+  if (price > 0 && previousPrice > 0) {
+    if (price > previousPrice) return 'outer';
+    if (price < previousPrice) return 'inner';
   }
   return 'neutral';
 }
@@ -732,14 +761,12 @@ function markMisOutage() {
 }
 
 function readMisOutageUntil() {
-  if (typeof sessionStorage === 'undefined') return 0;
-  const value = Number(sessionStorage.getItem(MIS_OUTAGE_STORAGE_KEY) || 0);
+  const value = Number(readCollection('misOutageUntil') || 0);
   return Number.isFinite(value) ? value : 0;
 }
 
 function writeMisOutageUntil(value) {
-  if (typeof sessionStorage === 'undefined') return;
-  sessionStorage.setItem(MIS_OUTAGE_STORAGE_KEY, String(value));
+  writeCollection('misOutageUntil', value);
 }
 
 function sleep(ms) {

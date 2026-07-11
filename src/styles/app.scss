@@ -608,6 +608,36 @@ button {
   margin-bottom: 14px;
 }
 
+.trade-flow-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(245, 158, 11, 0.26);
+  border-radius: var(--radius);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.trade-flow-notice strong {
+  flex: 0 0 auto;
+  color: #fcd34d;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.trade-flow-notice.ready {
+  border-color: rgba(45, 212, 191, 0.28);
+  background: rgba(45, 212, 191, 0.08);
+}
+
+.trade-flow-notice.ready strong {
+  color: #99f6e4;
+}
+
 .trade-flow-card {
   min-height: 112px;
   padding: 16px;
@@ -2041,6 +2071,12 @@ button {
   background: var(--bg-2);
 }
 
+.load-status-card > div,
+.data-status-card > div {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .load-status-card .inline-icon,
 .data-status-card .inline-icon {
   flex: 0 0 auto;
@@ -2113,6 +2149,13 @@ button {
   white-space: nowrap;
 }
 
+.data-status-card .data-source-badge {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
 .data-source-badge.realtime {
   border-color: rgba(34, 197, 94, 0.35);
   color: #86efac;
@@ -2163,8 +2206,12 @@ button {
 }
 
 .source-badge-quote {
+  max-width: 100%;
   min-height: 24px;
   padding: 0 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 12px;
 }
 
@@ -2199,6 +2246,77 @@ button {
 
 .section-desc {
   margin: 4px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.backup-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.backup-summary-card {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+
+.backup-summary-card span,
+.backup-summary-card em {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.backup-summary-card strong {
+  display: block;
+  margin: 8px 0 6px;
+  color: var(--text-1);
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.backup-summary-card small {
+  margin-left: 3px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.backup-message {
+  margin: 12px 0 0;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.backup-note {
+  margin: 10px 0 0;
   color: var(--text-3);
   font-size: 12px;
   line-height: 1.5;
@@ -2475,6 +2593,7 @@ button {
 
 .backtest-hero {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 10px 0;
 }
 
 .backtest-hero>div {
@@ -2502,6 +2621,7 @@ button {
 
 .backtest-card-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 10px 0;
 }
 
 .backtest-card {
@@ -4956,6 +5076,7 @@ button {
     justify-content: flex-start;
   }
 
+  .backup-summary-grid,
   .health-summary-grid,
   .health-check-grid,
   .notification-summary-grid,
@@ -5048,6 +5169,7 @@ button {
 }
 
 @media (max-width: 640px) {
+  .backup-summary-grid,
   .health-summary-grid,
   .health-check-grid,
   .notification-summary-grid,
@@ -5337,7 +5459,7 @@ button {
   .quote-range-tabs {
     gap: 7px;
     max-width: 100%;
-    padding: 7px;
+    padding: 7px 12px;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scroll-snap-type: x proximity;
@@ -5369,6 +5491,17 @@ button {
   .quote-fundamental-card {
     min-height: 0;
     padding: 14px;
+  }
+
+  .data-status-card {
+    gap: 8px;
+    padding: 12px 10px;
+  }
+
+  .data-status-card .data-source-badge {
+    padding: 3px 6px;
+    font-size: 10px;
+    line-height: 1.25;
   }
 
   .quote-info-head {
@@ -5431,6 +5564,12 @@ button {
 
   .trade-flow-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trade-flow-notice {
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
   }
 
   .trade-flow-card {

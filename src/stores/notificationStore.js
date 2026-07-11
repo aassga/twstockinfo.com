@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
+import { readCollection, writeCollection } from '../repositories/localDataRepository';
 
-const STORAGE_KEY = 'tw_stock_notifications';
 const MAX_NOTIFICATIONS = 160;
 const BUY_THRESHOLD = 70;
 const SELL_THRESHOLD = 65;
@@ -16,18 +16,12 @@ export const useNotificationStore = defineStore('notifications', () => {
   const latest = computed(() => notifications.value.slice(0, 12));
 
   function loadNotifications() {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      const rows = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      notifications.value = Array.isArray(rows) ? rows.map(normalizeNotification).filter(Boolean) : [];
-    } catch (error) {
-      notifications.value = [];
-    }
+    const rows = readCollection('notifications');
+    notifications.value = Array.isArray(rows) ? rows.map(normalizeNotification).filter(Boolean) : [];
   }
 
   function persist() {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications.value.slice(0, MAX_NOTIFICATIONS)));
+    writeCollection('notifications', notifications.value.slice(0, MAX_NOTIFICATIONS));
   }
 
   function evaluateStocks(stocks = []) {

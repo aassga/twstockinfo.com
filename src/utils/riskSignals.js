@@ -14,15 +14,32 @@ export function buildStockRiskChecks({
   const technical = buildTechnicalSummary(candles, { interval });
 
   return [
+    sellPressureRisk(current),
     peRisk(fundamental),
+    movingAverageRisk(technical, 'ma20'),
+    movingAverageRisk(technical, 'ma60'),
+    volumeRisk(current, technical),
     revenueRisk(fundamental),
     grossMarginRisk(fundamental),
     institutionalSellRisk(institutional, institutionalTrend),
     marginRisk(fundamental),
-    monthlyLineRisk(technical),
-    volumeRisk(current, technical),
+    marginUsageRisk(fundamental),
+    attentionDispositionRisk(fundamental),
     cashFlowRisk(fundamental)
   ];
+}
+
+function sellPressureRisk(current) {
+  const sellPct = numberOrNull(current?.sellPct);
+  const reliable = Boolean(current?.tradeFlow?.reliable);
+  if (!isValid(sellPct)) return pending('賣壓 / 內盤', '待查', '尚未取得買賣力道');
+
+  return {
+    label: reliable ? '內盤偏高' : '賣壓偏高',
+    value: `${formatNumber(sellPct, 0)}%`,
+    detail: reliable ? '以 MIS 快照重建內外盤判斷' : '目前仍屬五檔委託量推估',
+    status: sellPct >= 70 ? 'risk' : sellPct >= 60 ? 'watch' : 'good'
+  };
 }
 
 function peRisk(fundamental) {
@@ -45,11 +62,12 @@ function revenueRisk(fundamental) {
   if (!isValid(yoy)) return pending('營收衰退', '待查', '尚未取得月營收 YoY');
 
   const avg3 = numberOrNull(trend?.avg3Yoy);
+  const negativeStreak = countNegativeStreak((trend?.rows || []).map(row => numberOrNull(row.yoy)).reverse());
   return {
-    label: '營收衰退',
-    value: formatPct(yoy),
-    detail: isValid(avg3) ? `近 3 月平均 ${formatPct(avg3)}` : '以最新月營收 YoY 判斷',
-    status: yoy <= -10 || (isValid(avg3) && avg3 < -5) ? 'risk' : yoy < 0 ? 'watch' : 'good'
+    label: '營收連續衰退',
+    value: negativeStreak > 0 ? `連 ${negativeStreak} 月` : formatPct(yoy),
+    detail: isValid(avg3) ? `最新 YoY ${formatPct(yoy)}，近 3 月平均 ${formatPct(avg3)}` : '以最新月營收 YoY 判斷',
+    status: negativeStreak >= 3 || yoy <= -10 || (isValid(avg3) && avg3 < -5) ? 'risk' : negativeStreak >= 1 || yoy < 0 ? 'watch' : 'good'
   };
 }
 
@@ -62,11 +80,12 @@ function grossMarginRisk(fundamental) {
   if (!isValid(latestMargin)) return pending('毛利率下降', '待查', '尚未取得財報毛利率');
 
   const diff = isValid(previousMargin) ? latestMargin - previousMargin : null;
+  const declineStreak = countConsecutiveDeclines(rows.map(row => numberOrNull(row.grossMargin)));
   return {
-    label: '毛利率下降',
+    label: '毛利率連續下降',
     value: `${formatNumber(latestMargin, 2)}%`,
-    detail: isValid(diff) ? `較上期 ${formatSigned(diff, 2, ' 個百分點')}` : '以最新季度毛利率判斷',
-    status: isValid(diff) && diff <= -3 ? 'risk' : isValid(diff) && diff < 0 ? 'watch' : 'good'
+    detail: isValid(diff) ? `較上期 ${formatSigned(diff, 2, ' 個百分點')}；連續下降 ${declineStreak} 期` : '以最新季度毛利率判斷',
+    status: declineStreak >= 3 || (isValid(diff) && diff <= -3) ? 'risk' : declineStreak >= 1 || (isValid(diff) && diff < 0) ? 'watch' : 'good'
   };
 }
 
@@ -101,15 +120,48 @@ function marginRisk(fundamental) {
   };
 }
 
-function monthlyLineRisk(technical) {
-  if (!technical?.latestClose || !technical?.ma20) return pending('跌破月線', '待查', 'MA20 資料不足');
+function marginUsageRisk(fundamental) {
+  const margin = fundamental?.marginTrading;
+  if (!margin?.available) return pending('融資使用率異常', '待查', '尚未取得融資餘額');
 
-  const distance = ((technical.latestClose - technical.ma20) / technical.ma20) * 100;
+  const usage = numberOrNull(margin.marginUsageRatio);
+  if (isValid(usage)) {
+    return {
+      label: '融資使用率異常',
+      value: `${formatNumber(usage, 2)}%`,
+      detail: '以融資餘額 / 可融資額度或流通股數判斷',
+      status: usage >= 45 ? 'risk' : usage >= 30 ? 'watch' : 'good'
+    };
+  }
+
+  const balance = numberOrNull(margin.marginBalance);
+  const change5 = numberOrNull(margin.margin5Change);
+  const pressure = isValid(balance) && balance > 0 && isValid(change5)
+    ? (change5 / balance) * 100
+    : null;
+  if (!isValid(pressure)) return pending('融資使用率異常', '待查', '缺流通股數，暫無法計算正式使用率');
+
   return {
-    label: '跌破月線',
-    value: technical.latestClose < technical.ma20 ? '跌破' : '站上',
-    detail: `MA20 ${formatNumber(technical.ma20, 2)}，乖離 ${formatSigned(distance, 2, '%')}`,
-    status: distance < 0 ? 'risk' : distance < 2 ? 'watch' : 'good'
+    label: '融資使用率異常',
+    value: `${formatSigned(pressure, 2, '%')}`,
+    detail: `尚未接流通股數，先以近 5 日融資增幅 / 餘額替代；餘額 ${formatNumber(balance, 0)} 張`,
+    status: pressure >= 12 ? 'risk' : pressure >= 6 ? 'watch' : 'good'
+  };
+}
+
+function movingAverageRisk(technical, key) {
+  const label = key === 'ma60' ? '跌破 MA60' : '跌破 MA20';
+  const lineLabel = key === 'ma60' ? 'MA60' : 'MA20';
+  const lineValue = numberOrNull(technical?.[key]);
+  const latestClose = numberOrNull(technical?.latestClose);
+  if (!isValid(latestClose) || !isValid(lineValue)) return pending(label, '待查', `${lineLabel} 資料不足`);
+
+  const distance = ((latestClose - lineValue) / lineValue) * 100;
+  return {
+    label,
+    value: latestClose < lineValue ? '跌破' : '站上',
+    detail: `${lineLabel} ${formatNumber(lineValue, 2)}，乖離 ${formatSigned(distance, 2, '%')}`,
+    status: distance < -2 ? 'risk' : distance < 0 ? 'watch' : 'good'
   };
 }
 
@@ -140,6 +192,28 @@ function cashFlowRisk(fundamental) {
   };
 }
 
+function attentionDispositionRisk(fundamental) {
+  const events = Array.isArray(fundamental?.attentionEvents) ? fundamental.attentionEvents : [];
+  const disposition = events.find(row => row?.type === 'disposition');
+  const attention = events.find(row => row?.type === 'attention');
+  if (!events.length) {
+    return {
+      label: '注意 / 處置股',
+      value: '無',
+      detail: '近期未取得注意或處置公告',
+      status: 'good'
+    };
+  }
+
+  const latest = disposition || attention || events[0];
+  return {
+    label: '注意 / 處置股',
+    value: disposition ? '處置' : '注意',
+    detail: `${latest.date || '--'} ${latest.title || latest.detail || '有公告'}`,
+    status: disposition ? 'risk' : 'watch'
+  };
+}
+
 function pending(label, value, detail) {
   return { label, value, detail, status: 'pending' };
 }
@@ -164,6 +238,16 @@ function countNegativeStreak(values) {
   for (const value of values) {
     if (!isValid(value) || value >= 0) break;
     streak += 1;
+  }
+  return streak;
+}
+
+function countConsecutiveDeclines(values) {
+  const normalized = (Array.isArray(values) ? values : []).filter(isValid);
+  let streak = 0;
+  for (let index = normalized.length - 1; index > 0; index -= 1) {
+    if (normalized[index] < normalized[index - 1]) streak += 1;
+    else break;
   }
   return streak;
 }

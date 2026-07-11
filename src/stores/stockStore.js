@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { stockApi } from '../api/stockApi';
+import { readCollection, writeCollection } from '../repositories/localDataRepository';
 import { getSector } from '../utils/stockMeta';
-
-const ACTIVE_STOCK_STORAGE_KEY = 'twstock.activeCode';
 
 export const useStockStore = defineStore('stocks', () => {
   const defaultHotSort = { key: 'volume', direction: 'desc' };
@@ -393,6 +392,10 @@ export const useStockStore = defineStore('stocks', () => {
     writeActiveCode(nextStock.code);
   }
 
+  function loadLocalState() {
+    activeCode.value = readActiveCode();
+  }
+
   function normalizeOptionalNumber(value) {
     const number = Number(value);
     return Number.isFinite(number) && number > 0 ? number : null;
@@ -427,14 +430,12 @@ export const useStockStore = defineStore('stocks', () => {
   }
 
   function readActiveCode() {
-    if (typeof localStorage === 'undefined') return '';
-    return String(localStorage.getItem(ACTIVE_STOCK_STORAGE_KEY) || '').trim().toUpperCase();
+    return String(readCollection('activeStockCode') || '').trim().toUpperCase();
   }
 
   function writeActiveCode(code) {
-    if (typeof localStorage === 'undefined') return;
     const value = String(code || '').trim().toUpperCase();
-    if (value) localStorage.setItem(ACTIVE_STOCK_STORAGE_KEY, value);
+    if (value) writeCollection('activeStockCode', value);
   }
 
   return {
@@ -460,6 +461,7 @@ export const useStockStore = defineStore('stocks', () => {
     refreshStocksByCodes,
     findStock,
     setCurrentStock,
+    loadLocalState,
     setHotFilter,
     setHotSort,
     hotCellFlashClass,

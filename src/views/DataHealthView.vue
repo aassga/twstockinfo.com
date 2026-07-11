@@ -410,9 +410,9 @@ function sleep(ms) {
         <em>{{ systemStore.latestError?.context || '目前無錯誤' }}</em>
       </article>
       <article class="health-summary-card" :class="{ cache: systemStore.updateAvailable }">
-        <span>PWA 版本</span>
-        <strong>{{ systemStore.updateAvailable ? '可更新' : '目前版本' }}</strong>
-        <em>{{ systemStore.updateAvailable ? '有新版快取等待套用' : '尚未收到更新提示' }}</em>
+        <span>PWA / 快取</span>
+        <strong>{{ systemStore.updateAvailable ? '可更新' : systemStore.offlineReady ? '離線可用' : '目前版本' }}</strong>
+        <em>App {{ systemStore.appVersion }} · Build {{ formatDateTime(systemStore.buildTime) }}</em>
       </article>
     </div>
 
@@ -494,6 +494,7 @@ function sleep(ms) {
           <thead>
             <tr>
               <th>時間</th>
+              <th>版本</th>
               <th>位置</th>
               <th>訊息</th>
               <th>頁面</th>
@@ -502,6 +503,7 @@ function sleep(ms) {
           <tbody>
             <tr v-for="error in frontendErrors" :key="error.id">
               <td>{{ formatDateTime(error.time) }}</td>
+              <td>{{ error.appVersion || systemStore.appVersion }}</td>
               <td>{{ error.context }}</td>
               <td class="health-error-cell" :title="error.stack || error.message">
                 {{ formatErrorMessage(error.message) }}
@@ -509,7 +511,7 @@ function sleep(ms) {
               <td class="health-path-cell" :title="error.url">{{ formatPath(error.url) }}</td>
             </tr>
             <tr v-if="!frontendErrors.length">
-              <td colspan="4" class="empty-cell">目前沒有前端錯誤紀錄。</td>
+              <td colspan="5" class="empty-cell">目前沒有前端錯誤紀錄。</td>
             </tr>
           </tbody>
         </table>

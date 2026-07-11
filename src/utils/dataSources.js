@@ -81,6 +81,12 @@ export function sourceMeta(source, fallback = '資料來源待確認') {
 
 export function quoteSourceMeta(stock) {
   const source = stock?.forceSourceLabel || stock?.source || 'TWSE MIS';
+  if (stock?.forceSourceLabel && !stock?.forceReliable && String(stock.forceSourceLabel).includes('推估')) {
+    return { label: stock.forceSourceLabel, type: 'estimated', raw: source };
+  }
+  if (stock?.forceSourceLabel && String(stock.forceSourceLabel).includes('輪詢重建')) {
+    return { label: stock.forceSourceLabel, type: 'computed', raw: source };
+  }
   const meta = sourceMeta(source);
   if (meta.type === 'estimated') return meta;
   if (String(stock?.source || '').includes('openapi')) {

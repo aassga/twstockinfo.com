@@ -21,6 +21,10 @@ export default defineConfig(({ command }) => {
   return {
     base: command === 'serve' ? '/' : '/twstockinfo.com/',
     appType: 'spa',
+    define: {
+      __APP_VERSION__: JSON.stringify(process.env.npm_package_version || '0.2.0'),
+      __BUILD_TIME__: JSON.stringify(new Date().toISOString())
+    },
     plugins: [
       devRootIndexFallback(),
       vue(),
@@ -92,6 +96,30 @@ export default defineConfig(({ command }) => {
     preview: {
       host: '0.0.0.0',
       port: 4173
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            const normalized = id.replace(/\\/g, '/');
+            if (normalized.includes('/node_modules/vue') || normalized.includes('/node_modules/pinia') || normalized.includes('/node_modules/vue-router')) {
+              return 'vendor-vue';
+            }
+            if (normalized.includes('/node_modules/vant') || normalized.includes('/node_modules/@vant')) {
+              return 'vendor-vant';
+            }
+            if (normalized.includes('/node_modules/@tabler/icons-vue')) {
+              return 'vendor-icons';
+            }
+            if (normalized.includes('/src/api/') || normalized.includes('/src/utils/') || normalized.includes('/src/repositories/')) {
+              return 'market-data';
+            }
+            if (normalized.includes('/node_modules/')) {
+              return 'vendor';
+            }
+          }
+        }
+      }
     }
   };
 });
