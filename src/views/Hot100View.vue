@@ -1,6 +1,8 @@
 <script setup>
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { IconFlame, IconInfoCircle, IconRefresh, IconSelector, IconSparkles, IconStar, IconStarFilled } from '@tabler/icons-vue';
+import { IconFlame, IconInfoCircle, IconSelector, IconSparkles, IconStar, IconStarFilled } from '@tabler/icons-vue';
+import AutoRefreshCountdown from '../components/AutoRefreshCountdown.vue';
 import SourceBadge from '../components/SourceBadge.vue';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useStockStore } from '../stores/stockStore';
@@ -9,6 +11,8 @@ import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from 
 const router = useRouter();
 const stockStore = useStockStore();
 const favoriteStore = useFavoriteStore();
+const hotRefreshMs = 30000;
+const hotRefreshResetKey = ref(0);
 const filters = [
   { key: 'all', label: '全部' },
   { key: 'buy', label: '🔴 強力買入' },
@@ -51,6 +55,15 @@ function formatVolRatio(stock) {
   const value = Number(stock?.volRatio);
   return Number.isFinite(value) && value > 0 ? `${Math.round(value)}%` : '--';
 }
+
+async function refreshHot100() {
+  if (stockStore.loadingAll) return;
+  try {
+    await stockStore.loadAllStocks({ force: true });
+  } finally {
+    hotRefreshResetKey.value += 1;
+  }
+}
 </script>
 
 <template>
@@ -62,16 +75,12 @@ function formatVolRatio(stock) {
       </div>
       <div class="page-actions">
         <input v-model="stockStore.hotSearch" class="table-search-input" placeholder="搜尋代號或名稱" />
-        <button
-          class="btn"
-          :class="{ 'is-refreshing': stockStore.loadingAll }"
-          type="button"
-          :disabled="stockStore.loadingAll"
-          @click="stockStore.loadAllStocks({ force: true })"
-        >
-          <IconRefresh class="btn-icon" :stroke-width="2" />
-          重新整理
-        </button>
+        <AutoRefreshCountdown
+          :interval-ms="hotRefreshMs"
+          :loading="stockStore.loadingAll"
+          :reset-key="hotRefreshResetKey"
+          @refresh="refreshHot100"
+        />
       </div>
     </div>
 

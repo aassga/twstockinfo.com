@@ -10,6 +10,7 @@ import {
   IconShieldCheck
 } from '@tabler/icons-vue';
 import { fetchFundamentalSnapshotPhased } from '../api/fundamentalApi';
+import AutoRefreshCountdown from '../components/AutoRefreshCountdown.vue';
 import DataStatusGrid from '../components/DataStatusGrid.vue';
 import SourceBadge from '../components/SourceBadge.vue';
 import StockChart from '../components/StockChart.vue';
@@ -32,7 +33,10 @@ const snapshot = ref(null);
 const candidates = ref([]);
 const showCandidates = ref(false);
 const loadStatus = ref(createLoadStatus());
+const isRealtimeRefreshing = ref(false);
+const refreshResetKey = ref(0);
 const candidateLimit = 20;
+const realtimeRefreshMs = 15000;
 const stockCodePattern = /^\d{4,6}[a-z]?$/i;
 const analysisSections = [
   { key: 'quote', label: '報價' },
@@ -238,6 +242,26 @@ async function runSearch(code) {
       error.value = err?.message || '分析資料取得失敗';
       setLoadStatus('quote', 'error', error.value);
     }
+  } finally {
+    if (runId === searchRunId) refreshResetKey.value += 1;
+  }
+}
+
+async function refreshCompleteRealtime(event = {}) {
+  if (!stock.value?.code || isRealtimeRefreshing.value) return;
+  if (event.manual) return runSearch(stock.value.code);
+  if (typeof document !== 'undefined' && document.hidden) return;
+
+  isRealtimeRefreshing.value = true;
+  try {
+    await stockStore.refreshCurrentStock({ silent: true, force: true });
+    if (chartStore.stock?.code === stock.value?.code) {
+      await chartStore.loadChart();
+    }
+    syncLoadStatusFromData();
+  } finally {
+    isRealtimeRefreshing.value = false;
+    refreshResetKey.value += 1;
   }
 }
 
@@ -650,9 +674,20 @@ function buildRiskChecks(current, fundamental, institutional) {
 
 <template>
   <section class="tab-content active complete-analysis-view">
-    <div class="page-title">
-      <IconLayoutDashboard class="title-icon" :stroke-width="2" />
-      個股完整分析
+    <div class="page-title-row">
+      <div class="page-title">
+        <IconLayoutDashboard class="title-icon" :stroke-width="2" />
+        個股完整分析
+      </div>
+      <div class="page-actions">
+        <AutoRefreshCountdown
+          :interval-ms="realtimeRefreshMs"
+          :loading="isBusy || isRealtimeRefreshing"
+          :enabled="Boolean(stock?.code)"
+          :reset-key="refreshResetKey"
+          @refresh="refreshCompleteRealtime"
+        />
+      </div>
     </div>
     <div class="page-purpose">
       一次整理單檔股票的報價、技術、籌碼、基本面、事件與風險，適合用來做買賣前檢查與事後回看。

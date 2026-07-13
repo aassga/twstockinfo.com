@@ -6,10 +6,10 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconDatabase,
-  IconRefresh,
   IconSearch,
 } from "@tabler/icons-vue";
 import { fetchFundamentalSnapshotPhased } from "../api/fundamentalApi";
+import AutoRefreshCountdown from "../components/AutoRefreshCountdown.vue";
 import DataStatusGrid from "../components/DataStatusGrid.vue";
 import SourceBadge from "../components/SourceBadge.vue";
 import StockChart from "../components/StockChart.vue";
@@ -35,6 +35,8 @@ const route = useRoute();
 const query = ref(stockStore.currentStock?.code || stockStore.activeCode || "");
 const loading = ref(false);
 const isManualRefreshing = ref(false);
+const liveQuoteRefreshing = ref(false);
+const quoteRefreshResetKey = ref(0);
 const error = ref("");
 const fundamentalSnapshot = ref(null);
 const fundamentalError = ref("");
@@ -49,8 +51,6 @@ const liveQuoteRefreshMs = 5000;
 const stockCodePattern = /^\d{4,6}[a-z]?$/i;
 let candidateTimer = null;
 let searchRunId = 0;
-let liveQuoteTimer = null;
-let liveQuoteRefreshing = false;
 
 const panels = [
   { label: "報價", value: "quote" },
@@ -373,13 +373,12 @@ onMounted(() => {
       }
     }
   }
-  startLiveQuoteRefresh();
   alignActiveTab(panelTabsEl, activePanel.value, panels, 1);
   alignActiveTab(rangeTabsEl, activeRange.value, ranges, ranges.length);
 });
 
 onBeforeUnmount(() => {
-  stopLiveQuoteRefresh();
+  clearTimeout(candidateTimer);
 });
 
 async function submit(value = query.value) {
@@ -421,11 +420,11 @@ async function runSearch(code) {
     fundamentalError.value = "";
     await openChart(nextStock);
     loadStockCenterData(nextStock, runId);
-    restartLiveQuoteRefresh();
   } catch (err) {
     if (runId === searchRunId) error.value = err?.message || "報價取得失敗";
   } finally {
     if (runId === searchRunId) loading.value = false;
+    quoteRefreshResetKey.value += 1;
   }
 }
 
@@ -449,12 +448,17 @@ async function manualRefreshQuote() {
     if (stock.value?.code) {
       loadStockCenterData(stock.value, ++searchRunId, { force: true });
     }
-    restartLiveQuoteRefresh();
   } catch (err) {
     error.value = err?.message || "報價更新失敗";
   } finally {
     isManualRefreshing.value = false;
+    quoteRefreshResetKey.value += 1;
   }
+}
+
+function handleQuoteRefresh(event = {}) {
+  if (event.manual) return manualRefreshQuote();
+  return refreshLiveQuote();
 }
 
 async function loadStockCenterData(nextStock, runId = searchRunId, { force = false } = {}) {
@@ -488,42 +492,18 @@ async function loadFundamental(nextStock, runId) {
   }
 }
 
-function startLiveQuoteRefresh() {
-  if (typeof window === "undefined") return;
-  stopLiveQuoteRefresh();
-  liveQuoteTimer = window.setInterval(refreshLiveQuote, liveQuoteRefreshMs);
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-}
-
-function stopLiveQuoteRefresh() {
-  if (liveQuoteTimer) {
-    window.clearInterval(liveQuoteTimer);
-    liveQuoteTimer = null;
-  }
-  if (typeof document !== "undefined") {
-    document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }
-}
-
-function restartLiveQuoteRefresh() {
-  startLiveQuoteRefresh();
-}
-
-function handleVisibilityChange() {
-  if (!document.hidden) refreshLiveQuote();
-}
-
 async function refreshLiveQuote() {
-  if (liveQuoteRefreshing || !stock.value?.code) return;
+  if (liveQuoteRefreshing.value || !stock.value?.code) return;
   if (typeof document !== "undefined" && document.hidden) return;
 
-  liveQuoteRefreshing = true;
+  liveQuoteRefreshing.value = true;
   try {
     await stockStore.refreshCurrentStock({ silent: true, force: true });
   } catch (_error) {
     // Keep the last quote visible if the realtime endpoint briefly fails.
   } finally {
-    liveQuoteRefreshing = false;
+    liveQuoteRefreshing.value = false;
+    quoteRefreshResetKey.value += 1;
   }
 }
 
@@ -648,16 +628,13 @@ function roundPrice(value) {
         個股即時報價
       </div>
       <div class="page-actions">
-        <button
-          class="btn"
-          :class="{ 'is-refreshing': isManualRefreshing }"
-          type="button"
-          :disabled="isManualRefreshing || !stock"
-          @click="manualRefreshQuote"
-        >
-          <IconRefresh class="btn-icon" :stroke-width="2" />
-          重新整理
-        </button>
+        <AutoRefreshCountdown
+          :interval-ms="liveQuoteRefreshMs"
+          :loading="isManualRefreshing || liveQuoteRefreshing"
+          :enabled="Boolean(stock?.code)"
+          :reset-key="quoteRefreshResetKey"
+          @refresh="handleQuoteRefresh"
+        />
       </div>
     </div>
     <div class="search-row quote-search-row">
