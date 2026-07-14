@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { IconInfoCircle, IconRefresh, IconTable } from '@tabler/icons-vue';
 import SourceBadge from '../components/SourceBadge.vue';
 import { useTopVolumeStore } from '../stores/topVolumeStore';
-import { formatDateTime, formatMoney, formatNumber, formatSigned, formatVolume, moveClass } from '../utils/formatters';
+import { formatDateTime, formatMoney, formatNumber, formatPct, formatSigned, formatVolume, moveClass } from '../utils/formatters';
 
 const router = useRouter();
 const topVolumeStore = useTopVolumeStore();
@@ -30,6 +30,13 @@ function changeMark(value) {
   if (number > 0) return '▲';
   if (number < 0) return '▼';
   return '';
+}
+
+function changePct(stock) {
+  const close = Number(stock?.close || 0);
+  const change = Number(stock?.change || 0);
+  const previous = close - change;
+  return previous > 0 ? (change / previous) * 100 : 0;
 }
 
 </script>
@@ -106,7 +113,7 @@ function changeMark(value) {
             <th>最高</th>
             <th>最低</th>
             <th>收盤</th>
-            <th>漲跌</th>
+            <th>漲跌 / 漲跌%</th>
             <th>買價</th>
             <th>賣價</th>
             <th>操作</th>
@@ -141,7 +148,10 @@ function changeMark(value) {
             <td>{{ formatMoney(stock.low, 2) }}</td>
             <td>{{ formatMoney(stock.close, 2) }}</td>
             <td class="move-cell" :class="moveClass(stock.change).replace('is-', '')">
-              {{ changeMark(stock.change) }} {{ formatSigned(stock.change, 2) }}
+              <div class="move-stack">
+                <span>{{ changeMark(stock.change) }} {{ formatSigned(stock.change, 2) }}</span>
+                <small>{{ formatPct(changePct(stock)) }}</small>
+              </div>
             </td>
             <td>{{ formatMoney(stock.bid, 2) }}</td>
             <td>{{ formatMoney(stock.ask, 2) }}</td>
