@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   IconBriefcase,
@@ -35,6 +35,7 @@ const candidates = ref([]);
 const showCandidates = ref(false);
 const candidateMessage = ref('');
 let candidateTimer = null;
+let candidateRequestId = 0;
 
 const stock = computed(() => stockStore.currentStock);
 const inst = computed(() => {
@@ -101,6 +102,7 @@ function forceText(side) {
 async function submit(value = query.value) {
   const input = String(value || '').trim();
   if (!input) return;
+  const requestId = closeCandidates();
   try {
     if (stockCodePattern.test(input)) {
       await runSearch(input.toUpperCase());
@@ -108,6 +110,7 @@ async function submit(value = query.value) {
     }
 
     const rows = await stockStore.findStockCandidates(input, candidateLimit);
+    if (requestId !== candidateRequestId || input !== String(query.value || '').trim()) return;
     const normalized = normalizeSearchText(input);
     const exact = rows.find(row => normalizeSearchText(row.code) === normalized || normalizeSearchText(row.name) === normalized);
 
@@ -141,11 +144,9 @@ function quickSearch(code) {
 }
 
 async function runSearch(value) {
+  closeCandidates();
   const result = await stockStore.searchStock(value);
   query.value = result.code;
-  showCandidates.value = false;
-  candidates.value = [];
-  candidateMessage.value = '';
   if (!institutionalStore.loaded) {
     await institutionalStore.loadInstitutional({ silent: true });
   }
@@ -164,8 +165,9 @@ function normalizeSearchText(value) {
 
 watch(query, value => {
   clearTimeout(candidateTimer);
+  const requestId = ++candidateRequestId;
   const input = String(value || '').trim();
-  if (!input) {
+  if (!input || stockCodePattern.test(input)) {
     candidates.value = [];
     showCandidates.value = false;
     candidateMessage.value = '';
@@ -174,6 +176,7 @@ watch(query, value => {
 
   candidateTimer = setTimeout(async () => {
     const rows = await stockStore.findStockCandidates(input, candidateLimit).catch(() => []);
+    if (requestId !== candidateRequestId || input !== String(query.value || '').trim()) return;
     const normalized = normalizeSearchText(input);
     const exact = rows.find(row => normalizeSearchText(row.code) === normalized || normalizeSearchText(row.name) === normalized);
     candidates.value = exact ? [] : rows;
@@ -181,6 +184,30 @@ watch(query, value => {
     candidateMessage.value = '';
   }, 180);
 });
+
+onMounted(() => {
+  document.addEventListener('click', handleCandidateOutsideClick);
+});
+
+onBeforeUnmount(() => {
+  clearTimeout(candidateTimer);
+  document.removeEventListener('click', handleCandidateOutsideClick);
+});
+
+function closeCandidates() {
+  clearTimeout(candidateTimer);
+  candidateRequestId += 1;
+  candidates.value = [];
+  showCandidates.value = false;
+  candidateMessage.value = '';
+  return candidateRequestId;
+}
+
+function handleCandidateOutsideClick(event) {
+  if (!showCandidates.value) return;
+  if (event.target?.closest?.('.search-row, .search-candidates')) return;
+  closeCandidates();
+}
 
 function addToPortfolio() {
   if (!stock.value) return;

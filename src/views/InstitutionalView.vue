@@ -32,6 +32,7 @@ const taipeiDateKeyFormatter = new Intl.DateTimeFormat('zh-TW', {
   day: '2-digit'
 });
 let candidateTimer = null;
+let candidateRequestId = 0;
 
 const totalRows = computed(() => institutionalStore.rows.length);
 const totalPages = computed(() => Math.max(1, Math.ceil(totalRows.value / pageSize)));
@@ -112,11 +113,13 @@ const selectedSignal = computed(() => {
 });
 
 onMounted(() => {
+  document.addEventListener('click', handleCandidateOutsideClick);
   institutionalStore.loadInstitutional();
 });
 
 onBeforeUnmount(() => {
   clearTimeout(candidateTimer);
+  document.removeEventListener('click', handleCandidateOutsideClick);
 });
 
 watch(totalPages, pages => {
@@ -125,6 +128,7 @@ watch(totalPages, pages => {
 
 watch(query, value => {
   clearTimeout(candidateTimer);
+  const requestId = ++candidateRequestId;
   const input = String(value || '').trim();
   if (!input || stockCodePattern.test(input)) {
     candidates.value = [];
@@ -135,6 +139,7 @@ watch(query, value => {
 
   candidateTimer = setTimeout(async () => {
     const rows = await stockStore.findStockCandidates(input, candidateLimit).catch(() => []);
+    if (requestId !== candidateRequestId || input !== String(query.value || '').trim()) return;
     const normalized = normalizeSearchText(input);
     const exact = rows.find(row => normalizeSearchText(row.code) === normalized || normalizeSearchText(row.name) === normalized);
     candidates.value = exact ? [] : rows;
@@ -150,10 +155,12 @@ function openQuote(row) {
 async function submit(value = query.value) {
   const input = String(value || '').trim();
   if (!input) return;
+  const requestId = closeCandidates();
 
   if (stockCodePattern.test(input)) return runSearch(input.toUpperCase());
 
   const rows = await stockStore.findStockCandidates(input, candidateLimit).catch(() => []);
+  if (requestId !== candidateRequestId || input !== String(query.value || '').trim()) return;
   const normalized = normalizeSearchText(input);
   const exact = rows.find(row => normalizeSearchText(row.code) === normalized || normalizeSearchText(row.name) === normalized);
   if (exact) return runSearch(exact.code);
@@ -178,9 +185,7 @@ async function runSearch(code) {
   searchLoading.value = true;
   selectedCode.value = normalizedCode;
   query.value = normalizedCode;
-  showCandidates.value = false;
-  candidates.value = [];
-  candidateMessage.value = '';
+  closeCandidates();
 
   try {
     if (!institutionalStore.loaded) await institutionalStore.loadInstitutional({ silent: true });
@@ -200,6 +205,21 @@ async function runSearch(code) {
 
 function selectCandidate(stock) {
   runSearch(stock.code);
+}
+
+function closeCandidates() {
+  clearTimeout(candidateTimer);
+  candidateRequestId += 1;
+  candidates.value = [];
+  showCandidates.value = false;
+  candidateMessage.value = '';
+  return candidateRequestId;
+}
+
+function handleCandidateOutsideClick(event) {
+  if (!showCandidates.value) return;
+  if (event.target?.closest?.('.search-row, .search-candidates')) return;
+  closeCandidates();
 }
 
 async function loadPriceRelation(code) {

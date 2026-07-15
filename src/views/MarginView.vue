@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { IconAlertTriangle, IconChartBar, IconInfoCircle, IconRefresh, IconSearch } from '@tabler/icons-vue';
 import { fetchFundamentalSnapshotPhased } from '../api/fundamentalApi';
@@ -21,6 +21,7 @@ const showCandidates = ref(false);
 const candidateLimit = 20;
 const stockCodePattern = /^\d{4,6}[a-z]?$/i;
 let candidateTimer = null;
+let candidateRequestId = 0;
 let searchRunId = 0;
 
 const marginTrading = computed(() => snapshot.value?.marginTrading || null);
@@ -30,6 +31,7 @@ const creditRiskRows = computed(() => buildCreditRiskRows(marginTrading.value));
 
 watch(query, value => {
   clearTimeout(candidateTimer);
+  const requestId = ++candidateRequestId;
   const input = String(value || '').trim();
   if (!input || stockCodePattern.test(input)) {
     candidates.value = [];
@@ -39,6 +41,7 @@ watch(query, value => {
 
   candidateTimer = setTimeout(async () => {
     const rows = await stockStore.findStockCandidates(input, candidateLimit).catch(() => []);
+    if (requestId !== candidateRequestId || input !== String(query.value || '').trim()) return;
     candidates.value = rows;
     showCandidates.value = rows.length > 0;
   }, 180);
@@ -53,17 +56,25 @@ watch(
 );
 
 onMounted(() => {
+  document.addEventListener('click', handleCandidateOutsideClick);
   const routeCode = normalizeRouteCode(route.query.code);
   const initialCode = routeCode || stockStore.currentStock?.code || stockStore.activeCode || query.value;
   if (initialCode) runSearch(String(initialCode).trim().toUpperCase());
 });
 
+onBeforeUnmount(() => {
+  clearTimeout(candidateTimer);
+  document.removeEventListener('click', handleCandidateOutsideClick);
+});
+
 async function submit(value = query.value) {
   const input = String(value || '').trim();
   if (!input) return;
+  const requestId = closeCandidates();
 
   if (!stockCodePattern.test(input)) {
     const rows = await stockStore.findStockCandidates(input, candidateLimit).catch(() => []);
+    if (requestId !== candidateRequestId || input !== String(query.value || '').trim()) return;
     const normalized = normalizeSearchText(input);
     const exact = rows.find(row => normalizeSearchText(row.code) === normalized || normalizeSearchText(row.name) === normalized);
     if (exact) return runSearch(exact.code);
@@ -83,7 +94,7 @@ async function runSearch(code) {
   loading.value = true;
   error.value = '';
   snapshot.value = null;
-  showCandidates.value = false;
+  closeCandidates();
 
   try {
     const nextStock = await stockStore.searchStock(code);
@@ -106,6 +117,20 @@ async function runSearch(code) {
 
 function selectCandidate(item) {
   runSearch(item.code);
+}
+
+function closeCandidates() {
+  clearTimeout(candidateTimer);
+  candidateRequestId += 1;
+  candidates.value = [];
+  showCandidates.value = false;
+  return candidateRequestId;
+}
+
+function handleCandidateOutsideClick(event) {
+  if (!showCandidates.value) return;
+  if (event.target?.closest?.('.search-row, .search-candidates')) return;
+  closeCandidates();
 }
 
 function quickSearch(code) {

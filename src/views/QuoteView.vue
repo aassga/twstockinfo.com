@@ -50,6 +50,7 @@ const candidateLimit = 20;
 const liveQuoteRefreshMs = 5000;
 const stockCodePattern = /^\d{4,6}[a-z]?$/i;
 let candidateTimer = null;
+let candidateRequestId = 0;
 let searchRunId = 0;
 
 const panels = [
@@ -331,6 +332,7 @@ const aiSummary = computed(() => {
 
 watch(query, (value) => {
   clearTimeout(candidateTimer);
+  const requestId = ++candidateRequestId;
   const input = String(value || "").trim();
   if (!input || stockCodePattern.test(input)) {
     candidates.value = [];
@@ -342,6 +344,7 @@ watch(query, (value) => {
     const rows = await stockStore
       .findStockCandidates(input, candidateLimit)
       .catch(() => []);
+    if (requestId !== candidateRequestId || input !== String(query.value || "").trim()) return;
     candidates.value = rows;
     showCandidates.value = rows.length > 0;
   }, 180);
@@ -356,6 +359,7 @@ watch(
 );
 
 onMounted(() => {
+  document.addEventListener("click", handleCandidateOutsideClick);
   const routeCode = normalizeRouteCode(route.query.code);
   if (routeCode) {
     query.value = routeCode;
@@ -379,16 +383,19 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearTimeout(candidateTimer);
+  document.removeEventListener("click", handleCandidateOutsideClick);
 });
 
 async function submit(value = query.value) {
   const input = String(value || "").trim();
   if (!input) return;
+  const requestId = closeCandidates();
 
   if (!stockCodePattern.test(input)) {
     const rows = await stockStore
       .findStockCandidates(input, candidateLimit)
       .catch(() => []);
+    if (requestId !== candidateRequestId || input !== String(query.value || "").trim()) return;
     const normalized = normalizeSearchText(input);
     const exact = rows.find(
       (row) =>
@@ -411,7 +418,7 @@ async function runSearch(code) {
   const runId = ++searchRunId;
   loading.value = true;
   error.value = "";
-  showCandidates.value = false;
+  closeCandidates();
   try {
     const nextStock = await stockStore.searchStock(code, { force: true });
     if (runId !== searchRunId) return;
@@ -555,6 +562,20 @@ function alignActiveTab(containerRef, value, items, resetThroughIndex = 0) {
 
 function selectCandidate(item) {
   runSearch(item.code);
+}
+
+function closeCandidates() {
+  clearTimeout(candidateTimer);
+  candidateRequestId += 1;
+  candidates.value = [];
+  showCandidates.value = false;
+  return candidateRequestId;
+}
+
+function handleCandidateOutsideClick(event) {
+  if (!showCandidates.value) return;
+  if (event.target?.closest?.(".search-row, .search-candidates")) return;
+  closeCandidates();
 }
 
 function normalizeSearchText(value) {
