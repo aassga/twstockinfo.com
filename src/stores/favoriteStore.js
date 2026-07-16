@@ -48,6 +48,23 @@ export const useFavoriteStore = defineStore('favorites', () => {
     persist();
   }
 
+  function reorderFavorite(sourceCode, targetCode) {
+    const source = String(sourceCode || '').trim();
+    const target = String(targetCode || '').trim();
+    if (!source || !target || source === target) return false;
+
+    const fromIndex = favorites.value.findIndex(stock => stock.code === source);
+    const toIndex = favorites.value.findIndex(stock => stock.code === target);
+    if (fromIndex < 0 || toIndex < 0) return false;
+
+    const next = [...favorites.value];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    favorites.value = next;
+    persist();
+    return true;
+  }
+
   function normalizeFavorite(stock) {
     const code = String(stock?.code || '').trim();
     if (!code) return null;
@@ -97,6 +114,7 @@ export const useFavoriteStore = defineStore('favorites', () => {
     isFavorite,
     toggleFavorite,
     addFavorite,
-    removeFavorite
+    removeFavorite,
+    reorderFavorite
   };
 });

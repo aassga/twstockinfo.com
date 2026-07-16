@@ -359,7 +359,7 @@ watch(
 );
 
 onMounted(() => {
-  document.addEventListener("click", handleCandidateOutsideClick);
+  document.addEventListener("pointerdown", handleCandidateOutsideClick, true);
   const routeCode = normalizeRouteCode(route.query.code);
   if (routeCode) {
     query.value = routeCode;
@@ -383,7 +383,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearTimeout(candidateTimer);
-  document.removeEventListener("click", handleCandidateOutsideClick);
+  document.removeEventListener("pointerdown", handleCandidateOutsideClick, true);
 });
 
 async function submit(value = query.value) {

@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { IconRefresh, IconStarFilled, IconTrash } from '@tabler/icons-vue';
+import { IconGripVertical, IconRefresh, IconStarFilled, IconTrash } from '@tabler/icons-vue';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
@@ -9,6 +9,8 @@ import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from 
 const router = useRouter();
 const favoriteStore = useFavoriteStore();
 const stockStore = useStockStore();
+const draggingCode = ref('');
+const dragOverCode = ref('');
 const favoriteRows = computed(() => favoriteStore.favorites.map(stock => {
   const latest = stockStore.allStocks.find(row => row.code === stock.code);
   return shouldUseLatestQuote(stock, latest) ? { ...stock, ...latest, savedAt: stock.savedAt } : stock;
@@ -48,6 +50,29 @@ function formatVolRatio(stock) {
   const value = Number(stock?.volRatio);
   return Number.isFinite(value) && value > 0 ? `${Math.round(value)}%` : '--';
 }
+
+function startFavoriteDrag(event, stock) {
+  draggingCode.value = stock.code;
+  dragOverCode.value = '';
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', stock.code);
+}
+
+function enterFavoriteDrag(stock) {
+  if (!draggingCode.value || draggingCode.value === stock.code) return;
+  dragOverCode.value = stock.code;
+}
+
+function dropFavorite(event, stock) {
+  const sourceCode = event.dataTransfer.getData('text/plain') || draggingCode.value;
+  favoriteStore.reorderFavorite(sourceCode, stock.code);
+  clearFavoriteDrag();
+}
+
+function clearFavoriteDrag() {
+  draggingCode.value = '';
+  dragOverCode.value = '';
+}
 </script>
 
 <template>
@@ -79,6 +104,7 @@ function formatVolRatio(stock) {
       <table class="stock-table">
         <thead>
           <tr>
+            <th class="drag-cell">排序</th>
             <th>#</th>
             <th>代號</th>
             <th>名稱</th>
@@ -94,7 +120,26 @@ function formatVolRatio(stock) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(stock, index) in favoriteRows" :key="stock.code">
+          <tr
+            v-for="(stock, index) in favoriteRows"
+            :key="stock.code"
+            class="favorite-sort-row"
+            :class="{
+              'is-dragging': draggingCode === stock.code,
+              'is-drag-over': dragOverCode === stock.code
+            }"
+            draggable="true"
+            @dragstart="startFavoriteDrag($event, stock)"
+            @dragenter.prevent="enterFavoriteDrag(stock)"
+            @dragover.prevent
+            @drop.prevent="dropFavorite($event, stock)"
+            @dragend="clearFavoriteDrag"
+          >
+            <td class="drag-cell">
+              <button class="drag-handle" type="button" title="拖曳排序" aria-label="拖曳排序">
+                <IconGripVertical class="btn-icon" :stroke-width="2" />
+              </button>
+            </td>
             <td>{{ index + 1 }}</td>
             <td>{{ stock.code }}</td>
             <td>

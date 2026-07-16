@@ -1253,6 +1253,51 @@ button {
   text-align: center;
 }
 
+.favorites-view .stock-table .drag-cell {
+  width: 52px;
+  min-width: 52px;
+  text-align: center;
+}
+
+.favorites-view .favorite-sort-row {
+  transition: opacity 0.16s ease, outline-color 0.16s ease, background 0.16s ease;
+}
+
+.favorites-view .favorite-sort-row.is-dragging {
+  opacity: 0.45;
+}
+
+.favorites-view .favorite-sort-row.is-drag-over {
+  outline: 2px solid rgba(56, 145, 255, 0.72);
+  outline-offset: -2px;
+  background: rgba(56, 145, 255, 0.08);
+}
+
+.favorites-view .drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: grab;
+}
+
+.favorites-view .drag-handle:hover,
+.favorites-view .favorite-sort-row.is-dragging .drag-handle {
+  border-color: rgba(56, 145, 255, 0.35);
+  background: rgba(56, 145, 255, 0.12);
+  color: var(--blue);
+}
+
+.favorites-view .drag-handle:active {
+  cursor: grabbing;
+}
+
 .favorites-view .table-actions {
   width: 100%;
   justify-content: center;

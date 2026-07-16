@@ -177,14 +177,14 @@ watch(query, value => {
 });
 
 onMounted(() => {
-  document.addEventListener('click', handleCandidateOutsideClick);
+  document.addEventListener('pointerdown', handleCandidateOutsideClick, true);
   const initialCode = stock.value?.code || chartStore.stock?.code || stockStore.activeCode || query.value;
   if (initialCode) runSearch(String(initialCode).trim().toUpperCase());
 });
 
 onBeforeUnmount(() => {
   clearTimeout(candidateTimer);
-  document.removeEventListener('click', handleCandidateOutsideClick);
+  document.removeEventListener('pointerdown', handleCandidateOutsideClick, true);
 });
 
 async function submit(value = query.value) {

@@ -113,13 +113,13 @@ const selectedSignal = computed(() => {
 });
 
 onMounted(() => {
-  document.addEventListener('click', handleCandidateOutsideClick);
+  document.addEventListener('pointerdown', handleCandidateOutsideClick, true);
   institutionalStore.loadInstitutional();
 });
 
 onBeforeUnmount(() => {
   clearTimeout(candidateTimer);
-  document.removeEventListener('click', handleCandidateOutsideClick);
+  document.removeEventListener('pointerdown', handleCandidateOutsideClick, true);
 });
 
 watch(totalPages, pages => {

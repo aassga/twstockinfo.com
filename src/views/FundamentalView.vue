@@ -115,7 +115,7 @@ watch(query, value => {
 });
 
 onMounted(() => {
-  document.addEventListener('click', handleCandidateOutsideClick);
+  document.addEventListener('pointerdown', handleCandidateOutsideClick, true);
   const routeCode = normalizeRouteCode(route.query.code);
   const initialCode = routeCode || stockStore.currentStock?.code || stockStore.activeCode || query.value;
   if (initialCode) runSearch(String(initialCode).trim().toUpperCase());
@@ -123,7 +123,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearTimeout(candidateTimer);
-  document.removeEventListener('click', handleCandidateOutsideClick);
+  document.removeEventListener('pointerdown', handleCandidateOutsideClick, true);
 });
 
 watch(

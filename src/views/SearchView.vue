@@ -186,12 +186,12 @@ watch(query, value => {
 });
 
 onMounted(() => {
-  document.addEventListener('click', handleCandidateOutsideClick);
+  document.addEventListener('pointerdown', handleCandidateOutsideClick, true);
 });
 
 onBeforeUnmount(() => {
   clearTimeout(candidateTimer);
-  document.removeEventListener('click', handleCandidateOutsideClick);
+  document.removeEventListener('pointerdown', handleCandidateOutsideClick, true);
 });
 
 function closeCandidates() {
