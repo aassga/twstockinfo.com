@@ -130,7 +130,7 @@ watch(query, value => {
   clearTimeout(candidateTimer);
   const requestId = ++candidateRequestId;
   const input = String(value || '').trim();
-  if (!input || stockCodePattern.test(input)) {
+  if (!input || isCurrentSearchCode(input)) {
     candidates.value = [];
     showCandidates.value = false;
     candidateMessage.value = '';
@@ -220,6 +220,10 @@ function handleCandidateOutsideClick(event) {
   if (!showCandidates.value) return;
   if (event.target?.closest?.('.search-row, .search-candidates')) return;
   closeCandidates();
+}
+
+function isCurrentSearchCode(input) {
+  return stockCodePattern.test(input) && String(selectedCode.value || '').toUpperCase() === input.toUpperCase();
 }
 
 async function loadPriceRelation(code) {
