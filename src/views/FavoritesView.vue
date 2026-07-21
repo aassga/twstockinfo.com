@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { IconGripVertical, IconRefresh, IconStarFilled, IconTrash } from '@tabler/icons-vue';
+import AutoRefreshCountdown from '../components/AutoRefreshCountdown.vue';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, formatVolume, moveClass } from '../utils/formatters';
@@ -11,6 +12,9 @@ const favoriteStore = useFavoriteStore();
 const stockStore = useStockStore();
 const draggingCode = ref('');
 const dragOverCode = ref('');
+const isFavoriteRefreshing = ref(false);
+const favoriteRefreshResetKey = ref(0);
+const favoriteRefreshMs = 15000;
 const favoriteRows = computed(() => favoriteStore.favorites.map(stock => {
   const latest = stockStore.allStocks.find(row => row.code === stock.code);
   return shouldUseLatestQuote(stock, latest) ? { ...stock, ...latest, savedAt: stock.savedAt } : stock;
@@ -25,13 +29,25 @@ function openQuote(stock) {
 }
 
 async function refreshFavorites() {
-  const rows = await stockStore.refreshStocksByCodes(favoriteStore.favorites.map(stock => stock.code), { force: true });
-  const latestByCode = new Map(rows.map(stock => [stock.code, stock]));
+  if (isFavoriteRefreshing.value || !favoriteStore.favorites.length) return;
+  isFavoriteRefreshing.value = true;
 
-  favoriteStore.favorites.forEach(stock => {
-    const latest = latestByCode.get(stock.code);
-    if (Number(latest?.price || 0) > 0) favoriteStore.addFavorite({ ...stock, ...latest, savedAt: stock.savedAt });
-  });
+  try {
+    const rows = await stockStore.refreshStocksByCodes(favoriteStore.favorites.map(stock => stock.code), { force: true });
+    const latestByCode = new Map(rows.map(stock => [stock.code, stock]));
+
+    favoriteStore.favorites.forEach(stock => {
+      const latest = latestByCode.get(stock.code);
+      if (Number(latest?.price || 0) > 0) favoriteStore.addFavorite({ ...stock, ...latest, savedAt: stock.savedAt });
+    });
+  } finally {
+    isFavoriteRefreshing.value = false;
+    favoriteRefreshResetKey.value += 1;
+  }
+}
+
+function handleFavoriteRefresh() {
+  return refreshFavorites();
 }
 
 function direction(stock) {
@@ -83,7 +99,14 @@ function clearFavoriteDrag() {
         我的最愛
       </div>
       <div class="page-actions">
-        <button class="btn" type="button" :disabled="stockStore.loadingAll" @click="refreshFavorites">
+        <AutoRefreshCountdown
+          :interval-ms="favoriteRefreshMs"
+          :loading="isFavoriteRefreshing || stockStore.loadingAll"
+          :enabled="Boolean(favoriteStore.favorites.length)"
+          :reset-key="favoriteRefreshResetKey"
+          @refresh="handleFavoriteRefresh"
+        />
+        <button v-if="false" class="btn" type="button" :disabled="isFavoriteRefreshing || stockStore.loadingAll" @click="refreshFavorites">
           <IconRefresh class="btn-icon" :stroke-width="2" />
           更新報價
         </button>

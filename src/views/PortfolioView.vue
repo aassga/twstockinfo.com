@@ -11,6 +11,7 @@ import {
   IconSelector
 } from '@tabler/icons-vue';
 import { stockApi } from '../api/stockApi';
+import AutoRefreshCountdown from '../components/AutoRefreshCountdown.vue';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useStockStore } from '../stores/stockStore';
 import { formatDateTime, formatMoney, formatPct, moveClass } from '../utils/formatters';
@@ -21,6 +22,8 @@ const stockStore = useStockStore();
 const form = reactive(createEmptyForm());
 const importInput = ref(null);
 const isRefreshingQuotes = ref(false);
+const portfolioRefreshResetKey = ref(0);
+const portfolioRefreshMs = 15000;
 const portfolioSort = ref({ key: '', direction: 'desc' });
 const leadingSortableColumns = [
   { key: 'buyPrice', label: '買進價' },
@@ -128,7 +131,12 @@ async function refresh() {
     await portfolioStore.refreshQuotes({ force: true });
   } finally {
     isRefreshingQuotes.value = false;
+    portfolioRefreshResetKey.value += 1;
   }
+}
+
+function handlePortfolioRefresh() {
+  return refresh();
 }
 
 function openQuote(holding) {
@@ -220,7 +228,15 @@ function portfolioSortValue(holding, key) {
         我的持股
       </div>
       <div class="page-actions">
+        <AutoRefreshCountdown
+          :interval-ms="portfolioRefreshMs"
+          :loading="isRefreshingQuotes || portfolioStore.loading"
+          :enabled="Boolean(portfolioStore.holdings.length)"
+          :reset-key="portfolioRefreshResetKey"
+          @refresh="handlePortfolioRefresh"
+        />
         <button
+          v-if="false"
           class="btn"
           :class="{ 'is-refreshing': isRefreshingQuotes }"
           type="button"
